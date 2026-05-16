@@ -1,0 +1,31 @@
+; Engine configuration file.
+; Frank's Adventure — 2.5D Roguelike Deckbuilder
+; Godot 4.x
+
+config_version=5
+
+[application]
+
+config/name="Frank's Adventure"
+config/description="A 2.5D roguelike deckbuilder where Frank becomes CEO and plays employees as cards."
+run/main_scene=""
+config/features=PackedStringArray("4.4", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[input]
+
+[internationalization]
+
+locale/translations_pot_files=PackedStringArray()
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
