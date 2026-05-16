@@ -25,3 +25,8 @@ mono_crash.*.json
 # Build artifacts
 build/
 exports/
+dist/
+node_modules/
+.playwright-cli/
+web-battle/dist/
+web-battle/node_modules/
