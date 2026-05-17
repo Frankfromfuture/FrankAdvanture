@@ -1168,3 +1168,463 @@ button {
     max-width: 320px;
   }
 }
+
+/* ============================================================
+   v3.0+ : 2.5D 全面增强层 (push every HUD & element)
+   策略: 全局透视 + 块状底阴影模拟物理厚度 + 桌面斜视面 + 卡牌等距
+   ============================================================ */
+
+:root {
+  /* 2.5D 设计 token */
+  --depth-1: 4px;
+  --depth-2: 8px;
+  --depth-3: 14px;
+  --tilt-angle: 9deg;
+  --chunk-color: rgba(64, 30, 122, 0.32);
+  --chunk-color-strong: rgba(64, 30, 122, 0.42);
+  --desk-color-1: #c9b3ff;
+  --desk-color-2: #8e6dd1;
+}
+
+/* 全局透视容器 — 让所有 transform-3d 子元素共享深度 */
+.battle-shell {
+  perspective: 1600px;
+  perspective-origin: 50% 28%;
+  transform-style: preserve-3d;
+}
+
+/* 桌面斜视底面: 在 arena 区域形成"会议桌"地平面 */
+.battle-bg {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.40) 56%, rgba(255, 255, 255, 0.0) 100%),
+    radial-gradient(ellipse at 50% 78%, rgba(168, 122, 255, 0.20), transparent 56%);
+}
+
+/* ---------- 顶部 HUD 整体 2.5D 化 ---------- */
+.top-hud {
+  transform-style: preserve-3d;
+}
+
+.brand-block {
+  border-radius: 14px;
+  transform: rotateX(var(--tilt-angle)) translateZ(20px);
+  box-shadow:
+    0 var(--depth-1) 0 var(--chunk-color),
+    0 var(--depth-2) 0 rgba(64, 30, 122, 0.22),
+    0 22px 36px rgba(88, 56, 145, 0.20);
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+
+.brand-block:hover {
+  transform: rotateX(calc(var(--tilt-angle) - 4deg)) translateZ(32px) translateY(-3px);
+}
+
+.hud-center > div {
+  border-radius: 12px;
+  transform: rotateX(var(--tilt-angle)) translateZ(22px);
+  box-shadow:
+    inset 0 0 0 1px rgba(139, 92, 246, 0.10),
+    0 var(--depth-1) 0 var(--chunk-color),
+    0 var(--depth-2) 0 rgba(64, 30, 122, 0.20),
+    0 22px 30px rgba(88, 56, 145, 0.18);
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+
+.hud-center > div:hover {
+  transform: rotateX(calc(var(--tilt-angle) - 4deg)) translateZ(36px) translateY(-2px);
+}
+
+.hud-actions {
+  display: flex;
+  gap: 8px;
+  transform-style: preserve-3d;
+}
+
+/* ---------- 通用按钮: 立体块按钮 (bottom thickness via box-shadow) ---------- */
+.guide-button,
+.small-ghost,
+.action-button,
+.system-slot {
+  border-radius: 12px;
+  transform: rotateX(0deg) translateY(0);
+  box-shadow:
+    0 var(--depth-1) 0 var(--chunk-color),
+    0 var(--depth-2) 0 rgba(64, 30, 122, 0.18),
+    0 18px 30px rgba(88, 56, 145, 0.16);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.guide-button:hover,
+.small-ghost:hover,
+.action-button:hover,
+.system-slot:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 calc(var(--depth-1) + 3px) 0 var(--chunk-color-strong),
+    0 calc(var(--depth-2) + 3px) 0 rgba(64, 30, 122, 0.22),
+    0 22px 36px rgba(117, 75, 170, 0.22);
+}
+
+.guide-button:active,
+.action-button:active,
+.system-slot:active {
+  transform: translateY(2px);
+  box-shadow:
+    0 1px 0 var(--chunk-color),
+    0 3px 0 rgba(64, 30, 122, 0.16),
+    0 10px 18px rgba(88, 56, 145, 0.14);
+}
+
+.action-button.primary {
+  background: linear-gradient(160deg, #a78bfa, #6d28d9);
+  border-color: rgba(139, 92, 246, 0.6);
+  box-shadow:
+    0 var(--depth-1) 0 rgba(46, 16, 101, 0.55),
+    0 var(--depth-2) 0 rgba(46, 16, 101, 0.42),
+    0 22px 36px rgba(109, 40, 217, 0.36);
+}
+
+.action-button.primary:hover {
+  box-shadow:
+    0 calc(var(--depth-1) + 3px) 0 rgba(46, 16, 101, 0.62),
+    0 calc(var(--depth-2) + 3px) 0 rgba(46, 16, 101, 0.48),
+    0 28px 44px rgba(109, 40, 217, 0.44);
+}
+
+/* ---------- 战斗布局: 三栏整体 2.5D 透视 ---------- */
+.battle-layout {
+  transform-style: preserve-3d;
+}
+
+.side-panel {
+  transform-style: preserve-3d;
+}
+
+/* 左侧 Frank panel 微微向右倾斜, 右侧 asset panel 向左倾斜, 形成包围感 */
+.frank-panel {
+  transform: rotateY(3deg);
+  transform-origin: right center;
+}
+
+.asset-panel {
+  transform: rotateY(-3deg);
+  transform-origin: left center;
+}
+
+/* ---------- 面板标题块 ---------- */
+.panel-title {
+  border-radius: 14px;
+  transform: rotateX(var(--tilt-angle)) translateZ(18px);
+  box-shadow:
+    0 var(--depth-1) 0 var(--chunk-color),
+    0 var(--depth-2) 0 rgba(64, 30, 122, 0.18),
+    0 22px 32px rgba(88, 56, 145, 0.18);
+}
+
+/* ---------- Stat / Trait / Log 卡片: 厚块 ---------- */
+.stat,
+.trait-card,
+.target-card,
+.rules-list,
+.log-list > div,
+.system-slot {
+  transform: rotateX(var(--tilt-angle)) translateZ(16px);
+  box-shadow:
+    0 var(--depth-1) 0 var(--chunk-color),
+    0 var(--depth-2) 0 rgba(64, 30, 122, 0.18),
+    0 18px 30px rgba(88, 56, 145, 0.16);
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+
+.stat:hover,
+.trait-card:hover,
+.system-slot:hover,
+.log-list > div:hover {
+  transform: rotateX(calc(var(--tilt-angle) - 3deg)) translateZ(26px) translateY(-2px);
+}
+
+.trait-card {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.85), rgba(248, 240, 255, 0.55)),
+    rgba(255, 255, 255, 0.6);
+}
+
+/* ---------- 战斗台: 等距桌面平面感 ---------- */
+.arena {
+  transform-style: preserve-3d;
+}
+
+.table-3d {
+  perspective: 1400px;
+  perspective-origin: 50% 30%;
+  background:
+    radial-gradient(ellipse at 50% 88%, rgba(168, 122, 255, 0.30), transparent 60%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.20), rgba(255, 255, 255, 0.0) 70%);
+}
+
+/* 添加一个伪元素作为"桌面"地平面 */
+.table-3d::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -10%;
+  width: 130%;
+  height: 70%;
+  background:
+    linear-gradient(180deg, rgba(201, 179, 255, 0.0) 0%, rgba(201, 179, 255, 0.35) 35%, rgba(142, 109, 209, 0.50) 100%);
+  transform: translateX(-50%) rotateX(72deg);
+  transform-origin: 50% 0;
+  filter: blur(2px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 桌面网格线增强等距感 */
+.table-3d::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -8%;
+  width: 110%;
+  height: 60%;
+  background-image:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.10) 1px, transparent 1px);
+  background-size: 48px 48px;
+  transform: translateX(-50%) rotateX(72deg);
+  transform-origin: 50% 0;
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ---------- AP 显示芯片 (budget-chip) 重做为漂浮厚块 ---------- */
+.budget-chip {
+  border-radius: 14px;
+  background: linear-gradient(160deg, #fef3c7, #fde047);
+  border-color: rgba(202, 138, 4, 0.5);
+  color: #422006;
+  transform: rotateX(var(--tilt-angle)) translateZ(28px);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6),
+    0 var(--depth-1) 0 rgba(133, 77, 14, 0.45),
+    0 var(--depth-2) 0 rgba(133, 77, 14, 0.35),
+    0 22px 36px rgba(202, 138, 4, 0.30);
+}
+
+/* ---------- 卡堆: 立体多层厚度 ---------- */
+.card-pile {
+  border-radius: 16px;
+  transform: rotateX(var(--tilt-angle)) translateZ(24px);
+  box-shadow:
+    0 var(--depth-1) 0 var(--chunk-color),
+    0 var(--depth-2) 0 rgba(64, 30, 122, 0.18),
+    0 28px 44px rgba(117, 75, 170, 0.22);
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+
+.card-pile:hover {
+  transform: rotateX(calc(var(--tilt-angle) - 3deg)) translateZ(36px) translateY(-3px);
+}
+
+.pile-stack {
+  transform-style: preserve-3d;
+}
+
+.pile-card {
+  box-shadow:
+    0 3px 0 rgba(64, 30, 122, 0.18),
+    0 8px 14px rgba(117, 75, 170, 0.18);
+}
+
+/* ---------- 手牌行: 透视扇形 + 深度 ---------- */
+.hand-table {
+  transform-style: preserve-3d;
+  perspective: 1400px;
+}
+
+.hand-row {
+  perspective: 1400px;
+  perspective-origin: 50% 0%;
+  transform-style: preserve-3d;
+  padding-bottom: 10px;
+}
+
+/* ---------- 员工卡: 加厚块阴影 + 微扇形 ---------- */
+.employee-card {
+  border-radius: 14px;
+  transform-style: preserve-3d;
+  transform: rotateX(10deg) translateY(0) translateZ(0);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6),
+    0 6px 0 rgba(121, 91, 171, 0.22),
+    0 12px 0 rgba(121, 91, 171, 0.16),
+    0 26px 40px rgba(117, 75, 170, 0.22);
+  transition:
+    transform 200ms cubic-bezier(.2, .8, .2, 1),
+    box-shadow 200ms ease,
+    filter 200ms ease;
+}
+
+.employee-card:hover {
+  transform: rotateX(2deg) rotateY(-6deg) translateY(-22px) translateZ(40px);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+    0 8px 0 rgba(121, 91, 171, 0.20),
+    0 14px 0 rgba(121, 91, 171, 0.14),
+    0 36px 50px rgba(117, 75, 170, 0.28);
+  filter: saturate(1.12) brightness(1.04);
+  z-index: 5;
+}
+
+.employee-card.selected {
+  border-color: #8b5cf6;
+  transform: rotateX(0deg) translateY(-30px) translateZ(48px);
+  box-shadow:
+    0 0 0 3px rgba(139, 92, 246, 0.30),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+    0 8px 0 rgba(91, 33, 182, 0.34),
+    0 14px 0 rgba(91, 33, 182, 0.24),
+    0 36px 54px rgba(139, 92, 246, 0.36);
+}
+
+.rank-badge {
+  background: linear-gradient(160deg, #fef3c7, #fde047);
+  color: #422006;
+  border-color: rgba(202, 138, 4, 0.5);
+  box-shadow:
+    0 2px 0 rgba(133, 77, 14, 0.40),
+    0 6px 10px rgba(202, 138, 4, 0.32);
+}
+
+/* ---------- preview-pill: 厚块 ---------- */
+.preview-pill {
+  border-radius: 999px;
+  transform: rotateX(var(--tilt-angle)) translateZ(18px);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.6),
+    0 var(--depth-1) 0 var(--chunk-color),
+    0 var(--depth-2) 0 rgba(64, 30, 122, 0.16),
+    0 22px 30px rgba(88, 56, 145, 0.18);
+}
+
+/* ---------- arena-top 与 intent-card ---------- */
+.arena-top {
+  border-radius: 16px;
+  transform: rotateX(var(--tilt-angle)) translateZ(18px);
+  box-shadow:
+    0 var(--depth-1) 0 var(--chunk-color),
+    0 var(--depth-2) 0 rgba(64, 30, 122, 0.18),
+    0 22px 32px rgba(88, 56, 145, 0.18);
+}
+
+.intent-card {
+  transform: rotateX(8deg) translateZ(28px);
+  box-shadow:
+    0 var(--depth-1) 0 var(--chunk-color),
+    0 var(--depth-2) 0 rgba(64, 30, 122, 0.18),
+    0 22px 36px rgba(117, 75, 170, 0.22);
+}
+
+/* ---------- 分数飞字: 增加 3D 厚度感 ---------- */
+.score-floater {
+  text-shadow:
+    0 2px 0 rgba(124, 58, 237, 0.6),
+    0 4px 0 rgba(124, 58, 237, 0.45),
+    0 6px 0 rgba(124, 58, 237, 0.32),
+    0 8px 0 rgba(76, 29, 149, 0.22),
+    0 14px 24px rgba(168, 85, 247, 0.55),
+    0 0 36px rgba(45, 212, 191, 0.40);
+}
+
+/* ---------- 模态框 2.5D 化 ---------- */
+.modal-panel {
+  transform: rotateX(2deg);
+  box-shadow:
+    0 6px 0 rgba(64, 30, 122, 0.30),
+    0 14px 0 rgba(64, 30, 122, 0.22),
+    0 40px 80px rgba(64, 30, 122, 0.40);
+}
+
+/* ---------- Archetype 选择卡片厚化 ---------- */
+.archetype-card {
+  transform: rotateX(6deg) translateZ(20px);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 6px 0 rgba(0, 0, 0, 0.40),
+    0 12px 0 rgba(0, 0, 0, 0.28),
+    0 32px 50px rgba(76, 29, 149, 0.40);
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+
+.archetype-card:hover {
+  transform: rotateX(0deg) translateY(-10px) translateZ(40px);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 220, 130, 0.30),
+    0 8px 0 rgba(0, 0, 0, 0.36),
+    0 14px 0 rgba(0, 0, 0, 0.24),
+    0 40px 60px rgba(255, 220, 130, 0.20);
+}
+
+/* ---------- hand-dock: 桌面边缘+灯光感 ---------- */
+.hand-dock {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.0) 0%, rgba(255, 255, 255, 0.45) 30%, rgba(255, 255, 255, 0.65) 100%),
+    radial-gradient(ellipse at 50% 110%, rgba(168, 122, 255, 0.30), transparent 60%);
+  border-top: 1px solid rgba(139, 92, 246, 0.15);
+  box-shadow:
+    inset 0 8px 24px rgba(168, 122, 255, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transform-style: preserve-3d;
+}
+
+.hand-header {
+  transform-style: preserve-3d;
+}
+
+.section-label {
+  letter-spacing: 1px;
+}
+
+/* ---------- pile-card 单卡更厚 (堆叠面看起来像一摞卡) ---------- */
+.pile-card {
+  border-radius: 12px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.4),
+    0 3px 0 rgba(64, 30, 122, 0.20),
+    0 6px 0 rgba(64, 30, 122, 0.14),
+    0 10px 16px rgba(117, 75, 170, 0.16);
+}
+
+/* ---------- 顶部 guide button 与 重开按钮 与 HUD 协调 ---------- */
+.top-hud .guide-button {
+  border-radius: 12px;
+  transform: rotateX(var(--tilt-angle)) translateZ(20px);
+}
+
+/* ---------- Frank avatar 加陀螺感 (slight idle bob) ---------- */
+.frank-panel .avatar-25d {
+  animation: avatar-bob 4500ms ease-in-out infinite;
+}
+
+@keyframes avatar-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* ---------- 进度条 2.5D ---------- */
+.progress-track {
+  box-shadow:
+    inset 0 2px 4px rgba(64, 30, 122, 0.18),
+    inset 0 0 0 1px rgba(139, 92, 246, 0.10);
+}
+
+.progress-track span {
+  box-shadow:
+    inset 0 -2px 0 rgba(76, 29, 149, 0.35),
+    0 0 18px rgba(168, 85, 247, 0.55);
+}
