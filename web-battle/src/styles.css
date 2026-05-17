@@ -2295,3 +2295,29 @@ body, .battle-shell {
   line-height: 1.0 !important;
 }
 
+
+/* ============================================================
+   AP rank-badge 放大显示
+   ============================================================ */
+.rank-badge {
+  min-width: 42px !important;
+  height: 32px !important;
+  padding: 0 8px !important;
+  font-family: 'Press Start 2P', 'Fusion Pixel', monospace !important;
+  font-size: 14px !important;
+  gap: 3px;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.rank-badge .ap-icon {
+  display: inline-block;
+  font-family: 'Fusion Pixel', monospace !important;
+  font-size: 13px;
+  font-weight: 400 !important;
+  color: var(--pix-ink);
+  transform: translateY(-1px);
+  margin-right: 1px;
+}
+

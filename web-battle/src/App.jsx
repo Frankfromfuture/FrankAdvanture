@@ -292,7 +292,7 @@ function App() {
           <Avatar role="frank" />
           <div className="stat-grid">
             <Stat label="资金" value={`¥${money}`} />
-            <Stat label="行动力" value={`⚡${ap}/${MAX_AP}`} />
+            <Stat label="行动力" value={`${ap}/${MAX_AP} AP`} />
             <Stat label="手牌" value={hand.length} />
             <Stat label="周/12" value={week} />
           </div>
@@ -306,7 +306,7 @@ function App() {
         <section className="arena">
           <div className="table-3d">
             <PhaserBattleFX fxEvent={fxEvent} />
-            <div className="budget-chip">⚡ 剩余 AP: {remainingAp}/{MAX_AP}</div>
+            <div className="budget-chip">* 剩余 AP: {remainingAp}/{MAX_AP}</div>
             <div className="played-zone">
               {playedCards.length === 0 ? (
                 <div className="drop-hint">战斗区</div>
@@ -344,7 +344,7 @@ function App() {
         <div className="hand-header">
           <div>
             <span className="section-label">本周手牌</span>
-            <strong>{selected.length} 张已选 · ⚡{preview.cost}/{ap}</strong>
+            <strong>{selected.length} 张已选 · {preview.cost}/{ap} AP</strong>
           </div>
           <div className="preview-pill">
             <span>预估</span>
@@ -426,7 +426,7 @@ function ArchetypeSelect({ onSelect }) {
         ))}
       </div>
       <footer className="archetype-footer">
-        起始资金 ¥{INITIAL_MONEY} · 每周 ⚡{MAX_AP} AP · 12 周达标 {TARGET_SCORE} 分
+        起始资金 ¥{INITIAL_MONEY} · 每周 {MAX_AP} AP · 12 周达标 {TARGET_SCORE} 分
       </footer>
     </main>
   )
@@ -625,7 +625,7 @@ function TopHud({ week, score, money, ap, maxAp, eventName, archetypeName, onGui
           <strong>¥{money}</strong>
         </div>
         <div>
-          <span>⚡ AP</span>
+          <span>AP</span>
           <strong>{ap}/{maxAp}</strong>
         </div>
         <div>
@@ -656,7 +656,7 @@ function EmployeeCardView({ card, selected, onClick, compact = false, style }) {
       onClick={onClick}
       style={style}
     >
-      <span className="rank-badge">⚡{card.cost}</span>
+      <span className="rank-badge"><b className="ap-icon">*</b>{card.cost}</span>
       <span className="dept">{isEmployee ? card.dept : card.rarity}</span>
       {isEmployee ? (
         <strong className="power">{card.power}</strong>
