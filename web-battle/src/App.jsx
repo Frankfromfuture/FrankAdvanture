@@ -306,7 +306,7 @@ function App() {
         <section className="arena">
           <div className="table-3d">
             <PhaserBattleFX fxEvent={fxEvent} />
-            <div className="budget-chip">* 剩余 AP: {remainingAp}/{MAX_AP}</div>
+            <div className="budget-chip"><b className="ap-icon" aria-hidden="true" /> 剩余 AP: {remainingAp}/{MAX_AP}</div>
             <div className="played-zone">
               {playedCards.length === 0 ? (
                 <div className="drop-hint">战斗区</div>
@@ -656,7 +656,7 @@ function EmployeeCardView({ card, selected, onClick, compact = false, style }) {
       onClick={onClick}
       style={style}
     >
-      <span className="rank-badge"><b className="ap-icon">*</b>{card.cost}</span>
+      <span className="rank-badge"><b className="ap-icon" aria-hidden="true" />{card.cost}</span>
       <span className="dept">{isEmployee ? card.dept : card.rarity}</span>
       {isEmployee ? (
         <strong className="power">{card.power}</strong>
