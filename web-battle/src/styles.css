@@ -2249,3 +2249,35 @@ body, .battle-shell {
   line-height: 1.4;
 }
 
+
+/* ============================================================
+   修复: 功能/服务卡 trait 文字过长溢出
+   ============================================================ */
+.employee-card.function .power,
+.employee-card.service .power {
+  font-family: 'Fusion Pixel', monospace !important;
+  font-size: 13px !important;
+  line-height: 1.2 !important;
+  white-space: normal !important;
+  text-overflow: clip !important;
+  overflow: visible !important;
+  max-width: 100% !important;
+  min-height: 32px !important;
+  margin-top: 8px !important;
+  padding: 0 4px !important;
+  word-break: break-word;
+}
+
+.employee-card.function em,
+.employee-card.service em {
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+  min-height: auto !important;
+}
+
+.employee-card.function .dept,
+.employee-card.service .dept {
+  font-size: 11px !important;
+  padding-right: 36px !important;
+}
+
