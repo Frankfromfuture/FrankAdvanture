@@ -1628,3 +1628,605 @@ button {
     inset 0 -2px 0 rgba(76, 29, 149, 0.35),
     0 0 18px rgba(168, 85, 247, 0.55);
 }
+
+/* ============================================================
+   v3.0++ : 像素风全面改造层 (Balatro-style pixel + 2.5D 等距)
+   策略: 保留 perspective 透视, 但把所有表面变成像素艺术: 
+   - 像素字体 (DotGothic16 CJK + Press Start 2P 标题)
+   - 硬边阴影 (无 blur, 无 backdrop-filter)
+   - 像素边框 (2px 硬色 + 1px 高光/暗影)
+   - 平面色块 (取消渐变, 限定调色板)
+   - 直角 / 2px 圆角最大
+   - 步进过渡 (animation steps)
+   ============================================================ */
+
+/* 像素调色板 */
+:root {
+  --pix-bg:        #1a0d2e;   /* 深紫底 */
+  --pix-bg-2:      #2d1659;   /* 浅紫底 */
+  --pix-card:      #f6e8d4;   /* 米色卡面 */
+  --pix-card-dark: #c8b08e;   /* 卡面暗边 */
+  --pix-ink:       #1a0d2e;   /* 文字主色 */
+  --pix-purple:    #8b5cf6;
+  --pix-purple-dk: #4c1d95;
+  --pix-gold:      #fbbf24;
+  --pix-gold-dk:   #92400e;
+  --pix-cyan:      #2dd4bf;
+  --pix-cyan-dk:   #0f766e;
+  --pix-magenta:   #ec4899;
+  --pix-rd-light:  #b8f3e8;
+  --pix-rd-dark:   #0f766e;
+  --pix-sales-light: #ffc985;
+  --pix-sales-dark:  #92400e;
+  --pix-admin-light: #c7b5ff;
+  --pix-admin-dark:  #4c1d95;
+  --pix-func-light:  #b9d4ff;
+  --pix-func-dark:   #1e40af;
+  --pix-svc-light:   #f0a8d4;
+  --pix-svc-dark:    #831843;
+  --pix-white:     #ffffff;
+  --pix-black:     #0a0613;
+}
+
+/* 全局字体: CJK 像素 + Latin 像素 */
+:root {
+  font-family: 'DotGothic16', 'VT323', 'Press Start 2P',
+               '方正像素 16', 'Fusion Pixel', 'Cubic 11',
+               'Microsoft YaHei', 'PingFang SC',
+               monospace !important;
+  font-synthesis: none;
+}
+
+body, .battle-shell {
+  background: var(--pix-bg) !important;
+  color: var(--pix-card) !important;
+  image-rendering: pixelated;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+  font-smooth: never;
+}
+
+/* 标题用更"像素方块"的 Press Start 2P (英文/数字) */
+.brand-block strong,
+.archetype-header h1,
+.modal-title h2 {
+  font-family: 'Press Start 2P', 'DotGothic16', monospace !important;
+  letter-spacing: 1px;
+}
+
+/* 取消所有圆角 */
+.battle-shell *,
+.battle-shell *::before,
+.battle-shell *::after {
+  border-radius: 0 !important;
+}
+
+/* 取消所有 backdrop-filter (像素风不糊) */
+.battle-shell *,
+.battle-shell *::before,
+.battle-shell *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ---------- 像素背景: 替换 PNG 会议室为像素网格 ---------- */
+.battle-shell {
+  background:
+    /* 扫描线效果 */
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 3px,
+      rgba(0, 0, 0, 0.12) 3px,
+      rgba(0, 0, 0, 0.12) 4px
+    ),
+    /* 主紫色底 */
+    linear-gradient(180deg, #1a0d2e 0%, #2d1659 50%, #1a0d2e 100%) !important;
+}
+
+.battle-bg {
+  background:
+    radial-gradient(ellipse at 50% 76%, rgba(139, 92, 246, 0.30), transparent 60%) !important;
+  opacity: 1;
+  mask-image: none;
+}
+
+/* ---------- 通用像素块容器 ---------- */
+.brand-block,
+.hud-center > div,
+.panel-title,
+.stat,
+.trait-card,
+.target-card,
+.rules-list,
+.log-list > div,
+.preview-pill,
+.intent-card,
+.budget-chip,
+.card-pile,
+.arena-top,
+.system-slot,
+.modal-panel {
+  border: 2px solid var(--pix-ink) !important;
+  background: var(--pix-card) !important;
+  color: var(--pix-ink) !important;
+  box-shadow:
+    /* 内部 2 像素高光 (顶左白, 底右深) */
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.7),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.18),
+    /* 厚度块 (硬偏移阴影) */
+    4px 4px 0 0 var(--pix-purple-dk),
+    8px 8px 0 0 var(--pix-black) !important;
+}
+
+/* ---------- 文字颜色统一: 深色背景上文字白, 浅色面板上文字深 ---------- */
+.brand-block strong,
+.brand-block span,
+.hud-center > div span,
+.hud-center > div strong,
+.panel-title strong,
+.panel-title span,
+.stat span,
+.stat strong,
+.trait-card span,
+.trait-card strong,
+.trait-card small,
+.log-list > div,
+.preview-pill span,
+.preview-pill strong,
+.preview-pill small,
+.intent-card span,
+.intent-card strong,
+.intent-card small,
+.system-slot span,
+.system-slot strong,
+.system-slot small,
+.budget-chip,
+.pile-copy span,
+.pile-copy strong,
+.pile-copy small {
+  color: var(--pix-ink) !important;
+  font-weight: 400 !important;
+  text-shadow: none !important;
+}
+
+.stat strong,
+.preview-pill strong,
+.hud-center > div strong {
+  color: var(--pix-purple-dk) !important;
+}
+
+/* ---------- 按钮: 像素硬块 ---------- */
+.guide-button,
+.small-ghost,
+.action-button {
+  border: 2px solid var(--pix-ink) !important;
+  background: var(--pix-card) !important;
+  color: var(--pix-ink) !important;
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.7),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.20),
+    4px 4px 0 0 var(--pix-purple-dk),
+    8px 8px 0 0 var(--pix-black) !important;
+  transition: transform 80ms steps(1), box-shadow 80ms steps(1) !important;
+}
+
+.guide-button:hover,
+.small-ghost:hover,
+.action-button:hover,
+.system-slot:hover {
+  transform: translateY(-2px) !important;
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.80),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.20),
+    4px 6px 0 0 var(--pix-purple-dk),
+    8px 10px 0 0 var(--pix-black) !important;
+}
+
+.guide-button:active,
+.action-button:active,
+.system-slot:active {
+  transform: translate(2px, 4px) !important;
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.4),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.4),
+    2px 2px 0 0 var(--pix-purple-dk),
+    4px 4px 0 0 var(--pix-black) !important;
+}
+
+/* 主按钮: 紫底白字 */
+.action-button.primary {
+  background: var(--pix-purple) !important;
+  color: var(--pix-white) !important;
+  border-color: var(--pix-black) !important;
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.45),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.30),
+    4px 4px 0 0 var(--pix-purple-dk),
+    8px 8px 0 0 var(--pix-black) !important;
+}
+
+/* ---------- 卡片: 像素卡牌 ---------- */
+.employee-card {
+  border: 3px solid var(--pix-ink) !important;
+  border-radius: 0 !important;
+  box-shadow:
+    /* 顶部 2px 高光 (像素感) */
+    inset 0 2px 0 0 rgba(255, 255, 255, 0.7),
+    inset 0 -2px 0 0 rgba(0, 0, 0, 0.20),
+    inset 2px 0 0 0 rgba(255, 255, 255, 0.4),
+    inset -2px 0 0 0 rgba(0, 0, 0, 0.15),
+    /* 多层厚度 (像素 stack) */
+    4px 4px 0 0 var(--pix-purple-dk),
+    8px 8px 0 0 var(--pix-black),
+    12px 12px 0 0 rgba(0, 0, 0, 0.5) !important;
+  transition: transform 100ms steps(2), box-shadow 100ms steps(2), filter 100ms steps(2) !important;
+}
+
+/* 部门色: 单色而非渐变 */
+.employee-card.rd      { background: var(--pix-rd-light) !important; }
+.employee-card.sales   { background: var(--pix-sales-light) !important; }
+.employee-card.admin   { background: var(--pix-admin-light) !important; }
+.employee-card.function { background: var(--pix-func-light) !important; }
+.employee-card.service { background: var(--pix-svc-light) !important; }
+
+.employee-card:hover {
+  transform: translateY(-12px) translateZ(20px) rotateX(0deg) rotateY(0deg) !important;
+  filter: brightness(1.12) saturate(1.15) !important;
+}
+
+.employee-card.selected {
+  border-color: var(--pix-purple-dk) !important;
+  outline: 3px solid var(--pix-gold) !important;
+  outline-offset: 2px !important;
+  transform: translateY(-22px) translateZ(30px) !important;
+  box-shadow:
+    inset 0 2px 0 0 rgba(255, 255, 255, 0.7),
+    inset 0 -2px 0 0 rgba(0, 0, 0, 0.20),
+    4px 4px 0 0 var(--pix-purple-dk),
+    8px 8px 0 0 var(--pix-black),
+    12px 12px 0 0 rgba(0, 0, 0, 0.5) !important;
+}
+
+.employee-card em,
+.employee-card .power,
+.employee-card .dept,
+.employee-card .chips {
+  color: var(--pix-ink) !important;
+  text-shadow: none !important;
+  font-weight: 400 !important;
+}
+
+.rank-badge {
+  border: 2px solid var(--pix-ink) !important;
+  background: var(--pix-gold) !important;
+  color: var(--pix-ink) !important;
+  box-shadow:
+    inset 1px 1px 0 0 rgba(255, 255, 255, 0.6),
+    inset -1px -1px 0 0 rgba(0, 0, 0, 0.25),
+    2px 2px 0 0 var(--pix-gold-dk) !important;
+  font-family: 'Press Start 2P', monospace !important;
+  font-size: 11px !important;
+}
+
+.chips {
+  background: rgba(255, 255, 255, 0.5) !important;
+  border-top: 2px solid rgba(0, 0, 0, 0.25) !important;
+}
+
+/* ---------- AP 芯片: 金色厚块 ---------- */
+.budget-chip {
+  background: var(--pix-gold) !important;
+  color: var(--pix-ink) !important;
+  border-color: var(--pix-ink) !important;
+  font-family: 'Press Start 2P', monospace !important;
+  font-size: 12px !important;
+  letter-spacing: 1px;
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.7),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.25),
+    4px 4px 0 0 var(--pix-gold-dk),
+    8px 8px 0 0 var(--pix-black) !important;
+}
+
+/* ---------- 卡堆 ---------- */
+.pile-card {
+  border: 2px solid var(--pix-ink) !important;
+  box-shadow:
+    inset 1px 1px 0 0 rgba(255, 255, 255, 0.4),
+    inset -1px -1px 0 0 rgba(0, 0, 0, 0.2),
+    2px 2px 0 0 rgba(0, 0, 0, 0.4) !important;
+}
+
+.pile-card.rd      { background: var(--pix-rd-light) !important; }
+.pile-card.sales   { background: var(--pix-sales-light) !important; }
+.pile-card.admin   { background: var(--pix-admin-light) !important; }
+.pile-card.function { background: var(--pix-func-light) !important; }
+.pile-card.service { background: var(--pix-svc-light) !important; }
+.pile-card.empty {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-style: dashed !important;
+  border-color: rgba(246, 232, 212, 0.4) !important;
+}
+
+/* ---------- 战斗台桌面: 像素网格 ---------- */
+.table-3d {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 4px,
+      rgba(0, 0, 0, 0.10) 4px,
+      rgba(0, 0, 0, 0.10) 5px
+    ),
+    transparent !important;
+}
+
+.table-3d::after {
+  background:
+    /* 透视桌面: 像素紫色阶梯 */
+    linear-gradient(180deg, rgba(139, 92, 246, 0.0) 0%, rgba(139, 92, 246, 0.40) 50%, rgba(76, 29, 149, 0.80) 100%) !important;
+  filter: none !important;
+}
+
+.table-3d::before {
+  background-image:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.20) 2px, transparent 2px),
+    linear-gradient(0deg, rgba(255, 255, 255, 0.18) 2px, transparent 2px) !important;
+  background-size: 32px 32px !important;
+  opacity: 0.65;
+}
+
+/* ---------- 进度条 ---------- */
+.progress-track {
+  border: 2px solid var(--pix-ink) !important;
+  background: rgba(255, 255, 255, 0.30) !important;
+  box-shadow: inset 1px 1px 0 0 rgba(0, 0, 0, 0.2) !important;
+}
+
+.progress-track span {
+  background: var(--pix-purple) !important;
+  box-shadow:
+    inset 0 -2px 0 0 rgba(0, 0, 0, 0.3),
+    inset 0 2px 0 0 rgba(255, 255, 255, 0.4) !important;
+}
+
+/* ---------- 模态框 ---------- */
+.modal-backdrop {
+  background: rgba(10, 6, 19, 0.88) !important;
+  backdrop-filter: none !important;
+  image-rendering: pixelated;
+}
+
+.modal-panel {
+  border: 3px solid var(--pix-ink) !important;
+  background: var(--pix-card) !important;
+  color: var(--pix-ink) !important;
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.6),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.20),
+    6px 6px 0 0 var(--pix-purple-dk),
+    12px 12px 0 0 var(--pix-black) !important;
+}
+
+.modal-title button {
+  border: 2px solid var(--pix-ink) !important;
+  background: var(--pix-purple) !important;
+  color: var(--pix-white) !important;
+  box-shadow: 2px 2px 0 0 var(--pix-black) !important;
+}
+
+.combo-row {
+  border: 2px solid var(--pix-ink) !important;
+  background: rgba(255, 255, 255, 0.6) !important;
+  box-shadow: 3px 3px 0 0 rgba(0, 0, 0, 0.4) !important;
+  color: var(--pix-ink) !important;
+}
+
+/* ---------- 头像: 像素硬边 + 限定调色 ---------- */
+.avatar-head,
+.avatar-jacket,
+.avatar-tablet {
+  border: 2px solid var(--pix-ink) !important;
+  background: var(--pix-sales-light) !important;
+  box-shadow: 3px 3px 0 0 var(--pix-black) !important;
+  filter: none !important;
+}
+
+.avatar-head {
+  background: var(--pix-sales-light) !important;
+}
+
+.avatar-jacket {
+  background: var(--pix-purple) !important;
+}
+
+.rival .avatar-jacket {
+  background: var(--pix-magenta) !important;
+}
+
+.avatar-tablet {
+  background: var(--pix-cyan) !important;
+}
+
+.avatar-shadow {
+  background: rgba(0, 0, 0, 0.40) !important;
+  filter: none !important;
+}
+
+/* ---------- 分数飞字: 像素 chunky 文字 ---------- */
+.score-floater {
+  font-family: 'Press Start 2P', monospace !important;
+  font-size: 28px !important;
+  color: var(--pix-gold) !important;
+  text-shadow:
+    2px 0 0 var(--pix-ink),
+    -2px 0 0 var(--pix-ink),
+    0 2px 0 var(--pix-ink),
+    0 -2px 0 var(--pix-ink),
+    2px 2px 0 var(--pix-ink),
+    -2px -2px 0 var(--pix-ink),
+    2px -2px 0 var(--pix-ink),
+    -2px 2px 0 var(--pix-ink),
+    0 4px 0 var(--pix-gold-dk),
+    0 8px 0 var(--pix-black) !important;
+  letter-spacing: 2px;
+}
+
+/* ---------- hand-dock: 像素酒吧台 ---------- */
+.hand-dock {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      var(--pix-bg-2) 0,
+      var(--pix-bg-2) 4px,
+      var(--pix-bg) 4px,
+      var(--pix-bg) 8px
+    ) !important;
+  border-top: 3px solid var(--pix-ink) !important;
+  box-shadow:
+    inset 0 3px 0 0 rgba(255, 255, 255, 0.10),
+    inset 0 -3px 0 0 rgba(0, 0, 0, 0.40) !important;
+}
+
+.section-label,
+.hand-header strong {
+  color: var(--pix-card) !important;
+  text-shadow: 2px 2px 0 var(--pix-black) !important;
+  font-family: 'Press Start 2P', monospace !important;
+  font-size: 11px !important;
+  letter-spacing: 1px;
+}
+
+.hand-header strong {
+  font-size: 14px !important;
+}
+
+/* ---------- 顶部 HUD 文字深色背景 ---------- */
+.brand-block,
+.hud-center > div {
+  background: var(--pix-card) !important;
+}
+
+/* ---------- archetype 选择面板 像素化 ---------- */
+.archetype-shell {
+  background:
+    repeating-linear-gradient(0deg, transparent 0, transparent 3px, rgba(0, 0, 0, 0.15) 3px, rgba(0, 0, 0, 0.15) 4px),
+    linear-gradient(180deg, var(--pix-bg) 0%, var(--pix-bg-2) 50%, var(--pix-bg) 100%) !important;
+}
+
+.archetype-header strong {
+  color: var(--pix-gold) !important;
+  font-family: 'Press Start 2P', monospace !important;
+  font-size: 11px !important;
+  letter-spacing: 3px;
+}
+
+.archetype-header h1 {
+  color: var(--pix-white) !important;
+  font-size: 28px !important;
+  text-shadow:
+    2px 2px 0 var(--pix-ink),
+    4px 4px 0 var(--pix-purple-dk) !important;
+}
+
+.archetype-header p,
+.archetype-footer {
+  color: var(--pix-card) !important;
+}
+
+.archetype-card {
+  border: 3px solid var(--pix-ink) !important;
+  background: var(--pix-card) !important;
+  color: var(--pix-ink) !important;
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.6),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.20),
+    6px 6px 0 0 var(--pix-purple-dk),
+    12px 12px 0 0 var(--pix-black) !important;
+  transition: transform 100ms steps(2), box-shadow 100ms steps(2) !important;
+}
+
+.archetype-card:hover {
+  transform: translate(-2px, -4px) !important;
+  box-shadow:
+    inset 2px 2px 0 0 rgba(255, 255, 255, 0.6),
+    inset -2px -2px 0 0 rgba(0, 0, 0, 0.20),
+    8px 10px 0 0 var(--pix-gold),
+    14px 16px 0 0 var(--pix-black) !important;
+}
+
+.archetype-card strong {
+  color: var(--pix-purple-dk) !important;
+  font-family: 'Press Start 2P', monospace !important;
+  font-size: 14px !important;
+}
+
+.archetype-card em,
+.archetype-card p {
+  color: var(--pix-ink) !important;
+}
+
+.archetype-badge {
+  background: var(--pix-gold) !important;
+  color: var(--pix-ink) !important;
+  border: 2px solid var(--pix-ink) !important;
+  box-shadow: 2px 2px 0 0 var(--pix-gold-dk) !important;
+  font-family: 'Press Start 2P', monospace !important;
+  font-size: 9px !important;
+}
+
+/* ---------- Lucide 图标: 用 contrast filter 模拟像素感 ---------- */
+.battle-shell svg,
+.archetype-shell svg {
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+  filter: contrast(1.4) saturate(1.2);
+}
+
+/* ---------- 取消所有 transition 的平滑曲线, 改 steps ---------- */
+.employee-card,
+.guide-button,
+.action-button,
+.system-slot,
+.archetype-card,
+.stat,
+.trait-card,
+.log-list > div,
+.card-pile {
+  transition-timing-function: steps(2, end) !important;
+}
+
+/* ---------- 取消之前 2.5D 层的 perspective hover Y 旋转 (像素风更适合纯Y轴上下) ---------- */
+.employee-card:hover {
+  transform: translateY(-12px) !important;
+}
+
+.employee-card.selected {
+  transform: translateY(-24px) !important;
+}
+
+/* ---------- 字号缩放微调 (像素字体往往需要小一点) ---------- */
+.hud-center span,
+.section-label,
+.panel-title span,
+.stat span,
+.trait-card small,
+.preview-pill small {
+  font-size: 11px !important;
+  letter-spacing: 0.5px;
+}
+
+.hud-center strong,
+.preview-pill strong {
+  font-family: 'Press Start 2P', 'DotGothic16', monospace !important;
+  font-size: 14px !important;
+}
+
+/* ---------- log 字号 ---------- */
+.log-list > div {
+  font-size: 12px !important;
+  font-family: 'DotGothic16', monospace !important;
+  line-height: 1.4;
+}
+
