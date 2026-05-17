@@ -1631,14 +1631,33 @@ button {
 
 /* ============================================================
    v3.0++ : 像素风全面改造层 (Balatro-style pixel + 2.5D 等距)
-   策略: 保留 perspective 透视, 但把所有表面变成像素艺术: 
-   - 像素字体 (DotGothic16 CJK + Press Start 2P 标题)
+   策略: 保留 perspective 透视, 但把所有表面变成像素艺术:
+   - 像素字体: Fusion Pixel 12px (CJK 全覆盖, TakWolf/fusion-pixel-font) + Press Start 2P (Latin 标题)
    - 硬边阴影 (无 blur, 无 backdrop-filter)
    - 像素边框 (2px 硬色 + 1px 高光/暗影)
    - 平面色块 (取消渐变, 限定调色板)
    - 直角 / 2px 圆角最大
    - 步进过渡 (animation steps)
    ============================================================ */
+
+/* Fusion Pixel 字体本地托管 */
+@font-face {
+  font-family: 'Fusion Pixel';
+  src: url('/assets/fonts/fusion-pixel-12px-monospaced-zh_hans.otf.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0080-FFFF, U+4E00-9FFF, U+3000-303F, U+FF00-FFEF;
+}
+
+@font-face {
+  font-family: 'Fusion Pixel';
+  src: url('/assets/fonts/fusion-pixel-12px-monospaced-latin.otf.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-007F;
+}
 
 /* 像素调色板 */
 :root {
@@ -1670,7 +1689,7 @@ button {
 
 /* 全局字体: CJK 像素 + Latin 像素 */
 :root {
-  font-family: 'DotGothic16', 'VT323', 'Press Start 2P',
+  font-family: 'Fusion Pixel', 'VT323', 'Press Start 2P',
                '方正像素 16', 'Fusion Pixel', 'Cubic 11',
                'Microsoft YaHei', 'PingFang SC',
                monospace !important;
@@ -1690,7 +1709,7 @@ body, .battle-shell {
 .brand-block strong,
 .archetype-header h1,
 .modal-title h2 {
-  font-family: 'Press Start 2P', 'DotGothic16', monospace !important;
+  font-family: 'Press Start 2P', 'Fusion Pixel', monospace !important;
   letter-spacing: 1px;
 }
 
@@ -2219,14 +2238,14 @@ body, .battle-shell {
 
 .hud-center strong,
 .preview-pill strong {
-  font-family: 'Press Start 2P', 'DotGothic16', monospace !important;
+  font-family: 'Press Start 2P', 'Fusion Pixel', monospace !important;
   font-size: 14px !important;
 }
 
 /* ---------- log 字号 ---------- */
 .log-list > div {
   font-size: 12px !important;
-  font-family: 'DotGothic16', monospace !important;
+  font-family: 'Fusion Pixel', monospace !important;
   line-height: 1.4;
 }
 
