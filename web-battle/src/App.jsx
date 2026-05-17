@@ -648,6 +648,8 @@ function TopHud({ week, score, money, ap, maxAp, eventName, archetypeName, onGui
 
 function EmployeeCardView({ card, selected, onClick, compact = false, style }) {
   const isEmployee = card.type === 'employee'
+  const traitParts = !isEmployee && card.trait ? card.trait.split(/\s+/) : []
+  const hasSplitTrait = traitParts.length >= 2
   return (
     <button
       className={`employee-card ${card.color} ${card.type} ${selected ? 'selected' : ''} ${compact ? 'compact' : ''}`}
@@ -656,7 +658,16 @@ function EmployeeCardView({ card, selected, onClick, compact = false, style }) {
     >
       <span className="rank-badge">⚡{card.cost}</span>
       <span className="dept">{isEmployee ? card.dept : card.rarity}</span>
-      <strong className="power">{isEmployee ? card.power : card.trait}</strong>
+      {isEmployee ? (
+        <strong className="power">{card.power}</strong>
+      ) : hasSplitTrait ? (
+        <strong className="power power-split">
+          <span className="trait-label">{traitParts[0]}</span>
+          <span className="trait-value">{traitParts.slice(1).join(' ')}</span>
+        </strong>
+      ) : (
+        <strong className="power power-single">{card.trait}</strong>
+      )}
       <em>{card.name}</em>
       <span className="chips">{isEmployee ? card.rank : ''}</span>
     </button>

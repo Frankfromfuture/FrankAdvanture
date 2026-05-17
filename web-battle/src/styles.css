@@ -2251,33 +2251,47 @@ body, .battle-shell {
 
 
 /* ============================================================
-   修复: 功能/服务卡 trait 文字过长溢出
+   功能/服务卡 trait 两行显示: 文字一行 + 数值一行 (与员工执行力同字号)
    ============================================================ */
 .employee-card.function .power,
 .employee-card.service .power {
   font-family: 'Fusion Pixel', monospace !important;
-  font-size: 13px !important;
-  line-height: 1.2 !important;
+  max-width: 100% !important;
+  margin-top: 10px !important;
+  padding: 0 4px !important;
+  overflow: visible !important;
   white-space: normal !important;
   text-overflow: clip !important;
-  overflow: visible !important;
-  max-width: 100% !important;
-  min-height: 32px !important;
-  margin-top: 8px !important;
-  padding: 0 4px !important;
-  word-break: break-word;
+  min-height: 58px !important;
 }
 
-.employee-card.function em,
-.employee-card.service em {
-  font-size: 12px !important;
-  line-height: 1.2 !important;
-  min-height: auto !important;
+/* 拆分版: 上下两行 flex */
+.employee-card .power-split {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  line-height: 1.0 !important;
 }
 
-.employee-card.function .dept,
-.employee-card.service .dept {
-  font-size: 11px !important;
-  padding-right: 36px !important;
+.employee-card .power-split .trait-label {
+  font-size: 20px !important;
+  line-height: 1.0 !important;
+  color: var(--pix-ink) !important;
+}
+
+.employee-card .power-split .trait-value {
+  font-family: 'Press Start 2P', 'Fusion Pixel', monospace !important;
+  font-size: 22px !important;
+  line-height: 1.0 !important;
+  color: var(--pix-purple-dk) !important;
+  letter-spacing: 0 !important;
+}
+
+/* 单行版 (合规护航等纯文字 trait) */
+.employee-card .power-single {
+  font-size: 22px !important;
+  line-height: 1.0 !important;
 }
 
