@@ -53,7 +53,8 @@ npm run test         # Vitest 单元测试（engine.test.js）
 ├── AGENTS.md                          ← Agent 入口（30 秒上手）
 ├── GAME_DESIGN_FOUNDATION.md          ← 核心规则基石（§A 锁定 / §B 待填）
 ├── CARDS_DESIGN.md                    ← 卡表 / 起始牌组 / 平衡公式
-├── BATTLEFIELD_DESIGN.md              ← 战斗界面布局 / 动效 / 文件骨架
+├── BATTLEFIELD_DESIGN.md              ← 主战斗场景 UI / 动效 / 文件骨架
+├── BOARD_MEETING_DESIGN.md            ← 关间「董事会会议」机制 / 商店 / 商业模式 / UI
 └── web-battle/
     ├── src/
     │   ├── App.jsx                    ← 主战斗界面
@@ -128,7 +129,7 @@ npm run test         # Vitest 单元测试（engine.test.js）
 |---|---|---|
 | **M1 (v3.0)** | ✅ | AP 引擎 / 起手属性 / ±20% 随机 / 像素 + 2.5D 视觉 |
 | M2 | 🟡 进行中 | 12 周状态机 / 7 季度事件 / localStorage 存档 / 保留 1 张 UI |
-| M3 | ⬜ | 大关推进 / 三选一奖励 / 牌库编辑 |
+| M3 | ⬜ | 大关推进 / 三选一奖励 / 牌库编辑 / **董事会会议（关间环节）** |
 | M4 | ⬜ | Boss 战 / 商店系统 |
 | M5 | ⬜ | 数值平衡 / Phaser VFX / 音效 / Vercel 部署 |
 

@@ -3,8 +3,9 @@
 > **配套文档**：
 > - [GAME_DESIGN_FOUNDATION.md](./GAME_DESIGN_FOUNDATION.md) - 核心规则
 > - [CARDS_DESIGN.md](./CARDS_DESIGN.md) - 卡牌数据
-> 
-> **本文档定位**：**视觉 / 交互 / 动画 / 技术实现规范**。规则不在此重述，请参照上述文档。
+> - [BOARD_MEETING_DESIGN.md](./BOARD_MEETING_DESIGN.md) - 关间「董事会会议」UI（§8 抽屉式 Hub 布局）
+>
+> **本文档定位**：**主战斗场景（一局月度循环）的视觉 / 交互 / 动画 / 技术实现规范**。规则不在此重述，请参照上述文档。关间 UI 见 BOARD_MEETING_DESIGN.md。
 > 
 > **版本**：v0.2 - 卡牌视觉布局重设计（参照 card.png）
 > **状态**：设计稿，待 AI / 开发者据此实现
