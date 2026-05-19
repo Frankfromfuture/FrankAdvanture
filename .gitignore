@@ -22,6 +22,9 @@ mono_crash.*.json
 # Local Claude Code state
 .claude/
 
+# Local Codex CLI state
+.codex/
+
 # Build artifacts
 build/
 exports/
