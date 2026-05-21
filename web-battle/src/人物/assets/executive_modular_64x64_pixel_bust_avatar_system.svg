@@ -1,0 +1,908 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="512"
+     height="512"
+     viewBox="0 0 64 64"
+     shape-rendering="crispEdges">
+
+  <title>Executive Modular 64x64 Pixel Bust Avatar System</title>
+  <desc>
+    Highly detailed 64x64 logical pixel bust avatar template.
+    Built for Codex batch generation with rich face detail modules, professional props,
+    and corporate rank levels: specialist, manager, director, vice_president, cxo.
+  </desc>
+
+  <defs>
+    <style><![CDATA[
+      .hide { display:none; }
+
+      .skin-0 { fill:#FFD4B2; }
+      .skin-1 { fill:#F9A876; }
+      .skin-2 { fill:#E29363; }
+      .skin-3 { fill:#C67443; }
+      .skin-4 { fill:#8E4F2E; }
+      .blush { fill:#FF5E62; }
+      .freckle { fill:#B86E4B; }
+
+      .hair-0 { fill:#191326; }
+      .hair-1 { fill:#2B203D; }
+      .hair-2 { fill:#3A2D54; }
+      .hair-3 { fill:#6C5CE7; }
+
+      .cloth-0 { fill:#101018; }
+      .cloth-1 { fill:#151522; }
+      .cloth-2 { fill:#1E1E2F; }
+      .cloth-3 { fill:#2D2D44; }
+      .cloth-4 { fill:#3B3B5C; }
+
+      .shirt-0 { fill:#FFFFFF; }
+      .shirt-1 { fill:#E9EDF2; }
+      .shirt-2 { fill:#CBD3DD; }
+
+      .accent-0 { fill:#FF3366; }
+      .accent-1 { fill:#D91A4D; }
+      .accent-2 { fill:#00F2FE; }
+      .accent-3 { fill:#FFE000; }
+
+      .gold-0 { fill:#FFE000; }
+      .gold-1 { fill:#D8A600; }
+      .gold-2 { fill:#8A6500; }
+      .silver-0 { fill:#D7DEE8; }
+      .silver-1 { fill:#8D99A8; }
+      .bronze-0 { fill:#B97855; }
+      .bronze-1 { fill:#8C5638; }
+
+      .green-0 { fill:#42D77D; }
+      .green-1 { fill:#1D8F55; }
+      .blue-0 { fill:#4C7FA8; }
+      .blue-1 { fill:#244E70; }
+      .purple-0 { fill:#7657A8; }
+      .red-0 { fill:#B3263E; }
+
+      .eye { fill:#221105; }
+      .eye-hi { fill:#FFFFFF; }
+      .brow { fill:#4A3728; }
+      .mouth { fill:#5C2618; }
+      .teeth { fill:#FFFFFF; }
+      .line { fill:#191614; }
+      .shadow { fill:#09090F; }
+
+      .stroke-black { fill:none; stroke:#000000; stroke-width:1; }
+      .outline { fill:none; stroke:#141014; stroke-width:1; }
+    ]]></style>
+  </defs>
+
+  <!--
+    CODEX_SCHEMA:
+    {
+      "rank": "specialist | manager | director | vice_president | cxo",
+      "profession": "marketing | product | engineer | finance | doctor | sales | founder | operator",
+      "skin": "classic | warm | tan | deep",
+      "face_shape": "soft_square | round | long | strong_chin | chubby",
+      "face_detail": "none | freckles | mole | cheek_lines | beard_stubble | mustache | under_eye | laugh_lines",
+      "expression": "confident | funny | sleepy | serious | smiling | anxious | proud",
+      "hair": "side_part | spiky | bob | swept_back | bald_executive | crown_hair",
+      "eyewear": "none | square_glasses | round_glasses | sunglasses | monocle | ar_glasses",
+      "outfit": "business_suit | hoodie | labcoat | armor | vest | trench",
+      "neckwear": "none | tie | bowtie | scarf | lanyard | executive_pin",
+      "badge": "none | chart_badge | id_badge | medal | nameplate | stock_badge",
+      "head_accessory": "none | small_crown | headset | cap | halo",
+      "hand_accessory": "none | megaphone | laptop | stethoscope | money_clip | coffee | pen_tablet | phone | briefcase | document | rocket | keycard",
+      "background": "none | rank_card | office | halo | city_window",
+      "effect_back": "none | sparkles | data_bits | gold_aura | arrows | coins",
+      "effect_front": "none | sweat | sales_fire | coin_pop | notification | signature_spark"
+    }
+
+    RULE:
+    - Keep all modules rect-first for pixel authenticity.
+    - Toggle by class="hide"; never delete id/data-slot if Codex needs batch replacement.
+  -->
+
+  <!-- =========================================================
+       SLOT_BACKGROUND
+       ========================================================= -->
+  <g id="SLOT_BACKGROUND" data-slot="background" data-selected="none">
+    <g id="background_none" data-option="none"></g>
+
+    <g id="background_rank_card" data-option="rank_card" class="hide">
+      <rect x="3" y="3" width="58" height="58" fill="#11111C"/>
+      <rect x="5" y="5" width="54" height="54" class="cloth-3"/>
+      <rect x="5" y="5" width="54" height="5" class="gold-0"/>
+      <rect x="5" y="56" width="54" height="3" class="cloth-1"/>
+      <rect x="9" y="9" width="5" height="1" class="gold-1"/>
+      <rect x="50" y="9" width="5" height="1" class="gold-1"/>
+    </g>
+
+    <g id="background_office" data-option="office" class="hide">
+      <rect x="5" y="7" width="54" height="51" fill="#E8DCC8"/>
+      <rect x="8" y="9" width="17" height="13" fill="#A9C7D9"/>
+      <rect x="10" y="18" width="13" height="2" fill="#6F91A7"/>
+      <rect x="30" y="9" width="25" height="13" fill="#F7F1E7"/>
+      <rect x="33" y="12" width="8" height="1" class="accent-0"/>
+      <rect x="33" y="16" width="14" height="1" class="cloth-3"/>
+      <rect x="33" y="19" width="18" height="1" class="cloth-4"/>
+    </g>
+
+    <g id="background_city_window" data-option="city_window" class="hide">
+      <rect x="5" y="6" width="54" height="52" fill="#DDE9F1"/>
+      <rect x="8" y="9" width="48" height="24" fill="#A9C7D9"/>
+      <rect x="11" y="21" width="5" height="12" fill="#6A8195"/>
+      <rect x="18" y="16" width="6" height="17" fill="#7B95A8"/>
+      <rect x="27" y="19" width="5" height="14" fill="#607B91"/>
+      <rect x="36" y="14" width="7" height="19" fill="#6A8195"/>
+      <rect x="47" y="18" width="5" height="15" fill="#7B95A8"/>
+      <rect x="8" y="33" width="48" height="2" class="shirt-0"/>
+    </g>
+
+    <g id="background_halo" data-option="halo" class="hide">
+      <rect x="8" y="8" width="48" height="48" fill="#FFF4D2"/>
+      <rect x="12" y="12" width="40" height="40" fill="#FFF9EA"/>
+      <rect x="29" y="8" width="6" height="2" class="gold-0"/>
+      <rect x="18" y="13" width="3" height="2" class="gold-1"/>
+      <rect x="43" y="13" width="3" height="2" class="gold-1"/>
+    </g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_EFFECT_BACK
+       ========================================================= -->
+  <g id="SLOT_EFFECT_BACK" data-slot="effect_back" data-selected="sparkles">
+    <g id="effect_back_none" data-option="none" class="hide"></g>
+
+    <g id="effect_back_sparkles" data-option="sparkles">
+      <rect x="8" y="15" width="2" height="2" class="gold-0"/>
+      <rect x="12" y="11" width="1" height="1" class="gold-0"/>
+      <rect x="53" y="18" width="2" height="2" class="gold-0"/>
+      <rect x="49" y="13" width="1" height="1" class="gold-0"/>
+      <rect x="10" y="43" width="1" height="1" class="accent-2"/>
+      <rect x="54" y="39" width="1" height="1" class="accent-2"/>
+    </g>
+
+    <g id="effect_back_data_bits" data-option="data_bits" class="hide">
+      <rect x="7" y="16" width="2" height="2" class="blue-0"/>
+      <rect x="11" y="19" width="2" height="2" class="blue-0"/>
+      <rect x="53" y="15" width="2" height="2" class="green-0"/>
+      <rect x="48" y="20" width="2" height="2" class="green-0"/>
+      <rect x="9" y="24" width="4" height="1" class="blue-0"/>
+      <rect x="50" y="25" width="4" height="1" class="green-0"/>
+    </g>
+
+    <g id="effect_back_gold_aura" data-option="gold_aura" class="hide">
+      <rect x="29" y="5" width="6" height="2" class="gold-0"/>
+      <rect x="20" y="9" width="3" height="2" class="gold-0"/>
+      <rect x="41" y="9" width="3" height="2" class="gold-0"/>
+      <rect x="13" y="22" width="2" height="5" class="gold-1"/>
+      <rect x="49" y="22" width="2" height="5" class="gold-1"/>
+      <rect x="11" y="35" width="2" height="3" class="gold-1"/>
+      <rect x="51" y="35" width="2" height="3" class="gold-1"/>
+    </g>
+
+    <g id="effect_back_arrows" data-option="arrows" class="hide">
+      <rect x="8" y="24" width="7" height="2" class="green-0"/>
+      <rect x="13" y="22" width="2" height="6" class="green-0"/>
+      <rect x="49" y="24" width="7" height="2" class="accent-0"/>
+      <rect x="49" y="22" width="2" height="6" class="accent-0"/>
+      <rect x="11" y="28" width="8" height="1" class="green-1"/>
+      <rect x="45" y="28" width="8" height="1" class="accent-1"/>
+    </g>
+
+    <g id="effect_back_coins" data-option="coins" class="hide">
+      <rect x="9" y="22" width="3" height="3" class="gold-0"/>
+      <rect x="10" y="23" width="1" height="1" class="gold-1"/>
+      <rect x="52" y="26" width="3" height="3" class="gold-0"/>
+      <rect x="53" y="27" width="1" height="1" class="gold-1"/>
+      <rect x="48" y="15" width="2" height="2" class="gold-0"/>
+    </g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_BODY_BASE
+       ========================================================= -->
+  <g id="SLOT_BODY_BASE" data-slot="body_base">
+    <rect x="28" y="41" width="8" height="5" class="skin-2"/>
+    <rect x="29" y="44" width="6" height="3" class="skin-3"/>
+    <rect x="25" y="45" width="14" height="2" class="shadow"/>
+  </g>
+
+  <!-- =========================================================
+       SLOT_OUTFIT
+       ========================================================= -->
+  <g id="SLOT_OUTFIT" data-slot="outfit" data-selected="business_suit">
+    <g id="outfit_business_suit" data-option="business_suit">
+      <rect x="20" y="46" width="24" height="4" class="cloth-2"/>
+      <rect x="16" y="50" width="32" height="4" class="cloth-2"/>
+      <rect x="14" y="54" width="36" height="10" class="cloth-2"/>
+      <rect x="14" y="56" width="2" height="8" class="cloth-0"/>
+      <rect x="48" y="56" width="2" height="8" class="cloth-0"/>
+      <rect x="20" y="46" width="6" height="3" class="cloth-3"/>
+      <rect x="38" y="46" width="6" height="3" class="cloth-3"/>
+      <rect x="18" y="50" width="8" height="2" class="cloth-3"/>
+      <rect x="38" y="50" width="8" height="2" class="cloth-3"/>
+      <rect x="28" y="46" width="8" height="2" class="shirt-0"/>
+      <rect x="29" y="48" width="6" height="2" class="shirt-0"/>
+      <rect x="31" y="50" width="2" height="2" class="shirt-0"/>
+      <rect x="27" y="48" width="2" height="7" class="cloth-0"/>
+      <rect x="35" y="48" width="2" height="7" class="cloth-0"/>
+      <rect x="18" y="58" width="5" height="1" class="cloth-4"/>
+      <rect x="41" y="58" width="5" height="1" class="cloth-4"/>
+    </g>
+
+    <g id="outfit_hoodie" data-option="hoodie" class="hide">
+      <rect x="20" y="46" width="24" height="4" fill="#566B7C"/>
+      <rect x="16" y="50" width="32" height="4" fill="#566B7C"/>
+      <rect x="14" y="54" width="36" height="10" fill="#566B7C"/>
+      <rect x="23" y="46" width="18" height="4" fill="#6F8494"/>
+      <rect x="24" y="48" width="3" height="6" class="shirt-1"/>
+      <rect x="37" y="48" width="3" height="6" class="shirt-1"/>
+      <rect x="30" y="53" width="4" height="11" fill="#3B4A55"/>
+      <rect x="22" y="55" width="4" height="1" class="shirt-1"/>
+      <rect x="38" y="55" width="4" height="1" class="shirt-1"/>
+    </g>
+
+    <g id="outfit_labcoat" data-option="labcoat" class="hide">
+      <rect x="20" y="46" width="24" height="4" fill="#F2F2EA"/>
+      <rect x="16" y="50" width="32" height="4" fill="#F2F2EA"/>
+      <rect x="14" y="54" width="36" height="10" fill="#F2F2EA"/>
+      <rect x="28" y="46" width="8" height="12" fill="#7AA3B5"/>
+      <rect x="20" y="47" width="7" height="4" class="shirt-0"/>
+      <rect x="37" y="47" width="7" height="4" class="shirt-0"/>
+      <rect x="17" y="56" width="1" height="5" fill="#D6D6CE"/>
+      <rect x="46" y="56" width="1" height="5" fill="#D6D6CE"/>
+      <rect x="40" y="52" width="5" height="4" class="accent-0"/>
+    </g>
+
+    <g id="outfit_armor" data-option="armor" class="hide">
+      <rect x="20" y="46" width="24" height="4" fill="#333A44"/>
+      <rect x="16" y="50" width="32" height="4" fill="#333A44"/>
+      <rect x="14" y="54" width="36" height="10" fill="#333A44"/>
+      <rect x="18" y="47" width="10" height="8" class="gold-1"/>
+      <rect x="36" y="47" width="10" height="8" class="gold-1"/>
+      <rect x="28" y="46" width="8" height="18" class="mouth"/>
+      <rect x="20" y="49" width="6" height="1" class="gold-0"/>
+      <rect x="38" y="49" width="6" height="1" class="gold-0"/>
+    </g>
+
+    <g id="outfit_trench" data-option="trench" class="hide">
+      <rect x="20" y="46" width="24" height="4" fill="#7A6048"/>
+      <rect x="16" y="50" width="32" height="4" fill="#7A6048"/>
+      <rect x="14" y="54" width="36" height="10" fill="#7A6048"/>
+      <rect x="18" y="51" width="8" height="13" fill="#5C4635"/>
+      <rect x="38" y="51" width="8" height="13" fill="#5C4635"/>
+      <rect x="28" y="46" width="8" height="18" class="shirt-0"/>
+      <rect x="30" y="52" width="4" height="1" fill="#5C4635"/>
+      <rect x="30" y="56" width="4" height="1" fill="#5C4635"/>
+    </g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_NECKWEAR
+       ========================================================= -->
+  <g id="SLOT_NECKWEAR" data-slot="neckwear" data-selected="tie">
+    <g id="neckwear_tie" data-option="tie">
+      <rect x="31" y="48" width="2" height="2" class="accent-0"/>
+      <rect x="31" y="50" width="2" height="5" class="accent-1"/>
+      <rect x="30" y="55" width="4" height="3" class="accent-1"/>
+      <rect x="31" y="58" width="2" height="2" class="accent-1"/>
+    </g>
+
+    <g id="neckwear_bowtie" data-option="bowtie" class="hide">
+      <rect x="31" y="49" width="2" height="2" class="accent-0"/>
+      <rect x="26" y="48" width="5" height="4" class="accent-1"/>
+      <rect x="33" y="48" width="5" height="4" class="accent-1"/>
+      <rect x="27" y="49" width="2" height="1" class="accent-0"/>
+      <rect x="35" y="49" width="2" height="1" class="accent-0"/>
+    </g>
+
+    <g id="neckwear_lanyard" data-option="lanyard" class="hide">
+      <rect x="27" y="47" width="1" height="7" class="accent-2"/>
+      <rect x="36" y="47" width="1" height="7" class="accent-2"/>
+      <rect x="28" y="54" width="8" height="5" class="shirt-1"/>
+      <rect x="30" y="56" width="4" height="1" class="blue-0"/>
+    </g>
+
+    <g id="neckwear_executive_pin" data-option="executive_pin" class="hide">
+      <rect x="31" y="48" width="2" height="2" class="gold-0"/>
+      <rect x="30" y="50" width="4" height="2" class="gold-1"/>
+      <rect x="31" y="52" width="2" height="5" class="gold-1"/>
+      <rect x="42" y="49" width="3" height="3" class="gold-0"/>
+    </g>
+
+    <g id="neckwear_none" data-option="none" class="hide"></g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_FACE_SHAPE
+       ========================================================= -->
+  <g id="SLOT_FACE_SHAPE" data-slot="face_shape" data-selected="soft_square">
+    <g id="face_soft_square" data-option="soft_square">
+      <rect x="20" y="20" width="24" height="2" class="skin-0"/>
+      <rect x="18" y="22" width="28" height="18" class="skin-0"/>
+      <rect x="20" y="40" width="24" height="2" class="skin-2"/>
+      <rect x="22" y="38" width="20" height="2" class="skin-2"/>
+      <rect x="18" y="33" width="2" height="5" class="skin-1"/>
+      <rect x="44" y="33" width="2" height="5" class="skin-1"/>
+    </g>
+
+    <g id="face_round" data-option="round" class="hide">
+      <rect x="22" y="19" width="20" height="2" class="skin-0"/>
+      <rect x="19" y="21" width="26" height="18" class="skin-0"/>
+      <rect x="21" y="39" width="22" height="2" class="skin-2"/>
+      <rect x="24" y="41" width="16" height="1" class="skin-2"/>
+    </g>
+
+    <g id="face_long" data-option="long" class="hide">
+      <rect x="21" y="18" width="22" height="2" class="skin-0"/>
+      <rect x="19" y="20" width="26" height="21" class="skin-0"/>
+      <rect x="22" y="41" width="20" height="2" class="skin-2"/>
+      <rect x="25" y="43" width="14" height="1" class="skin-2"/>
+    </g>
+
+    <g id="face_strong_chin" data-option="strong_chin" class="hide">
+      <rect x="20" y="20" width="24" height="2" class="skin-0"/>
+      <rect x="18" y="22" width="28" height="17" class="skin-0"/>
+      <rect x="20" y="39" width="24" height="3" class="skin-2"/>
+      <rect x="24" y="42" width="16" height="2" class="skin-2"/>
+    </g>
+
+    <g id="face_chubby" data-option="chubby" class="hide">
+      <rect x="21" y="20" width="22" height="2" class="skin-0"/>
+      <rect x="17" y="22" width="30" height="17" class="skin-0"/>
+      <rect x="19" y="39" width="26" height="2" class="skin-2"/>
+      <rect x="22" y="41" width="20" height="1" class="skin-2"/>
+      <rect x="17" y="33" width="2" height="5" class="skin-1"/>
+      <rect x="45" y="33" width="2" height="5" class="skin-1"/>
+    </g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_EARS
+       ========================================================= -->
+  <g id="SLOT_EARS" data-slot="ears" data-selected="normal">
+    <g id="ears_normal" data-option="normal">
+      <rect x="16" y="30" width="2" height="4" class="skin-0"/>
+      <rect x="46" y="30" width="2" height="4" class="skin-0"/>
+      <rect x="16" y="32" width="1" height="2" class="skin-2"/>
+      <rect x="47" y="32" width="1" height="2" class="skin-2"/>
+    </g>
+
+    <g id="ears_large" data-option="large" class="hide">
+      <rect x="15" y="29" width="3" height="6" class="skin-0"/>
+      <rect x="46" y="29" width="3" height="6" class="skin-0"/>
+      <rect x="16" y="32" width="1" height="2" class="skin-2"/>
+      <rect x="47" y="32" width="1" height="2" class="skin-2"/>
+    </g>
+
+    <g id="ears_pointy" data-option="pointy" class="hide">
+      <rect x="15" y="29" width="2" height="2" class="skin-0"/>
+      <rect x="16" y="31" width="2" height="3" class="skin-0"/>
+      <rect x="47" y="29" width="2" height="2" class="skin-0"/>
+      <rect x="46" y="31" width="2" height="3" class="skin-0"/>
+    </g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_FACE_DETAIL
+       New module: facial details independent of expression.
+       ========================================================= -->
+  <g id="SLOT_FACE_DETAIL" data-slot="face_detail" data-selected="laugh_lines">
+    <g id="face_detail_none" data-option="none" class="hide"></g>
+
+    <g id="face_detail_freckles" data-option="freckles" class="hide">
+      <rect x="22" y="33" width="1" height="1" class="freckle"/>
+      <rect x="25" y="34" width="1" height="1" class="freckle"/>
+      <rect x="39" y="34" width="1" height="1" class="freckle"/>
+      <rect x="42" y="33" width="1" height="1" class="freckle"/>
+    </g>
+
+    <g id="face_detail_mole" data-option="mole" class="hide">
+      <rect x="40" y="35" width="1" height="1" class="line"/>
+    </g>
+
+    <g id="face_detail_cheek_lines" data-option="cheek_lines" class="hide">
+      <rect x="21" y="34" width="3" height="1" class="skin-2"/>
+      <rect x="40" y="34" width="3" height="1" class="skin-2"/>
+    </g>
+
+    <g id="face_detail_stubble" data-option="beard_stubble" class="hide">
+      <rect x="26" y="37" width="1" height="1" class="skin-4"/>
+      <rect x="30" y="38" width="1" height="1" class="skin-4"/>
+      <rect x="34" y="38" width="1" height="1" class="skin-4"/>
+      <rect x="38" y="37" width="1" height="1" class="skin-4"/>
+      <rect x="28" y="40" width="8" height="1" class="skin-4"/>
+    </g>
+
+    <g id="face_detail_mustache" data-option="mustache" class="hide">
+      <rect x="28" y="34" width="3" height="1" class="hair-0"/>
+      <rect x="33" y="34" width="3" height="1" class="hair-0"/>
+      <rect x="27" y="35" width="4" height="1" class="hair-0"/>
+      <rect x="33" y="35" width="4" height="1" class="hair-0"/>
+    </g>
+
+    <g id="face_detail_under_eye" data-option="under_eye" class="hide">
+      <rect x="23" y="33" width="4" height="1" class="skin-2"/>
+      <rect x="37" y="33" width="4" height="1" class="skin-2"/>
+    </g>
+
+    <g id="face_detail_laugh_lines" data-option="laugh_lines">
+      <rect x="25" y="34" width="2" height="1" class="skin-2"/>
+      <rect x="37" y="34" width="2" height="1" class="skin-2"/>
+      <rect x="24" y="36" width="1" height="1" class="skin-2"/>
+      <rect x="39" y="36" width="1" height="1" class="skin-2"/>
+    </g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_FACE_FEATURES
+       ========================================================= -->
+  <g id="SLOT_FACE_FEATURES" data-slot="expression" data-selected="confident">
+    <g id="expression_confident" data-option="confident">
+      <rect x="22" y="25" width="4" height="1" class="brow"/>
+      <rect x="38" y="25" width="4" height="1" class="brow"/>
+      <rect x="25" y="24" width="2" height="1" class="brow"/>
+      <rect x="37" y="24" width="2" height="1" class="brow"/>
+      <rect x="23" y="28" width="4" height="4" class="eye"/>
+      <rect x="25" y="28" width="1" height="1" class="eye-hi"/>
+      <rect x="37" y="28" width="4" height="4" class="eye"/>
+      <rect x="39" y="28" width="1" height="1" class="eye-hi"/>
+      <rect x="31" y="32" width="2" height="2" class="skin-2"/>
+      <rect x="29" y="36" width="6" height="1" class="mouth"/>
+      <rect x="34" y="35" width="1" height="1" class="mouth"/>
+      <rect x="20" y="33" width="2" height="1" class="blush"/>
+      <rect x="42" y="33" width="2" height="1" class="blush"/>
+    </g>
+
+    <g id="expression_sales_charm" data-option="sales_charm" class="hide">
+      <rect x="21" y="24" width="5" height="1" class="brow"/>
+      <rect x="38" y="23" width="4" height="1" class="brow"/>
+      <rect x="26" y="25" width="2" height="1" class="brow"/>
+      <rect x="36" y="24" width="2" height="1" class="brow"/>
+      <rect x="23" y="28" width="4" height="4" class="eye"/>
+      <rect x="25" y="28" width="1" height="1" class="eye-hi"/>
+      <rect x="37" y="28" width="5" height="4" class="eye"/>
+      <rect x="40" y="28" width="1" height="1" class="eye-hi"/>
+      <rect x="31" y="32" width="2" height="2" class="skin-2"/>
+      <rect x="28" y="36" width="8" height="2" class="mouth"/>
+      <rect x="31" y="36" width="4" height="1" class="teeth"/>
+      <rect x="20" y="33" width="2" height="1" class="blush"/>
+      <rect x="42" y="33" width="2" height="1" class="blush"/>
+    </g>
+
+    <g id="expression_funny" data-option="funny" class="hide">
+      <rect x="22" y="24" width="5" height="1" class="brow"/>
+      <rect x="37" y="26" width="5" height="1" class="brow"/>
+      <rect x="23" y="28" width="5" height="5" class="eye"/>
+      <rect x="25" y="28" width="1" height="1" class="eye-hi"/>
+      <rect x="38" y="29" width="3" height="3" class="eye"/>
+      <rect x="39" y="29" width="1" height="1" class="eye-hi"/>
+      <rect x="31" y="32" width="2" height="2" class="skin-2"/>
+      <rect x="28" y="36" width="8" height="3" class="mouth"/>
+      <rect x="30" y="36" width="4" height="1" class="teeth"/>
+    </g>
+
+    <g id="expression_sleepy" data-option="sleepy" class="hide">
+      <rect x="23" y="26" width="5" height="1" class="brow"/>
+      <rect x="36" y="26" width="5" height="1" class="brow"/>
+      <rect x="23" y="30" width="5" height="1" class="eye"/>
+      <rect x="36" y="30" width="5" height="1" class="eye"/>
+      <rect x="31" y="32" width="2" height="2" class="skin-2"/>
+      <rect x="29" y="36" width="6" height="1" class="mouth"/>
+    </g>
+
+    <g id="expression_serious" data-option="serious" class="hide">
+      <rect x="22" y="24" width="6" height="1" class="brow"/>
+      <rect x="36" y="24" width="6" height="1" class="brow"/>
+      <rect x="24" y="28" width="3" height="3" class="eye"/>
+      <rect x="37" y="28" width="3" height="3" class="eye"/>
+      <rect x="31" y="32" width="2" height="2" class="skin-2"/>
+      <rect x="29" y="37" width="6" height="1" class="mouth"/>
+    </g>
+
+    <g id="expression_proud" data-option="proud" class="hide">
+      <rect x="22" y="24" width="4" height="1" class="brow"/>
+      <rect x="38" y="24" width="4" height="1" class="brow"/>
+      <rect x="24" y="28" width="3" height="3" class="eye"/>
+      <rect x="37" y="28" width="3" height="3" class="eye"/>
+      <rect x="31" y="32" width="2" height="2" class="skin-2"/>
+      <rect x="28" y="36" width="8" height="2" class="mouth"/>
+      <rect x="31" y="36" width="4" height="1" class="teeth"/>
+    </g>
+
+    <g id="expression_anxious" data-option="anxious" class="hide">
+      <rect x="22" y="25" width="4" height="1" class="brow"/>
+      <rect x="38" y="24" width="4" height="1" class="brow"/>
+      <rect x="24" y="28" width="3" height="4" class="eye"/>
+      <rect x="38" y="28" width="3" height="4" class="eye"/>
+      <rect x="31" y="32" width="2" height="2" class="skin-2"/>
+      <rect x="30" y="37" width="4" height="2" class="mouth"/>
+    </g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_EYEWEAR
+       ========================================================= -->
+  <g id="SLOT_EYEWEAR" data-slot="eyewear" data-selected="square_glasses">
+    <g id="eyewear_square_glasses" data-option="square_glasses">
+      <rect x="21" y="27" width="8" height="6" class="stroke-black"/>
+      <rect x="35" y="27" width="8" height="6" class="stroke-black"/>
+      <rect x="29" y="29" width="6" height="1" class="line"/>
+      <rect x="23" y="29" width="1" height="1" class="accent-2"/>
+      <rect x="37" y="29" width="1" height="1" class="accent-2"/>
+    </g>
+
+    <g id="eyewear_round_glasses" data-option="round_glasses" class="hide">
+      <rect x="22" y="27" width="7" height="7" class="stroke-black"/>
+      <rect x="35" y="27" width="7" height="7" class="stroke-black"/>
+      <rect x="29" y="30" width="6" height="1" class="line"/>
+      <rect x="24" y="29" width="1" height="1" class="accent-2"/>
+      <rect x="37" y="29" width="1" height="1" class="accent-2"/>
+    </g>
+
+    <g id="eyewear_sunglasses" data-option="sunglasses" class="hide">
+      <rect x="21" y="27" width="9" height="6" fill="#09090F"/>
+      <rect x="34" y="27" width="9" height="6" fill="#09090F"/>
+      <rect x="30" y="29" width="4" height="1" fill="#09090F"/>
+      <rect x="23" y="28" width="3" height="1" fill="#3C4C5F"/>
+      <rect x="36" y="28" width="3" height="1" fill="#3C4C5F"/>
+    </g>
+
+    <g id="eyewear_monocle" data-option="monocle" class="hide">
+      <rect x="35" y="27" width="8" height="7" class="stroke-black"/>
+      <rect x="43" y="33" width="1" height="6" class="line"/>
+      <rect x="37" y="29" width="1" height="1" class="accent-2"/>
+    </g>
+
+    <g id="eyewear_ar_glasses" data-option="ar_glasses" class="hide">
+      <rect x="20" y="27" width="10" height="6" class="stroke-black"/>
+      <rect x="34" y="27" width="10" height="6" class="stroke-black"/>
+      <rect x="30" y="29" width="4" height="1" class="accent-2"/>
+      <rect x="22" y="28" width="5" height="1" class="accent-2"/>
+      <rect x="37" y="28" width="5" height="1" class="accent-2"/>
+    </g>
+
+    <g id="eyewear_none" data-option="none" class="hide"></g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_HAIR
+       ========================================================= -->
+  <g id="SLOT_HAIR" data-slot="hair" data-selected="side_part">
+    <g id="hair_side_part" data-option="side_part">
+      <rect x="18" y="14" width="28" height="8" class="hair-2"/>
+      <rect x="16" y="16" width="32" height="6" class="hair-2"/>
+      <rect x="14" y="18" width="4" height="8" class="hair-2"/>
+      <rect x="46" y="18" width="4" height="6" class="hair-2"/>
+      <rect x="18" y="22" width="1" height="4" class="hair-2"/>
+      <rect x="45" y="22" width="1" height="4" class="hair-2"/>
+      <rect x="22" y="16" width="16" height="1" class="hair-3"/>
+      <rect x="20" y="18" width="8" height="1" class="hair-3"/>
+      <rect x="39" y="20" width="5" height="1" class="hair-1"/>
+    </g>
+
+    <g id="hair_spiky" data-option="spiky" class="hide">
+      <rect x="19" y="16" width="26" height="6" class="hair-2"/>
+      <rect x="17" y="18" width="30" height="5" class="hair-2"/>
+      <rect x="20" y="12" width="3" height="5" class="hair-2"/>
+      <rect x="26" y="11" width="3" height="6" class="hair-3"/>
+      <rect x="33" y="11" width="3" height="6" class="hair-2"/>
+      <rect x="40" y="12" width="3" height="5" class="hair-2"/>
+      <rect x="16" y="20" width="3" height="6" class="hair-2"/>
+      <rect x="45" y="20" width="3" height="6" class="hair-2"/>
+    </g>
+
+    <g id="hair_swept_back" data-option="swept_back" class="hide">
+      <rect x="18" y="15" width="28" height="7" class="hair-1"/>
+      <rect x="16" y="18" width="32" height="5" class="hair-1"/>
+      <rect x="20" y="13" width="20" height="2" class="hair-2"/>
+      <rect x="24" y="11" width="16" height="2" class="hair-3"/>
+      <rect x="45" y="17" width="4" height="8" class="hair-1"/>
+      <rect x="17" y="20" width="3" height="5" class="hair-1"/>
+    </g>
+
+    <g id="hair_bob" data-option="bob" class="hide">
+      <rect x="18" y="14" width="28" height="7" class="hair-2"/>
+      <rect x="17" y="18" width="6" height="18" class="hair-2"/>
+      <rect x="41" y="18" width="6" height="18" class="hair-2"/>
+      <rect x="21" y="13" width="16" height="2" class="hair-3"/>
+      <rect x="37" y="15" width="7" height="2" class="hair-3"/>
+      <rect x="19" y="34" width="4" height="2" class="hair-1"/>
+      <rect x="41" y="34" width="4" height="2" class="hair-1"/>
+    </g>
+
+    <g id="hair_bald_executive" data-option="bald_executive" class="hide">
+      <rect x="19" y="20" width="26" height="2" class="hair-1"/>
+      <rect x="17" y="22" width="4" height="5" class="hair-2"/>
+      <rect x="43" y="22" width="4" height="5" class="hair-2"/>
+      <rect x="25" y="18" width="14" height="1" class="skin-0"/>
+      <rect x="26" y="17" width="12" height="1" class="skin-1"/>
+    </g>
+
+    <g id="hair_crown_hair" data-option="crown_hair" class="hide">
+      <rect x="18" y="15" width="28" height="7" class="hair-2"/>
+      <rect x="16" y="18" width="32" height="5" class="hair-2"/>
+      <rect x="28" y="10" width="8" height="4" class="gold-0"/>
+      <rect x="28" y="8" width="1" height="2" class="gold-0"/>
+      <rect x="31" y="9" width="2" height="1" class="gold-0"/>
+      <rect x="35" y="8" width="1" height="2" class="gold-0"/>
+      <rect x="31" y="11" width="2" height="1" class="accent-0"/>
+      <rect x="22" y="16" width="16" height="1" class="hair-3"/>
+    </g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_HEAD_ACCESSORY
+       ========================================================= -->
+  <g id="SLOT_HEAD_ACCESSORY" data-slot="head_accessory" data-selected="none">
+    <g id="head_acc_none" data-option="none"></g>
+
+    <g id="head_acc_small_crown" data-option="small_crown" class="hide">
+      <rect x="28" y="10" width="8" height="4" class="gold-0"/>
+      <rect x="28" y="8" width="1" height="2" class="gold-0"/>
+      <rect x="31" y="9" width="2" height="1" class="gold-0"/>
+      <rect x="35" y="8" width="1" height="2" class="gold-0"/>
+      <rect x="31" y="11" width="2" height="1" class="accent-0"/>
+    </g>
+
+    <g id="head_acc_headset" data-option="headset" class="hide">
+      <rect x="17" y="25" width="2" height="6" class="line"/>
+      <rect x="45" y="25" width="2" height="6" class="line"/>
+      <rect x="18" y="18" width="1" height="7" class="line"/>
+      <rect x="45" y="18" width="1" height="7" class="line"/>
+      <rect x="39" y="34" width="6" height="1" class="line"/>
+      <rect x="44" y="33" width="2" height="2" class="line"/>
+    </g>
+
+    <g id="head_acc_cap" data-option="cap" class="hide">
+      <rect x="19" y="15" width="26" height="5" class="blue-1"/>
+      <rect x="21" y="12" width="20" height="4" class="blue-0"/>
+      <rect x="40" y="18" width="8" height="2" class="blue-1"/>
+      <rect x="29" y="13" width="6" height="1" class="shirt-0"/>
+    </g>
+
+    <g id="head_acc_halo" data-option="halo" class="hide">
+      <rect x="25" y="8" width="14" height="2" class="gold-0"/>
+      <rect x="23" y="9" width="2" height="1" class="gold-1"/>
+      <rect x="39" y="9" width="2" height="1" class="gold-1"/>
+    </g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_BADGE
+       ========================================================= -->
+  <g id="SLOT_BADGE" data-slot="badge" data-selected="chart_badge">
+    <g id="badge_chart" data-option="chart_badge">
+      <rect x="42" y="52" width="5" height="5" class="shirt-0"/>
+      <rect x="43" y="55" width="1" height="1" class="accent-0"/>
+      <rect x="45" y="53" width="1" height="3" class="gold-0"/>
+      <rect x="46" y="54" width="1" height="2" class="green-0"/>
+      <rect x="42" y="52" width="5" height="1" class="shirt-1"/>
+    </g>
+
+    <g id="badge_id" data-option="id_badge" class="hide">
+      <rect x="41" y="52" width="6" height="5" class="shirt-0"/>
+      <rect x="42" y="53" width="2" height="2" class="blue-0"/>
+      <rect x="45" y="53" width="1" height="1" class="line"/>
+      <rect x="45" y="55" width="1" height="1" class="line"/>
+    </g>
+
+    <g id="badge_nameplate" data-option="nameplate" class="hide">
+      <rect x="40" y="52" width="8" height="3" class="gold-0"/>
+      <rect x="41" y="53" width="6" height="1" class="gold-1"/>
+    </g>
+
+    <g id="badge_stock" data-option="stock_badge" class="hide">
+      <rect x="41" y="52" width="7" height="5" class="shirt-0"/>
+      <rect x="42" y="55" width="1" height="1" class="green-0"/>
+      <rect x="43" y="54" width="1" height="1" class="green-0"/>
+      <rect x="44" y="53" width="1" height="1" class="green-0"/>
+      <rect x="45" y="53" width="1" height="1" class="green-0"/>
+      <rect x="46" y="52" width="1" height="1" class="green-0"/>
+    </g>
+
+    <g id="badge_none" data-option="none" class="hide"></g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_HAND_ACCESSORY
+       More props for profession diversity.
+       ========================================================= -->
+  <g id="SLOT_HAND_ACCESSORY" data-slot="hand_accessory" data-selected="megaphone">
+    <g id="hand_acc_megaphone" data-option="megaphone">
+      <rect x="7" y="34" width="5" height="3" class="accent-0"/>
+      <rect x="12" y="33" width="2" height="5" class="accent-1"/>
+      <rect x="14" y="32" width="6" height="7" class="gold-0"/>
+      <rect x="20" y="34" width="2" height="3" class="gold-1"/>
+      <rect x="9" y="37" width="2" height="6" class="cloth-2"/>
+      <rect x="22" y="32" width="1" height="1" class="accent-0"/>
+      <rect x="23" y="36" width="1" height="1" class="accent-0"/>
+      <rect x="24" y="34" width="1" height="1" class="accent-0"/>
+    </g>
+
+    <g id="hand_acc_laptop" data-option="laptop" class="hide">
+      <rect x="6" y="39" width="14" height="8" fill="#293846"/>
+      <rect x="7" y="40" width="12" height="6" fill="#7AA3B5"/>
+      <rect x="5" y="47" width="16" height="2" class="cloth-0"/>
+      <rect x="12" y="43" width="3" height="1" class="shirt-0"/>
+    </g>
+
+    <g id="hand_acc_stethoscope" data-option="stethoscope" class="hide">
+      <rect x="43" y="45" width="1" height="8" fill="#293846"/>
+      <rect x="39" y="53" width="8" height="1" fill="#293846"/>
+      <rect x="38" y="51" width="2" height="2" fill="#293846"/>
+      <rect x="46" y="51" width="2" height="2" fill="#293846"/>
+      <rect x="45" y="55" width="3" height="3" class="accent-0"/>
+      <rect x="46" y="56" width="1" height="1" class="shirt-0"/>
+    </g>
+
+    <g id="hand_acc_money_clip" data-option="money_clip" class="hide">
+      <rect x="7" y="36" width="13" height="7" class="green-0"/>
+      <rect x="8" y="37" width="11" height="5" fill="#79A982"/>
+      <rect x="12" y="38" width="4" height="3" class="gold-0"/>
+      <rect x="18" y="35" width="2" height="9" class="cloth-0"/>
+    </g>
+
+    <g id="hand_acc_coffee" data-option="coffee" class="hide">
+      <rect x="9" y="38" width="7" height="8" fill="#0B5B45"/>
+      <rect x="10" y="39" width="5" height="1" class="shirt-0"/>
+      <rect x="16" y="40" width="2" height="4" fill="#0B5B45"/>
+      <rect x="17" y="41" width="1" height="2" class="shirt-0"/>
+      <rect x="10" y="36" width="5" height="1" class="shirt-0"/>
+      <rect x="11" y="35" width="1" height="1" class="shirt-0"/>
+      <rect x="14" y="35" width="1" height="1" class="shirt-0"/>
+    </g>
+
+    <g id="hand_acc_pen_tablet" data-option="pen_tablet" class="hide">
+      <rect x="7" y="38" width="12" height="8" class="cloth-3"/>
+      <rect x="8" y="39" width="10" height="6" class="shirt-1"/>
+      <rect x="18" y="35" width="1" height="9" class="line"/>
+      <rect x="17" y="36" width="3" height="1" class="line"/>
+    </g>
+
+    <g id="hand_acc_phone" data-option="phone" class="hide">
+      <rect x="9" y="36" width="6" height="10" class="line"/>
+      <rect x="10" y="37" width="4" height="7" class="blue-0"/>
+      <rect x="11" y="45" width="2" height="1" class="shirt-0"/>
+      <rect x="12" y="38" width="1" height="1" class="shirt-0"/>
+    </g>
+
+    <g id="hand_acc_briefcase" data-option="briefcase" class="hide">
+      <rect x="7" y="39" width="14" height="9" class="bronze-1"/>
+      <rect x="9" y="37" width="10" height="2" class="bronze-1"/>
+      <rect x="11" y="36" width="6" height="1" class="bronze-0"/>
+      <rect x="13" y="42" width="2" height="2" class="gold-0"/>
+    </g>
+
+    <g id="hand_acc_document" data-option="document" class="hide">
+      <rect x="8" y="35" width="10" height="13" class="shirt-0"/>
+      <rect x="10" y="38" width="6" height="1" class="blue-0"/>
+      <rect x="10" y="41" width="5" height="1" class="cloth-3"/>
+      <rect x="10" y="44" width="6" height="1" class="cloth-3"/>
+      <rect x="16" y="35" width="2" height="2" class="shirt-2"/>
+    </g>
+
+    <g id="hand_acc_rocket" data-option="rocket" class="hide">
+      <rect x="10" y="33" width="5" height="10" class="silver-0"/>
+      <rect x="11" y="31" width="3" height="2" class="accent-0"/>
+      <rect x="11" y="35" width="3" height="2" class="blue-0"/>
+      <rect x="8" y="40" width="2" height="3" class="accent-0"/>
+      <rect x="15" y="40" width="2" height="3" class="accent-0"/>
+      <rect x="11" y="43" width="3" height="2" class="gold-0"/>
+    </g>
+
+    <g id="hand_acc_keycard" data-option="keycard" class="hide">
+      <rect x="8" y="37" width="10" height="7" class="shirt-0"/>
+      <rect x="9" y="38" width="3" height="2" class="blue-0"/>
+      <rect x="13" y="38" width="4" height="1" class="line"/>
+      <rect x="13" y="41" width="3" height="1" class="line"/>
+      <rect x="11" y="44" width="1" height="3" class="accent-2"/>
+    </g>
+
+    <g id="hand_acc_none" data-option="none" class="hide"></g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_RANK_CORPORATE
+       Corporate levels: 专员、经理、总监、副总裁、CXO.
+       Visual hierarchy: badge/shoulder/crown/aura strength increases.
+       ========================================================= -->
+  <g id="SLOT_RANK_CORPORATE" data-slot="rank" data-selected="manager">
+    <g id="rank_specialist" data-option="specialist" class="hide">
+      <rect x="44" y="58" width="3" height="3" class="bronze-0"/>
+      <rect x="45" y="59" width="1" height="1" class="skin-0"/>
+      <rect x="42" y="61" width="7" height="1" class="bronze-1"/>
+    </g>
+
+    <g id="rank_manager" data-option="manager">
+      <rect x="44" y="57" width="4" height="4" class="silver-0"/>
+      <rect x="45" y="58" width="2" height="2" class="silver-1"/>
+      <rect x="43" y="61" width="6" height="1" class="accent-2"/>
+      <rect x="18" y="50" width="2" height="1" class="silver-0"/>
+      <rect x="44" y="50" width="2" height="1" class="silver-0"/>
+    </g>
+
+    <g id="rank_director" data-option="director" class="hide">
+      <rect x="43" y="56" width="6" height="5" class="gold-0"/>
+      <rect x="44" y="54" width="1" height="3" class="gold-0"/>
+      <rect x="47" y="54" width="1" height="3" class="gold-0"/>
+      <rect x="44" y="58" width="4" height="1" class="gold-1"/>
+      <rect x="42" y="61" width="8" height="1" class="accent-0"/>
+      <rect x="18" y="49" width="3" height="1" class="gold-0"/>
+      <rect x="43" y="49" width="3" height="1" class="gold-0"/>
+    </g>
+
+    <g id="rank_vice_president" data-option="vice_president" class="hide">
+      <rect x="42" y="55" width="8" height="6" class="gold-0"/>
+      <rect x="43" y="53" width="1" height="3" class="gold-0"/>
+      <rect x="46" y="52" width="2" height="4" class="gold-0"/>
+      <rect x="49" y="53" width="1" height="3" class="gold-0"/>
+      <rect x="43" y="57" width="6" height="1" class="gold-1"/>
+      <rect x="41" y="61" width="10" height="1" class="accent-0"/>
+      <rect x="17" y="48" width="4" height="2" class="gold-0"/>
+      <rect x="43" y="48" width="4" height="2" class="gold-0"/>
+      <rect x="18" y="51" width="2" height="1" class="gold-1"/>
+      <rect x="44" y="51" width="2" height="1" class="gold-1"/>
+    </g>
+
+    <g id="rank_cxo" data-option="cxo" class="hide">
+      <rect x="41" y="54" width="10" height="7" class="gold-0"/>
+      <rect x="42" y="51" width="1" height="4" class="gold-0"/>
+      <rect x="45" y="50" width="2" height="5" class="gold-0"/>
+      <rect x="50" y="51" width="1" height="4" class="gold-0"/>
+      <rect x="43" y="56" width="6" height="1" class="gold-1"/>
+      <rect x="40" y="61" width="12" height="1" class="accent-0"/>
+      <rect x="16" y="47" width="5" height="2" class="gold-0"/>
+      <rect x="43" y="47" width="5" height="2" class="gold-0"/>
+      <rect x="18" y="50" width="2" height="1" class="gold-1"/>
+      <rect x="45" y="50" width="2" height="1" class="gold-1"/>
+      <rect x="29" y="8" width="6" height="2" class="gold-0"/>
+      <rect x="20" y="10" width="2" height="2" class="gold-1"/>
+      <rect x="42" y="10" width="2" height="2" class="gold-1"/>
+    </g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_EFFECT_FRONT
+       ========================================================= -->
+  <g id="SLOT_EFFECT_FRONT" data-slot="effect_front" data-selected="none">
+    <g id="effect_front_none" data-option="none"></g>
+
+    <g id="effect_front_sweat" data-option="sweat" class="hide">
+      <rect x="45" y="25" width="2" height="3" class="blue-0"/>
+      <rect x="46" y="28" width="1" height="1" class="blue-0"/>
+    </g>
+
+    <g id="effect_front_sales_fire" data-option="sales_fire" class="hide">
+      <rect x="52" y="35" width="2" height="4" class="accent-0"/>
+      <rect x="54" y="33" width="2" height="6" class="gold-0"/>
+      <rect x="56" y="36" width="1" height="3" class="accent-1"/>
+    </g>
+
+    <g id="effect_front_coin_pop" data-option="coin_pop" class="hide">
+      <rect x="52" y="30" width="3" height="3" class="gold-0"/>
+      <rect x="53" y="31" width="1" height="1" class="gold-1"/>
+      <rect x="55" y="25" width="2" height="2" class="gold-0"/>
+      <rect x="8" y="28" width="2" height="2" class="gold-0"/>
+    </g>
+
+    <g id="effect_front_notification" data-option="notification" class="hide">
+      <rect x="50" y="20" width="8" height="6" class="shirt-0"/>
+      <rect x="51" y="21" width="6" height="1" class="accent-0"/>
+      <rect x="52" y="24" width="4" height="1" class="cloth-3"/>
+    </g>
+
+    <g id="effect_front_signature_spark" data-option="signature_spark" class="hide">
+      <rect x="52" y="42" width="2" height="2" class="gold-0"/>
+      <rect x="55" y="45" width="1" height="1" class="gold-0"/>
+      <rect x="49" y="47" width="1" height="1" class="accent-2"/>
+    </g>
+  </g>
+
+  <!-- =========================================================
+       SLOT_MASTER_OUTLINE
+       ========================================================= -->
+  <g id="SLOT_MASTER_OUTLINE" data-slot="outline">
+    <path id="master_outline"
+          d="M28 8 H36 V10 H46 V14 H48 V18 H50 V26 H48 V34 H46 V42 H36 V46 H44 V50 H48 V54 H50 V64 H14 V54 H16 V50 H20 V46 H28 V42 H20 V40 H18 V34 H16 V30 H14 V18 H16 V16 H18 V14 H28 Z"
+          class="outline"/>
+  </g>
+
+</svg>

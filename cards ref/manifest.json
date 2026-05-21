@@ -1,0 +1,285 @@
+{
+  "version": 2,
+  "generated": "2026-05-21T08:18:14.789Z",
+  "cardSize": {
+    "width": 300,
+    "height": 420
+  },
+  "cards": [
+    {
+      "id": "FUN_01",
+      "name": "市场调研",
+      "type": "function",
+      "rarity": "common",
+      "ap": 2,
+      "svgPath": "cards/FUN_01.svg",
+      "shortEffect": "相邻 +25%",
+      "description": "相邻产线 +25% 产出",
+      "flavor": "了解客户才能搞定客户"
+    },
+    {
+      "id": "FUN_02",
+      "name": "产品冲刺",
+      "type": "function",
+      "rarity": "common",
+      "ap": 3,
+      "svgPath": "cards/FUN_02.svg",
+      "shortEffect": "研发相邻 ×2",
+      "description": "相邻 R 部门 ×2 产出",
+      "flavor": "全部门拼一把，发版日就是验货日"
+    },
+    {
+      "id": "FUN_03",
+      "name": "团队建设",
+      "type": "function",
+      "rarity": "common",
+      "ap": 2,
+      "svgPath": "cards/FUN_03.svg",
+      "shortEffect": "整线 +¥15",
+      "description": "本月该产线整体 +¥15",
+      "flavor": "团建不是吃饭，是凝聚力投资"
+    },
+    {
+      "id": "FUN_04",
+      "name": "产品推广",
+      "type": "function",
+      "rarity": "common",
+      "ap": 3,
+      "svgPath": "cards/FUN_04.svg",
+      "shortEffect": "销售相邻 ×2",
+      "description": "相邻 S 部门 ×2 产出",
+      "flavor": "酒香也怕巷子深，推广要趁早"
+    },
+    {
+      "id": "FUN_05",
+      "name": "数据分析",
+      "type": "function",
+      "rarity": "common",
+      "ap": 2,
+      "svgPath": "cards/FUN_05.svg",
+      "shortEffect": "左邻 +30%",
+      "description": "左侧产线 +30% 产出",
+      "flavor": "用数据说话，向上汇报必备"
+    },
+    {
+      "id": "FUN_06",
+      "name": "流程优化",
+      "type": "function",
+      "rarity": "common",
+      "ap": 2,
+      "svgPath": "cards/FUN_06.svg",
+      "shortEffect": "右邻 +30%",
+      "description": "右侧产线 +30% 产出",
+      "flavor": "把繁琐变简单，把简单变高效"
+    },
+    {
+      "id": "FUN_07",
+      "name": "跨部门协作",
+      "type": "function",
+      "rarity": "rare",
+      "ap": 3,
+      "svgPath": "cards/FUN_07.svg",
+      "shortEffect": "异部门 +40%",
+      "description": "左右部门不同时双侧 +40%",
+      "flavor": "墙太厚要敲掉，孤岛太多要修桥"
+    },
+    {
+      "id": "FUN_08",
+      "name": "OKR 制定",
+      "type": "function",
+      "rarity": "rare",
+      "ap": 3,
+      "svgPath": "cards/FUN_08.svg",
+      "shortEffect": "整线 +15% / ⭐+3%",
+      "description": "该产线 +15%，月度星率 +3%",
+      "flavor": "目标对齐了，效率才有意义"
+    },
+    {
+      "id": "FUN_09",
+      "name": "加班动员",
+      "type": "function",
+      "rarity": "common",
+      "ap": 2,
+      "svgPath": "cards/FUN_09.svg",
+      "shortEffect": "整线 +20%",
+      "description": "本月该产线 +20% 产出",
+      "flavor": "冲一波，但下个月别怪我"
+    },
+    {
+      "id": "FUN_10",
+      "name": "品牌建设",
+      "type": "function",
+      "rarity": "rare",
+      "ap": 3,
+      "svgPath": "cards/FUN_10.svg",
+      "shortEffect": "相邻 +20% / ⭐+8%",
+      "description": "相邻 +20%，月度星率 +8%",
+      "flavor": "品牌即资产，长期主义的体现"
+    },
+    {
+      "id": "FUN_11",
+      "name": "用户运营活动",
+      "type": "function",
+      "rarity": "rare",
+      "ap": 3,
+      "svgPath": "cards/FUN_11.svg",
+      "shortEffect": "销售相邻 +50%",
+      "description": "相邻 S +50%，月度 +¥10",
+      "flavor": "拉新促活，私域引流的标配"
+    },
+    {
+      "id": "FUN_12",
+      "name": "技术债务清理",
+      "type": "function",
+      "rarity": "rare",
+      "ap": 3,
+      "svgPath": "cards/FUN_12.svg",
+      "shortEffect": "研发相邻 +50%",
+      "description": "相邻 R +50% 产出",
+      "flavor": "前人欠的债，后人还，但还完爽"
+    },
+    {
+      "id": "FUN_LEG_01",
+      "name": "黑天鹅基金",
+      "type": "function",
+      "rarity": "legendary",
+      "ap": 4,
+      "svgPath": "cards/FUN_LEG_01.svg",
+      "shortEffect": "整线 ×3 / 月度 +¥30",
+      "description": "产线乘区 ×3，月度 +¥30",
+      "flavor": "反脆弱才是真正的护城河"
+    },
+    {
+      "id": "FUN_LEG_02",
+      "name": "专利墙战略",
+      "type": "function",
+      "rarity": "legendary",
+      "ap": 3,
+      "svgPath": "cards/FUN_LEG_02.svg",
+      "shortEffect": "相邻 +60% / R线 +30%",
+      "description": "相邻 +60%，整 R 线 +30%",
+      "flavor": "把每个 idea 都申请成专利"
+    },
+    {
+      "id": "SRV_01",
+      "name": "律师事务所",
+      "type": "service",
+      "rarity": "common",
+      "ap": 2,
+      "svgPath": "cards/SRV_01.svg",
+      "shortEffect": "本月免维持费",
+      "description": "本月免除维持费",
+      "flavor": "合同审查 + 风险规避，省钱的法宝"
+    },
+    {
+      "id": "SRV_02",
+      "name": "税务筹划",
+      "type": "service",
+      "rarity": "common",
+      "ap": 2,
+      "svgPath": "cards/SRV_02.svg",
+      "shortEffect": "⭐+5%",
+      "description": "月度星率 +5%",
+      "flavor": "合法节税是企业必修课"
+    },
+    {
+      "id": "SRV_03",
+      "name": "外部咨询",
+      "type": "service",
+      "rarity": "rare",
+      "ap": 4,
+      "svgPath": "cards/SRV_03.svg",
+      "shortEffect": "整线 ×1.3",
+      "description": "本月该产线乘区 ×1.3",
+      "flavor": "麦府一份报告，半年战略不愁"
+    },
+    {
+      "id": "SRV_04",
+      "name": "融资顾问",
+      "type": "service",
+      "rarity": "rare",
+      "ap": 3,
+      "svgPath": "cards/SRV_04.svg",
+      "shortEffect": "月度 +¥15 / ⭐+3%",
+      "description": "月度 +¥15，星率 +3%",
+      "flavor": "对接 VC、修 BP，专业的事专业人做"
+    },
+    {
+      "id": "SRV_05",
+      "name": "管理咨询",
+      "type": "service",
+      "rarity": "elite",
+      "ap": 5,
+      "svgPath": "cards/SRV_05.svg",
+      "shortEffect": "月度 AP +5",
+      "description": "本月行动点 +5",
+      "flavor": "组织架构 + 流程再造的大手术"
+    },
+    {
+      "id": "SRV_06",
+      "name": "战略顾问",
+      "type": "service",
+      "rarity": "elite",
+      "ap": 5,
+      "svgPath": "cards/SRV_06.svg",
+      "shortEffect": "整线 +30%",
+      "description": "本月该产线 +30%",
+      "flavor": "看远一些，走稳一些"
+    },
+    {
+      "id": "SRV_07",
+      "name": "PR 公关",
+      "type": "service",
+      "rarity": "rare",
+      "ap": 3,
+      "svgPath": "cards/SRV_07.svg",
+      "shortEffect": "⭐+10%",
+      "description": "月度星率 +10%",
+      "flavor": "口碑、热度、声誉都是真金白银"
+    },
+    {
+      "id": "SRV_08",
+      "name": "HR 外包",
+      "type": "service",
+      "rarity": "common",
+      "ap": 2,
+      "svgPath": "cards/SRV_08.svg",
+      "shortEffect": "免维持 / 双向 +5%",
+      "description": "免维持费，双向 +5%",
+      "flavor": "把杂活外包出去，专注主业"
+    },
+    {
+      "id": "SRV_09",
+      "name": "投行顾问",
+      "type": "service",
+      "rarity": "epic",
+      "ap": 5,
+      "svgPath": "cards/SRV_09.svg",
+      "shortEffect": "月度 +¥30 / ⭐+15%",
+      "description": "月度 +¥30，星率 +15%",
+      "flavor": "上市路上的必经合作伙伴"
+    },
+    {
+      "id": "SRV_10",
+      "name": "法律团队",
+      "type": "service",
+      "rarity": "rare",
+      "ap": 3,
+      "svgPath": "cards/SRV_10.svg",
+      "shortEffect": "免维持 / 整线 +10%",
+      "description": "免维持费，整线 +10%",
+      "flavor": "升级版律师，覆盖知识产权、并购"
+    },
+    {
+      "id": "SRV_LEG_01",
+      "name": "麦肯锡战略",
+      "type": "service",
+      "rarity": "legendary",
+      "ap": 5,
+      "svgPath": "cards/SRV_LEG_01.svg",
+      "shortEffect": "乘区 ×2 / 月度 +¥50",
+      "description": "产线乘区 ×2，月度 +¥50",
+      "flavor": "咨询界的最高荣誉"
+    }
+  ]
+}

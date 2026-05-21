@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buyRecruit,
   computeLineOutput,
   createInitialState,
+  enterIntermission,
+  exitIntermission,
+  fireCard,
   GAME_CONFIG,
   getRecruitMarketSize,
   makeFixedCard,
+  parseEffectAst,
   placeCardInSlot,
+  purchaseBusinessModel,
+  purchaseShopItem,
+  resolveEvent,
   resolveMonth,
+  upgradeCard,
 } from './engine.js'
 
 const calmEvent = {
@@ -49,6 +58,12 @@ describe('Scoring engine', () => {
     expect(report.slotResults[3].output).toBe(30)
     expect(report.total).toBe(60)
   })
+
+  it('parses effect strings into AST before scoring', () => {
+    expect(parseEffectAst('RIGHT: +25%')).toMatchObject({ kind: 'neighbor', direction: 'right', factor: 1.25 })
+    expect(parseEffectAst('SELF_IF_P3: LINE_ALL: +30%')).toMatchObject({ kind: 'selfIf', condition: 'p3', target: 'line', factor: 1.3 })
+    expect(parseEffectAst('IF_ALL_THREE_DEPT_IN_LINE: LINE_XMULT: x1.5')).toMatchObject({ condition: 'allThreeDept', factor: 1.5 })
+  })
 })
 
 describe('AP and month flow', () => {
@@ -88,16 +103,16 @@ describe('AP and month flow', () => {
     expect(resolved.drawPile.map((card) => card.uid).sort()).toEqual(['draw-1', 'draw-2'])
   })
 
-  it('ramps the recruit market from empty to three cards over the first four months', () => {
-    expect(getRecruitMarketSize(1)).toBe(0)
-    expect(getRecruitMarketSize(2)).toBe(1)
-    expect(getRecruitMarketSize(3)).toBe(2)
+  it('offers three face-up recruit choices every month', () => {
+    expect(getRecruitMarketSize(1)).toBe(3)
+    expect(getRecruitMarketSize(2)).toBe(3)
+    expect(getRecruitMarketSize(3)).toBe(3)
     expect(getRecruitMarketSize(4)).toBe(3)
     expect(getRecruitMarketSize(5)).toBe(3)
-    expect(createInitialState({ rng: fixedRng }).recruitMarket).toHaveLength(0)
+    expect(createInitialState({ rng: fixedRng }).recruitMarket).toHaveLength(3)
   })
 
-  it('refreshes the recruit market using the month ramp after settlement', () => {
+  it('refreshes the recruit market as a new three-card offer after settlement', () => {
     const monthOne = {
       ...createInitialState({ rng: fixedRng }),
       event: calmEvent,
@@ -110,9 +125,20 @@ describe('AP and month flow', () => {
     const monthThree = resolveMonth({ ...monthTwo, hand: [], drawPile: [], coolingPile: [] }, fixedRng).state
 
     expect(monthTwo.month).toBe(2)
-    expect(monthTwo.recruitMarket).toHaveLength(1)
+    expect(monthTwo.recruitMarket).toHaveLength(3)
     expect(monthThree.month).toBe(3)
-    expect(monthThree.recruitMarket).toHaveLength(2)
+    expect(monthThree.recruitMarket).toHaveLength(3)
+  })
+
+  it('allows only one recruit pick from the face-up offer each month', () => {
+    const state = { ...createInitialState({ rng: fixedRng }), strategicBudget: 999 }
+    const firstPick = state.recruitMarket[0]
+    const picked = buyRecruit(state, firstPick.uid)
+    expect(picked.ok).toBe(true)
+    expect(picked.state.recruitChoiceUsed).toBe(true)
+    expect(picked.state.recruitMarket).toHaveLength(0)
+    const second = buyRecruit(picked.state, firstPick.uid)
+    expect(second.ok).toBe(false)
   })
 
   it('rejects a placement that exceeds the monthly AP limit', () => {
@@ -182,5 +208,140 @@ describe('AP and month flow', () => {
     expect(resolved.lines.find((line) => line.id === 'A').slots.every((slot) => slot === null)).toBe(true)
     expect(resolved.coolingPile).toHaveLength(1)
     expect(resolved.coolingPile[0].uid).toBe(card.uid)
+  })
+
+  it('uses the level boss event on the final month', () => {
+    const state = {
+      ...createInitialState({ rng: fixedRng }),
+      event: calmEvent,
+      month: GAME_CONFIG.monthsPerStage - 1,
+      hand: [],
+      drawPile: [],
+      coolingPile: [],
+      recruitMarket: [],
+      lines: [
+        { id: 'A', status: 'planning', slots: [null, null, null, null, null], workingMonthsLeft: 0 },
+        { id: 'B', status: 'idle', slots: [null, null, null, null, null], workingMonthsLeft: 0 },
+      ],
+    }
+    const resolved = resolveMonth(state, fixedRng).state
+    expect(resolved.month).toBe(GAME_CONFIG.monthsPerStage)
+    expect(resolved.event.id).toBe('boss-series-a-roadshow')
+  })
+
+  it('fails the A round boss check when P3 is below manager tier', () => {
+    const junior = makeFixedCard('EMP_R_01', { baseOutput: 150, cost: 1 })
+    const state = {
+      ...createInitialState({ rng: fixedRng }),
+      event: {
+        id: 'boss-series-a-roadshow',
+        name: 'Boss · A 轮路演',
+        tone: 'Boss',
+        description: '',
+        effectLines: [],
+        incomeMultiplier: 1,
+        maintenanceMultiplier: 1,
+        bossRule: { type: 'p3_min_tier', minTier: '经理' },
+      },
+      month: GAME_CONFIG.monthsPerStage,
+      cumulativeIncome: 2000,
+      cash: 100,
+      hand: [],
+      drawPile: [],
+      coolingPile: [],
+      recruitMarket: [],
+      activeLineId: 'A',
+      lines: [
+        { id: 'A', status: 'planning', slots: [null, null, junior, null, null], workingMonthsLeft: 0 },
+        { id: 'B', status: 'idle', slots: [null, null, null, null, null], workingMonthsLeft: 0 },
+      ],
+    }
+    const resolved = resolveMonth(state, fixedRng).state
+    expect(resolved.result.passed).toBe(false)
+    expect(resolved.result.reason).toContain('P3')
+  })
+})
+
+describe('Intermission - 董事会会议', () => {
+  function fakeRng() { return 0.5 }
+
+  function preparedPassedState() {
+    const state = createInitialState({ rng: fakeRng })
+    return {
+      ...state,
+      result: { passed: true, rating: 'A', bestMonth: 100, reason: '半年结算' },
+    }
+  }
+
+  it('enterIntermission 在未通关时拒绝', () => {
+    const state = createInitialState({ rng: fakeRng })
+    const res = enterIntermission(state, fakeRng)
+    expect(res.ok).toBe(false)
+  })
+
+  it('enterIntermission 在通关后初始化事件 + 商店刷出', () => {
+    const state = preparedPassedState()
+    const res = enterIntermission(state, fakeRng)
+    expect(res.ok).toBe(true)
+    expect(res.state.intermissionState.phase).toBe('event')
+    expect(res.state.intermissionState.event).toBeTruthy()
+    expect(res.state.intermissionState.shopRoll).toBeTruthy()
+    // 评级 A → +5 💰
+    expect(res.state.strategicBudget).toBeGreaterThanOrEqual(state.strategicBudget + 20)
+  })
+
+  it('resolveEvent 后 phase 变 hub', () => {
+    const state = preparedPassedState()
+    const e1 = enterIntermission(state, fakeRng).state
+    const optionId = e1.intermissionState.event.options[0].id  // 不一定能负担，但 noop 选项总能选
+    const cheapOptionId = e1.intermissionState.event.options.find((o) => !o.cost)?.id ?? optionId
+    const e2 = resolveEvent(e1, cheapOptionId, fakeRng)
+    expect(e2.ok).toBe(true)
+    expect(e2.state.intermissionState.phase).toBe('hub')
+  })
+
+  it('exitIntermission 重建下关 state，保留 💰 与商业模式', () => {
+    const state = preparedPassedState()
+    const e1 = enterIntermission(state, fakeRng).state
+    const cheapOpt = e1.intermissionState.event.options.find((o) => !o.cost) ?? e1.intermissionState.event.options[0]
+    const e2 = resolveEvent(e1, cheapOpt.id, fakeRng).state
+    const budgetBefore = e2.strategicBudget
+    const e3 = exitIntermission(e2, fakeRng).state
+    expect(e3.intermissionState).toBe(null)
+    expect(e3.level.id).toBe(2)
+    expect(e3.strategicBudget).toBe(budgetBefore)  // 全保留
+    expect(e3.month).toBe(1)
+    expect(e3.cumulativeIncome).toBe(0)
+    expect(e3.result).toBe(null)
+  })
+
+  it('fireCard 移除卡 + 扣 💰', () => {
+    const state = preparedPassedState()
+    const e1 = enterIntermission(state, fakeRng).state
+    const opt = e1.intermissionState.event.options.find((o) => !o.cost)
+    const e2 = resolveEvent(e1, opt.id, fakeRng).state
+    const card = e2.hand[0]
+    const before = e2.strategicBudget
+    const e3 = fireCard(e2, card.uid)
+    expect(e3.ok).toBe(true)
+    expect(e3.state.strategicBudget).toBe(before - 3)  // 关 1 解雇 💰3
+    expect(e3.state.hand.find((c) => c.uid === card.uid)).toBe(undefined)
+  })
+
+  it('upgradeCard 稀有度模式 +25% baseOutput', () => {
+    const state = preparedPassedState()
+    const e1 = enterIntermission(state, fakeRng).state
+    const opt = e1.intermissionState.event.options.find((o) => !o.cost)
+    const e2 = resolveEvent(e1, opt.id, fakeRng).state
+    // 给玩家足够 💰
+    const e2Rich = { ...e2, strategicBudget: 100 }
+    const empCard = e2Rich.hand.find((c) => c.type === 'emp' && c.rarity === 'common')
+    if (!empCard) return  // 没合适卡跳过
+    const baseBefore = empCard.baseOutput
+    const e3 = upgradeCard(e2Rich, empCard.uid, 'rarity')
+    expect(e3.ok).toBe(true)
+    const upgraded = [...e3.state.hand, ...e3.state.drawPile].find((c) => c.uid === empCard.uid)
+    expect(upgraded.rarity).toBe('rare')
+    expect(upgraded.baseOutput).toBe(Math.round(baseBefore * 1.25))
   })
 })
