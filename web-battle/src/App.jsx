@@ -1166,7 +1166,7 @@ function CardView({
   const neighborDirection = getNeighborDirection(effects)
   const Component = onClick ? 'button' : 'div'
   const canTilt = (mode === 'hand' && selected) || mode === 'reveal'
-  const usesFloatingHint = mode === 'hand'
+  const usesFloatingHint = mode === 'hand' || mode === 'slot'
 
   useEffect(() => {
     return () => window.clearTimeout(handHintTimerRef.current)
@@ -1209,29 +1209,31 @@ function CardView({
 
   function updateFloatingHint(event) {
     if (!usesFloatingHint) return
-    const offset = 16
-    const hintWidth = 244
-    const hintHeight = 104
-    // 鼠标位置转设计画布坐标，因为浮窗 (fixed) 在 .app-scaler 内
-    const p = clientToDesign(event.clientX, event.clientY)
-    const nearRight = p.x + offset + hintWidth > DESIGN_CANVAS_W
-    const nearBottom = p.y + offset + hintHeight > DESIGN_CANVAS_H
+    // 提示框使用 position:fixed（在 body 上 portal），直接用视口坐标
+    const cx = event.clientX
+    const cy = event.clientY
+    const offset = 14       // 紧贴指针，视口像素
+    const hintW = 220       // 提示框估算宽度（视口像素）
+    const hintH = 72        // 提示框估算高度
+    const nearRight  = cx + offset + hintW > window.innerWidth
+    const nearBottom = cy + offset + hintH > window.innerHeight
+    // left/top 始终指向指针旁的锚点；CSS class 再用 translate(-100%) 翻转到另一侧
     const nextHint = {
-      left: p.x + (nearRight ? -offset : offset),
-      top: p.y + (nearBottom ? -offset : offset),
-      x: nearRight ? 'left' : 'right',
-      y: nearBottom ? 'top' : 'bottom',
+      left: cx + (nearRight ? -offset : offset),
+      top:  cy + (nearBottom ? -offset : offset),
+      x: nearRight  ? 'left'  : 'right',
+      y: nearBottom ? 'top'   : 'bottom',
     }
     pendingHandHintRef.current = nextHint
     if (handHint) {
-      setHandHint(nextHint)
+      setHandHint(nextHint)   // 已显示时实时跟随
       return
     }
     if (handHintTimerRef.current) return
     handHintTimerRef.current = window.setTimeout(() => {
       setHandHint(pendingHandHintRef.current)
       handHintTimerRef.current = null
-    }, 1000)
+    }, 500)   // 0.5 秒后出现
   }
 
   function hideFloatingHint() {

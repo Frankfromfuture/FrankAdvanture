@@ -1,53 +1,38 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges">
-  <g fill="#261307" opacity="0.58">
-    <rect x="7" y="10" width="19" height="4"/>
-    <rect x="25" y="8" width="4" height="6"/>
-    <rect x="5" y="14" width="20" height="4"/>
-    <rect x="4" y="18" width="18" height="4"/>
-    <rect x="5" y="22" width="15" height="4"/>
-    <rect x="8" y="26" width="10" height="4"/>
+  <title>pixel-hand-cursor</title>
+  <g fill="#7c3aed" opacity="0.72" transform="translate(2 2)">
+    <path d="M26.67 13.71h1.52v10.67h-1.52Z"/>
+    <path d="M25.14 27.43H9.91v-1.52H8.38v1.52H6.86V32h21.33v-4.57h-1.52v-3.05h-1.53Zm0 3.05H22.1v-1.53h3.04Z"/>
+    <path d="M25.14 12.19h1.53v1.52h-1.53Z"/>
+    <path d="M22.1 13.71h1.52v4.58H22.1Z"/>
+    <path d="M22.1 10.67h3.04v1.52H22.1Z"/>
+    <path d="M17.53 13.71h1.52v4.58h-1.52Z"/>
+    <path d="M12.95 13.71h1.53v4.58h-1.53Z"/>
+    <path d="m12.95 10.67 9.15 0 0 -1.53 -7.62 0 0 -7.62 -1.53 0 0 9.15z"/>
+    <path d="M9.91 0h3.04v1.52H9.91Z"/>
+    <path d="m8.38 19.81 1.53 0 0 -18.29 -1.53 0 0 10.67 -1.52 0 0 1.52 1.52 0 0 6.1z"/>
+    <path d="M6.86 24.38h1.52v1.53H6.86Z"/>
+    <path d="M5.34 21.33h1.52v3.05H5.34Z"/>
+    <path d="M5.34 13.71h1.52v1.53H5.34Z"/>
+    <path d="M3.81 15.24h1.53v6.09H3.81Z"/>
   </g>
-
-  <g fill="#120a04">
-    <rect x="7" y="6" width="18" height="4"/>
-    <rect x="25" y="4" width="4" height="4"/>
-    <rect x="29" y="8" width="3" height="8"/>
-    <rect x="3" y="10" width="4" height="8"/>
-    <rect x="7" y="14" width="16" height="4"/>
-    <rect x="1" y="18" width="4" height="8"/>
-    <rect x="5" y="26" width="4" height="4"/>
-    <rect x="9" y="30" width="12" height="2"/>
-    <rect x="21" y="26" width="4" height="4"/>
-    <rect x="25" y="18" width="4" height="8"/>
-    <rect x="13" y="18" width="10" height="4"/>
+  <g fill="#000000">
+    <path d="M9.91 1.52H12.95V10.67H22.1V12.19H25.14V13.71H26.67V24.38H25.14V27.43H26.67V32H6.86V27.43H8.38V25.91H6.86V24.38H5.34V21.33H3.81V15.24H5.34V13.71H6.86V12.19H8.38V1.52Z"/>
   </g>
-
-  <g fill="#fde68a">
-    <rect x="7" y="10" width="18" height="4"/>
-    <rect x="25" y="8" width="4" height="4"/>
-    <rect x="5" y="14" width="18" height="4"/>
-    <rect x="5" y="18" width="8" height="4"/>
-    <rect x="23" y="18" width="2" height="4"/>
-    <rect x="5" y="22" width="16" height="4"/>
-    <rect x="9" y="26" width="12" height="4"/>
-  </g>
-
-  <g fill="#fff7c7">
-    <rect x="8" y="10" width="12" height="4"/>
-    <rect x="6" y="14" width="10" height="4"/>
-    <rect x="5" y="18" width="5" height="4"/>
-  </g>
-
-  <g fill="#a16207">
-    <rect x="13" y="18" width="10" height="4"/>
-    <rect x="9" y="22" width="12" height="4"/>
-    <rect x="21" y="22" width="4" height="4"/>
-  </g>
-
-  <g fill="#3b2410">
-    <rect x="25" y="8" width="4" height="2"/>
-    <rect x="16" y="14" width="7" height="2"/>
-    <rect x="13" y="18" width="10" height="2"/>
-    <rect x="9" y="22" width="12" height="2"/>
+  <g fill="#ffffff">
+    <path d="M26.67 13.71h1.52v10.67h-1.52Z"/>
+    <path d="M25.14 27.43H9.91v-1.52H8.38v1.52H6.86V32h21.33v-4.57h-1.52v-3.05h-1.53Zm0 3.05H22.1v-1.53h3.04Z"/>
+    <path d="M25.14 12.19h1.53v1.52h-1.53Z"/>
+    <path d="M22.1 13.71h1.52v4.58H22.1Z"/>
+    <path d="M22.1 10.67h3.04v1.52H22.1Z"/>
+    <path d="M17.53 13.71h1.52v4.58h-1.52Z"/>
+    <path d="M12.95 13.71h1.53v4.58h-1.53Z"/>
+    <path d="m12.95 10.67 9.15 0 0 -1.53 -7.62 0 0 -7.62 -1.53 0 0 9.15z"/>
+    <path d="M9.91 0h3.04v1.52H9.91Z"/>
+    <path d="m8.38 19.81 1.53 0 0 -18.29 -1.53 0 0 10.67 -1.52 0 0 1.52 1.52 0 0 6.1z"/>
+    <path d="M6.86 24.38h1.52v1.53H6.86Z"/>
+    <path d="M5.34 21.33h1.52v3.05H5.34Z"/>
+    <path d="M5.34 13.71h1.52v1.53H5.34Z"/>
+    <path d="M3.81 15.24h1.53v6.09H3.81Z"/>
   </g>
 </svg>

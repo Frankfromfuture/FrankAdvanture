@@ -59,7 +59,7 @@ html, body {
 body {
   font-family: "Fusion Pixel SC", "Fusion Pixel", "Press Start 2P", monospace;
   /* 全局像素 2.5D 鼠标指针：金色箭头 + 阴影，热点 (1,0) */
-  cursor: url("/cursors/arrow.svg") 1 0, default;
+  cursor: url("/cursors/arrow.svg?v=solid-black-20260521") 7 2, default;
 }
 
 #root {
@@ -112,7 +112,7 @@ input[type="range"],
 input[type="range"]::-webkit-slider-thumb,
 input[type="checkbox"],
 select {
-  cursor: url("/cursors/hand.svg") 28 10, pointer;
+  cursor: url("/cursors/hand.svg?v=white-black-fill-20260521") 10 0, pointer;
 }
 
 /* 禁用态按钮恢复箭头 */
@@ -120,13 +120,13 @@ button:disabled,
 .candidate:disabled,
 .pack-card:disabled,
 [aria-disabled="true"] {
-  cursor: url("/cursors/arrow.svg") 1 0, not-allowed;
+  cursor: url("/cursors/arrow.svg?v=solid-black-20260521") 7 2, not-allowed;
 }
 
 /* 拖拽中的卡牌：沿用侧面食指，保留 grabbing fallback */
 .card-view.dragging,
 .card-view[draggable="true"]:active {
-  cursor: url("/cursors/hand.svg") 28 10, grabbing;
+  cursor: url("/cursors/hand.svg?v=white-black-fill-20260521") 10 0, grabbing;
 }
 
 button {
@@ -585,7 +585,7 @@ button {
 .battle-photo-bg {
   z-index: 0;
   background:
-    url("/assets/battle/battlebackground.png") center / cover no-repeat,
+    url("/assets/battle/battlebackground.png?v=image1-20260521") center / cover no-repeat,
     #dcecf5;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
@@ -594,17 +594,7 @@ button {
 
 .battle-crt-overlay {
   z-index: 0;
-  background:
-    repeating-linear-gradient(
-      0deg,
-      rgba(255, 255, 255, 0.055) 0 1px,
-      rgba(38, 45, 55, 0.055) 1px 3px,
-      transparent 3px 5px
-    ),
-    radial-gradient(ellipse at center, transparent 58%, rgba(44, 50, 58, 0.2) 100%),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.12), rgba(230, 234, 238, 0.1));
-  mix-blend-mode: luminosity;
-  opacity: 0.54;
+  background: rgba(255, 255, 255, 0.5);
 }
 
 .top-hud,
@@ -3134,6 +3124,11 @@ button {
 .card-stage.slot {
   width: min(109px, 100%);
   height: 151px;
+}
+
+/* slot 禁用 ::after 伪元素提示（改用浮动 portal 提示） */
+.card-stage.slot::after {
+  display: none;
 }
 
 .card-view.slot .neighbor-cue .left,
@@ -7831,19 +7826,19 @@ input[type="range"],
 input[type="range"]::-webkit-slider-thumb,
 input[type="checkbox"],
 select {
-  cursor: url("/cursors/hand.svg") 28 10, pointer;
+  cursor: url("/cursors/hand.svg?v=white-black-fill-20260521") 10 0, pointer;
 }
 
 button:disabled,
 .candidate:disabled,
 .pack-card:disabled,
 [aria-disabled="true"] {
-  cursor: url("/cursors/arrow.svg") 1 0, not-allowed;
+  cursor: url("/cursors/arrow.svg?v=solid-black-20260521") 7 2, not-allowed;
 }
 
 .card-view.dragging,
 .card-view[draggable="true"]:active {
-  cursor: url("/cursors/hand.svg") 28 10, grabbing;
+  cursor: url("/cursors/hand.svg?v=white-black-fill-20260521") 10 0, grabbing;
 }
 
 /* ============================================================================
@@ -7991,13 +7986,13 @@ button:disabled,
 .edit-move-bar,
 .layout-btn,
 .edit-reset-btn {
-  cursor: url("/cursors/hand.svg") 28 10, pointer;
+  cursor: url("/cursors/hand.svg?v=white-black-fill-20260521") 10 0, pointer;
 }
 .edit-move-bar {
-  cursor: url("/cursors/hand.svg") 28 10, move;
+  cursor: url("/cursors/hand.svg?v=white-black-fill-20260521") 10 0, move;
 }
 .edit-handle {
-  cursor: url("/cursors/hand.svg") 28 10, crosshair;
+  cursor: url("/cursors/hand.svg?v=white-black-fill-20260521") 10 0, crosshair;
 }
 
 /* Final HUD meta override: keep right-bottom pile labels readable in every viewport. */
