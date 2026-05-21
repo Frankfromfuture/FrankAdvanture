@@ -69,8 +69,8 @@ body {
 }
 
 /* ============================================================================
- * 分辨率自适应缩放：1920×1080 设计画布 → 等比缩放到任意视口
- * --app-scale 由 main.jsx 在 resize 时计算并写到 :root
+ * 分辨率自适应缩放：1920×1080 设计画布 → 按当前浏览器窗口宽高铺满
+ * --app-scale-x / --app-scale-y 由 main.jsx 在 resize 时计算并写到 :root
  * ========================================================================= */
 .app-scaler {
   position: fixed;
@@ -78,10 +78,66 @@ body {
   left: 50%;
   width: var(--design-w, 1920px);
   height: var(--design-h, 1080px);
-  transform: translate(-50%, -50%) scale(var(--app-scale, 1));
+  transform: translate(-50%, -50%) scale(var(--app-scale-x, 1), var(--app-scale-y, 1));
   transform-origin: center center;
   overflow: hidden;
   will-change: transform;
+}
+
+.orientation-guard {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 16px;
+  width: 100vw;
+  height: 100vh;
+  padding: 28px;
+  border: 0;
+  color: #fff4bd;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(255, 200, 87, 0.22), transparent 28%),
+    linear-gradient(180deg, rgba(8, 12, 22, 0.96), rgba(3, 7, 14, 0.98));
+  font-family: "Fusion Pixel SC", "Fusion Pixel", monospace;
+  text-align: center;
+}
+
+.orientation-guard strong {
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.orientation-guard em {
+  max-width: 320px;
+  color: #dbeafe;
+  font-style: normal;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.orientation-guard small {
+  color: #93c5fd;
+  font-size: 12px;
+}
+
+.orientation-phone {
+  width: 78px;
+  height: 122px;
+  border: 5px solid #ffc857;
+  border-radius: 16px;
+  box-shadow:
+    inset 0 0 0 4px rgba(255, 255, 255, 0.1),
+    0 0 0 4px rgba(0, 0, 0, 0.45),
+    0 18px 0 rgba(0, 0, 0, 0.28);
+  animation: phone-landscape-hint 1.8s ease-in-out infinite;
+}
+
+@keyframes phone-landscape-hint {
+  0%, 18% { transform: rotate(0deg); }
+  48%, 70% { transform: rotate(90deg); }
+  100% { transform: rotate(0deg); }
 }
 
 /* 所有可点击元素：侧面食指，热点对齐右侧指尖 */
@@ -154,7 +210,7 @@ button {
   gap: 10px;
   width: 100%;
   height: 100%;
-  padding-top: 56px;
+  padding-top: 68px;
   overflow: hidden;
   background: #dcecf5;
   perspective: 1200px;
@@ -249,7 +305,7 @@ button {
   position: relative;
   z-index: 2;
   display: block;
-  width: min(1090px, 94vw);  /* 缩小 20% (原 1360 / 118vw) */
+  width: min(1145px, 99vw);  /* 1090 × 1.05 */
   height: auto;
   margin: 0 0 16px;
   filter: drop-shadow(12px 14px 0 rgba(0, 0, 0, 0.92));
@@ -285,7 +341,7 @@ button {
     transform: translateY(-1px) scale(0.99) rotate(-3.5deg);
   }
   100% {
-    transform: translateY(0) scale(1) rotate(-3deg) scaleX(1.08);
+    transform: translateY(6px) scale(1) rotate(-3deg) scaleX(1.08);
     filter: drop-shadow(12px 14px 0 rgba(0, 0, 0, 0.92));
   }
 }
@@ -299,7 +355,7 @@ button {
 .main-menu-panel {
   position: absolute;
   z-index: 2;
-  top: calc(50vh - 25px);
+  top: calc(50vh + 5px);
   left: 50%;
   display: grid;
   justify-items: center;
@@ -585,16 +641,110 @@ button {
 .battle-photo-bg {
   z-index: 0;
   background:
-    url("/assets/battle/battlebackground.png?v=image1-20260521") center / cover no-repeat,
+    url("/assets/battle/battlebackground.png") center / cover no-repeat,
     #dcecf5;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   filter: grayscale(0.14) saturate(0.86) contrast(1.05) brightness(1.04);
+  animation: crt-signal-flicker 14s steps(1, end) infinite;
 }
 
+/* ── 信号抖动 keyframes ───────────────────────────────── */
+/* 绝大多数时间静止；偶尔 2‑3 帧快速 filter 微跳 + 1-2px 横移 */
+@keyframes crt-signal-flicker {
+  0%,   28%,  28.15%, 29%,   57%,   57.2%, 58%,   85%,   85.25%, 86%, 100% {
+    filter: grayscale(0.14) saturate(0.86) contrast(1.05) brightness(1.04);
+    transform: none;
+  }
+  /* burst 1 */
+  28.05% {
+    filter: grayscale(0.20) saturate(0.74) contrast(1.12) brightness(1.07);
+    transform: translateX(2px);
+  }
+  28.10% {
+    filter: grayscale(0.10) saturate(0.96) contrast(1.02) brightness(1.02);
+    transform: translateX(-1px);
+  }
+  /* burst 2 */
+  57.08% {
+    filter: grayscale(0.22) saturate(0.70) contrast(1.14) brightness(1.08);
+    transform: translateX(-2px);
+  }
+  57.16% {
+    filter: grayscale(0.12) saturate(0.90) contrast(1.04) brightness(1.03);
+    transform: translateX(1px);
+  }
+  /* burst 3 — 更轻 */
+  85.10% {
+    filter: grayscale(0.17) saturate(0.80) contrast(1.08) brightness(1.05);
+    transform: translateX(1px);
+  }
+  85.18% {
+    filter: grayscale(0.14) saturate(0.86) contrast(1.05) brightness(1.04);
+    transform: none;
+  }
+}
+
+/* ── CRT overlay：扫描线 + 滚动亮条 + 磷光晕 ──────────── */
 .battle-crt-overlay {
   z-index: 0;
-  background: rgba(255, 255, 255, 0.5);
+  /* 基底：极淡磷光晕（白色 → 青绿） */
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 40%,
+      rgba(200, 230, 255, 0.06) 0%,
+      transparent 70%),
+    rgba(255, 255, 255, 0.32);
+  /* 横向扫描线：2px 暗纹，4px 间隔 */
+  mask-image: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1)  0px,
+    rgba(0, 0, 0, 1)  2px,
+    rgba(0, 0, 0, 0.88) 2px,
+    rgba(0, 0, 0, 0.88) 4px
+  );
+  -webkit-mask-image: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1)  0px,
+    rgba(0, 0, 0, 1)  2px,
+    rgba(0, 0, 0, 0.88) 2px,
+    rgba(0, 0, 0, 0.88) 4px
+  );
+}
+
+/* 滚动亮带：::before 每 16s 从顶到底扫一次 */
+.battle-crt-overlay::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  height: 90px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 255, 0.025) 35%,
+    rgba(255, 255, 255, 0.045) 50%,
+    rgba(255, 255, 255, 0.025) 65%,
+    transparent 100%
+  );
+  animation: crt-roll-sweep 16s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes crt-roll-sweep {
+  from { transform: translateY(-100px); }
+  to   { transform: translateY(1180px); }
+}
+
+/* 轻微暗角 vignette */
+.battle-crt-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 100% 100% at 50% 50%,
+    transparent 55%,
+    rgba(0, 0, 0, 0.18) 100%
+  );
+  pointer-events: none;
 }
 
 .top-hud,
@@ -715,6 +865,11 @@ button {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   min-width: 0;
+  /* 月份往左扩 10%：去掉左内边距；AP 等往左收 20%：右侧留空防止与设置按钮重叠 */
+  padding-left: 5%;
+  padding-right: 20%;
+  transform: scale(1.21);
+  transform-origin: left center;
 }
 
 .hud-item {
@@ -728,6 +883,8 @@ button {
   padding: 8px 8px;
   border-right: 0;
   perspective: 760px;
+  transform: scale(1.2) translateY(4px);
+  transform-origin: center center;
   isolation: isolate;
 }
 
@@ -1361,11 +1518,11 @@ button {
 .line-board {
   position: absolute;
   left: 50%;
-  top: 282px;  /* 整体下移 40px */
+  top: 297px;  /* 整体下移 40px + 15px */
   z-index: 4;
   display: grid;
   width: 81%;
-  height: 250px;
+  height: 300px;
   gap: 8px;
   grid-template-rows: 24px 1fr;
   padding: 10px;
@@ -1400,7 +1557,7 @@ button {
 }
 
 .line-board.active {
-  top: 74px;  /* 整体下移 40px */
+  top: 74px;  /* 上边不变 */
   z-index: 6;
   border: 4px solid rgba(178, 156, 93, 0.84);
   background:
@@ -1460,7 +1617,7 @@ button {
 .line-slot-cell {
   position: relative;
   min-height: 0;
-  height: 195px;
+  height: 240px;
   overflow: visible;
   perspective: 900px;
 }
@@ -3116,14 +3273,13 @@ button {
 }
 
 .card-view.slot {
-  grid-template-rows: 19px 40px 20px 19px 1fr;
-  padding: 5px;
   transform: rotateX(0deg);
 }
 
 .card-stage.slot {
-  width: min(109px, 100%);
-  height: 151px;
+  width: 134px;
+  height: 200px;
+  overflow: visible;
 }
 
 /* slot 禁用 ::after 伪元素提示（改用浮动 portal 提示） */
@@ -3568,14 +3724,7 @@ button {
 }
 
 .card-view.slot .executive-svg-avatar {
-  width: 53px;
-  height: 53px;
-  bottom: 0;
   animation: none;
-  transform:
-    translateX(-50%)
-    translateY(0)
-    translateZ(12px);
 }
 
 .pixel-person-portrait {
@@ -4182,18 +4331,6 @@ button {
 
 .card-view.slot .pixel-person {
   animation: none;
-  transform:
-    perspective(150px)
-    rotateX(7deg)
-    rotateY(-7deg)
-    translateY(-4px)
-    translateZ(12px)
-    scale(calc(var(--person-scale) * 0.82));
-}
-
-.card-view.slot .pixel-person-bg::before,
-.card-view.slot .pixel-person-fx {
-  display: none;
 }
 
 .card-name {
@@ -4341,20 +4478,16 @@ button {
   -webkit-line-clamp: 2;
 }
 
-.card-view.slot .card-flavor,
-.card-view.slot .affix-row,
 .card-view.market .card-flavor,
 .card-view.market .affix-row {
   display: none;
 }
 
-.card-view.slot .card-name,
 .card-view.market .card-name {
   font-size: 10px;
   transform: none;
 }
 
-.card-view.slot .card-output,
 .card-view.market .card-output {
   min-width: 48px;
   font-size: 11px;
@@ -4362,12 +4495,10 @@ button {
   transform: none;
 }
 
-.card-view.slot .action-primary-label,
 .card-view.market .action-primary-label {
   font-size: 9px;
 }
 
-.card-view.slot .action-primary-value.exec-number,
 .card-view.market .action-primary-value.exec-number {
   font-size: 11px;
 }
@@ -4738,7 +4869,7 @@ button {
   .line-board {
     width: 81%;
     top: 190px;
-    height: 200px;
+    height: 206px;
     grid-template-rows: 22px 1fr;
     gap: 6px;
     padding: 8px;
@@ -4755,7 +4886,7 @@ button {
 
   .line-slot {
     min-height: 124px;
-    height: 137px;
+    height: 148px;
     padding: 5px 3px;
   }
 
@@ -4767,46 +4898,6 @@ button {
     right: 4px;
     bottom: 4px;
     font-size: 10px;
-  }
-
-  .card-stage.slot {
-    width: 61px;
-    height: 99px;
-  }
-
-  .card-view.slot {
-    grid-template-rows: 16px 19px 14px 16px 15px;
-    padding: 3px;
-  }
-
-  .card-view.slot .card-portrait,
-  .card-view.slot .card-flavor,
-  .card-view.slot .card-effects {
-    display: none;
-  }
-
-  .card-view.slot .card-top {
-    grid-template-columns: 1fr auto;
-  }
-
-  .card-view.slot .card-top em {
-    display: none;
-  }
-
-  .card-view.slot .card-top i,
-  .card-view.slot .card-top b {
-    padding: 2px;
-    font-size: 10px;
-  }
-
-  .card-view.slot .card-ap-icon {
-    width: 12px;
-    height: 12px;
-  }
-
-  .card-view.slot .card-name {
-    white-space: normal;
-    font-size: 9px;
   }
 
   .candidate-list {

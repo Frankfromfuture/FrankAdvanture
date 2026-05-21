@@ -1,0 +1,12 @@
+{
+  "name": "Frank's Adventure",
+  "short_name": "Frank",
+  "description": "Company-building roguelike deckbuilder.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#090d16",
+  "theme_color": "#090d16",
+  "icons": []
+}

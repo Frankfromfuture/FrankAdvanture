@@ -151,6 +151,16 @@ function App() {
     window.clearTimeout(settlementFxTimerRef.current)
   }, [])
 
+  useEffect(() => {
+    function handleGlobalButtonSound(event) {
+      const button = event.target?.closest?.('button, [role="button"]')
+      if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true') return
+      playUiSfx(button.dataset.sfx || 'click')
+    }
+    window.addEventListener('pointerup', handleGlobalButtonSound)
+    return () => window.removeEventListener('pointerup', handleGlobalButtonSound)
+  }, [])
+
   function showHint(message) {
     setHint(message)
     window.clearTimeout(hintTimerRef.current)
@@ -172,9 +182,11 @@ function App() {
 
   function commit(result, options = {}) {
     if (!result.ok) {
+      playUiSfx('error')
       showHint(result.message)
       return
     }
+    if (options.sfx && !options.fx) playUiSfx(options.sfx)
     if (options.fx) {
       const settlement = result.state.lastSettlement
       const nextSettlementFx = buildSettlementFx(settlement)
@@ -198,14 +210,14 @@ function App() {
     if (isSettling) return
     if (line.status !== 'planning') return
     if (line.slots[slotIndex]) {
-      commit(returnSlotToHand(game, line.id, slotIndex))
+      commit(returnSlotToHand(game, line.id, slotIndex), { sfx: 'card' })
       return
     }
     if (!selectedCard) {
       showHint('先选择一张手牌')
       return
     }
-    commit(placeCardInSlot(game, selectedCard.uid, slotIndex))
+    commit(placeCardInSlot(game, selectedCard.uid, slotIndex), { sfx: 'place' })
   }
 
   function canPlaceCardInSlot(line, slotIndex, card) {
@@ -218,7 +230,7 @@ function App() {
 
   function handleCardDrop(cardUid, slotIndex) {
     if (isSettling || !cardUid) return
-    commit(placeCardInSlot(game, cardUid, slotIndex))
+    commit(placeCardInSlot(game, cardUid, slotIndex), { sfx: 'place' })
     setDraggingCardUid(null)
   }
 
@@ -228,15 +240,15 @@ function App() {
   }
 
   function handleRecruit(packUid) {
-    commit(buyRecruit(game, packUid))
+    commit(buyRecruit(game, packUid), { sfx: 'buy' })
   }
 
   function handleDismissReveal() {
-    commit(dismissRecruitReveal(game))
+    commit(dismissRecruitReveal(game), { sfx: 'open' })
   }
 
   function handleDiscard(cardUid) {
-    commit(discardFromHand(game, cardUid))
+    commit(discardFromHand(game, cardUid), { sfx: 'card' })
   }
 
   function restart() {
@@ -256,6 +268,7 @@ function App() {
   }
 
   function startNewGame() {
+    playUiSfx('transition')
     restart()
     setScreen('battle')
   }
@@ -276,6 +289,7 @@ function App() {
   }
 
   function returnMain() {
+    playUiSfx('transition')
     setSettingsOpen(false)
     setComboOpen(false)
     setDrawer(null)
@@ -286,10 +300,11 @@ function App() {
 
   function handleEnterIntermission() {
     setSettingsOpen(false)
-    commit(enterIntermission(game))
+    commit(enterIntermission(game), { sfx: 'transition' })
   }
 
   function handleQuickEnterBoardMeeting() {
+    playUiSfx('transition')
     setSettingsOpen(false)
     setGame((current) => {
       const passedState = {
@@ -309,39 +324,39 @@ function App() {
   }
 
   function handleResolveEvent(optionId) {
-    commit(resolveEvent(game, optionId))
+    commit(resolveEvent(game, optionId), { sfx: 'choice' })
   }
 
   function handleShopBuy(slotKey) {
-    commit(purchaseShopItem(game, slotKey))
+    commit(purchaseShopItem(game, slotKey), { sfx: 'buy' })
   }
 
   function handleShopRoll() {
-    commit(rollShop(game))
+    commit(rollShop(game), { sfx: 'roll' })
   }
 
   function handlePack(packSlotIdx, pickIndex) {
-    commit(openPack(game, packSlotIdx, pickIndex))
+    commit(openPack(game, packSlotIdx, pickIndex), { sfx: pickIndex == null ? 'buy' : 'open' })
   }
 
   function handleUpgrade(cardUid, mode, affixId) {
-    commit(upgradeCard(game, cardUid, mode, affixId))
+    commit(upgradeCard(game, cardUid, mode, affixId), { sfx: 'upgrade' })
   }
 
   function handleFire(cardUid) {
-    commit(fireCard(game, cardUid))
+    commit(fireCard(game, cardUid), { sfx: 'fire' })
   }
 
   function handleBmBuy(schoolSlotIdx, replaceIdx) {
-    commit(purchaseBusinessModel(game, schoolSlotIdx, replaceIdx))
+    commit(purchaseBusinessModel(game, schoolSlotIdx, replaceIdx), { sfx: 'upgrade' })
   }
 
   function handleSchoolRoll() {
-    commit(rollSchool(game))
+    commit(rollSchool(game), { sfx: 'roll' })
   }
 
   function handleExitIntermission() {
-    commit(exitIntermission(game))
+    commit(exitIntermission(game), { sfx: 'transition' })
   }
 
   function handleOpenCompendium() {
@@ -1018,6 +1033,7 @@ function formatFxMultiplier(value) {
 // 音量设置 (module 级，localStorage 持久化)
 // ============================================================================
 const AUDIO_VOLUME = { master: 0.7, sfx: 0.6 }
+
 try {
   const stored = JSON.parse(window.localStorage.getItem('fa-audio-volume') || 'null')
   if (stored && typeof stored === 'object') {
@@ -1031,6 +1047,9 @@ export function setAudioVolume(next) {
   if (typeof next.sfx === 'number') AUDIO_VOLUME.sfx = Math.max(0, Math.min(1, next.sfx))
   try {
     window.localStorage.setItem('fa-audio-volume', JSON.stringify(AUDIO_VOLUME))
+  } catch {}
+  try {
+    window.dispatchEvent(new CustomEvent('fa-audio-volume-change'))
   } catch {}
 }
 
@@ -1093,6 +1112,47 @@ function playVolumeBlip() {
   osc.start(now)
   osc.stop(now + 0.2)
   window.setTimeout(() => ctx.close(), 400)
+}
+
+function playUiSfx(type = 'click') {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext
+  if (!AudioContextClass) return
+  const sfxLevel = getEffectiveSfxGain()
+  if (sfxLevel <= 0.001) return
+
+  const presets = {
+    click: { wave: 'square', notes: [740], length: 0.045, gain: 0.025 },
+    card: { wave: 'triangle', notes: [420, 360], length: 0.06, gap: 0.045, gain: 0.032 },
+    place: { wave: 'triangle', notes: [360, 520], length: 0.07, gap: 0.05, gain: 0.04 },
+    buy: { wave: 'square', notes: [523, 659, 784], length: 0.06, gap: 0.055, gain: 0.035 },
+    open: { wave: 'sawtooth', notes: [392, 587, 880], length: 0.075, gap: 0.05, gain: 0.035 },
+    roll: { wave: 'square', notes: [330, 440, 330, 554], length: 0.04, gap: 0.035, gain: 0.026 },
+    choice: { wave: 'triangle', notes: [494, 740], length: 0.08, gap: 0.06, gain: 0.035 },
+    upgrade: { wave: 'square', notes: [523, 659, 784, 1047], length: 0.065, gap: 0.055, gain: 0.04 },
+    transition: { wave: 'triangle', notes: [220, 330, 440], length: 0.12, gap: 0.075, gain: 0.035 },
+    fire: { wave: 'sawtooth', notes: [220, 146], length: 0.11, gap: 0.06, gain: 0.035 },
+    error: { wave: 'sawtooth', notes: [170, 130], length: 0.09, gap: 0.05, gain: 0.035 },
+  }
+  const preset = presets[type] ?? presets.click
+  const ctx = new AudioContextClass()
+  const now = ctx.currentTime
+  const total = preset.notes.length * (preset.gap ?? 0.05) + preset.length + 0.05
+
+  preset.notes.forEach((freq, index) => {
+    const start = now + index * (preset.gap ?? 0.05)
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = preset.wave
+    osc.frequency.setValueAtTime(freq, start)
+    gain.gain.setValueAtTime(0.0001, start)
+    gain.gain.exponentialRampToValueAtTime(preset.gain * sfxLevel, start + 0.008)
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + preset.length)
+    osc.connect(gain).connect(ctx.destination)
+    osc.start(start)
+    osc.stop(start + preset.length + 0.02)
+  })
+
+  window.setTimeout(() => ctx.close(), Math.ceil(total * 1000) + 80)
 }
 
 function getLineStatus(line, isActive) {
@@ -1627,23 +1687,30 @@ function EditableBlock({ id, label, children }) {
     if (!editMode) return
     event.preventDefault()
     event.stopPropagation()
-    const scale = parseFloat(
-      document.documentElement.style.getPropertyValue('--app-scale') || '1'
+    const scaleX = parseFloat(
+      document.documentElement.style.getPropertyValue('--app-scale-x') ||
+      document.documentElement.style.getPropertyValue('--app-scale') ||
+      '1'
+    ) || 1
+    const scaleY = parseFloat(
+      document.documentElement.style.getPropertyValue('--app-scale-y') ||
+      document.documentElement.style.getPropertyValue('--app-scale') ||
+      '1'
     ) || 1
     const rect = elRef.current.getBoundingClientRect()
-    const naturalW = rect.width / scale
-    const naturalH = rect.height / scale
+    const naturalW = rect.width / scaleX
+    const naturalH = rect.height / scaleY
     const startOv = {
       dx: ov.dx ?? 0,
       dy: ov.dy ?? 0,
       w: ov.w ?? naturalW,
       h: ov.h ?? naturalH,
     }
-    const drag = { type, startCX: event.clientX, startCY: event.clientY, startOv, scale }
+    const drag = { type, startCX: event.clientX, startCY: event.clientY, startOv, scaleX, scaleY }
 
     function onMove(e) {
-      const ddx = (e.clientX - drag.startCX) / drag.scale
-      const ddy = (e.clientY - drag.startCY) / drag.scale
+      const ddx = (e.clientX - drag.startCX) / drag.scaleX
+      const ddy = (e.clientY - drag.startCY) / drag.scaleY
       const s = drag.startOv
       const next = { ...s }
       if (drag.type === 'move') {

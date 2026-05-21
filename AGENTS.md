@@ -52,6 +52,18 @@
 3. 增加卡时 `cost` 字段含义是 AP，非 ¥
 4. 提交前 `npm run build` 必须无 error
 
+## 推送规则
+
+- 本项目以后所有正式提交都必须双推：GitHub `origin` 和云效 Codeup `codeup`。
+- GitHub 远端：`https://github.com/Frankfromfuture/FrankAdvanture.git`
+- Codeup 远端：`https://codeup.aliyun.com/69d7a808f4aadfa1ed7d6b36/Frankfromfuture/FrankAdvanture.git`
+- 本地远端名固定为：`origin` = GitHub, `codeup` = 云效 Codeup。
+- 推送命令：
+  1. `git push origin <branch>`
+  2. `git push codeup <branch>`
+- 不允许把 Codeup 用户名、密码、token 写入仓库文件；使用本机 Git 凭据管理、云效个人访问令牌或交互式登录保存凭据。
+- 如果创建新分支，两个远端都要推送同名分支；如果打 tag，tag 也要同时推送到两个远端。
+
 ## 起手三选一（下一个 agent 选）
 
 1. **M2 - 7 事件 + 12 周循环**：写 EventEngine, 让同套牌在不同事件下打法不同
