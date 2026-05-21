@@ -1687,30 +1687,23 @@ function EditableBlock({ id, label, children }) {
     if (!editMode) return
     event.preventDefault()
     event.stopPropagation()
-    const scaleX = parseFloat(
-      document.documentElement.style.getPropertyValue('--app-scale-x') ||
-      document.documentElement.style.getPropertyValue('--app-scale') ||
-      '1'
-    ) || 1
-    const scaleY = parseFloat(
-      document.documentElement.style.getPropertyValue('--app-scale-y') ||
-      document.documentElement.style.getPropertyValue('--app-scale') ||
-      '1'
+    const scale = parseFloat(
+      document.documentElement.style.getPropertyValue('--app-scale') || '1'
     ) || 1
     const rect = elRef.current.getBoundingClientRect()
-    const naturalW = rect.width / scaleX
-    const naturalH = rect.height / scaleY
+    const naturalW = rect.width / scale
+    const naturalH = rect.height / scale
     const startOv = {
       dx: ov.dx ?? 0,
       dy: ov.dy ?? 0,
       w: ov.w ?? naturalW,
       h: ov.h ?? naturalH,
     }
-    const drag = { type, startCX: event.clientX, startCY: event.clientY, startOv, scaleX, scaleY }
+    const drag = { type, startCX: event.clientX, startCY: event.clientY, startOv, scale }
 
     function onMove(e) {
-      const ddx = (e.clientX - drag.startCX) / drag.scaleX
-      const ddy = (e.clientY - drag.startCY) / drag.scaleY
+      const ddx = (e.clientX - drag.startCX) / drag.scale
+      const ddy = (e.clientY - drag.startCY) / drag.scale
       const s = drag.startOv
       const next = { ...s }
       if (drag.type === 'move') {
