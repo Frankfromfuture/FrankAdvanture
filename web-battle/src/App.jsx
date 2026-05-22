@@ -59,6 +59,25 @@ import {
   upgradeCard,
 } from './game/engine.js'
 
+const MEETING_ROOM_ASSETS = {
+  founder: '/assets/meeting-rooms/founder-origin-hex.png',
+  early: '/assets/meeting-rooms/boardroom-early-hex.png',
+  mid: '/assets/meeting-rooms/boardroom-mid-hex.png',
+  late: '/assets/meeting-rooms/boardroom-late-hex.png',
+}
+
+const FOUNDER_TRAITS = [
+  { id: 'scientist', name: '科学家', icon: FlaskConical, tone: 'blue' },
+  { id: 'sales-champion', name: '销售冠军', icon: HandCoins, tone: 'gold' },
+  { id: 'ex-cxo', name: '前大厂CXO', icon: BriefcaseBusiness, tone: 'purple' },
+]
+
+function getBoardMeetingAsset(levelId) {
+  if (levelId <= 3) return MEETING_ROOM_ASSETS.early
+  if (levelId <= 6) return MEETING_ROOM_ASSETS.mid
+  return MEETING_ROOM_ASSETS.late
+}
+
 const TUTORIAL_STEPS = [
   {
     title: '欢迎入职，新 CEO',
@@ -251,8 +270,8 @@ function App() {
     commit(discardFromHand(game, cardUid), { sfx: 'card' })
   }
 
-  function restart() {
-    setGame(createInitialState())
+  function resetRun(founderTrait = null) {
+    setGame({ ...createInitialState(), founderTrait })
     setHint('')
     setDrawer(null)
     setEnteringHandUids(new Set())
@@ -267,9 +286,21 @@ function App() {
     window.clearTimeout(settlementFxTimerRef.current)
   }
 
+  function restart() {
+    resetRun(game.founderTrait ?? null)
+  }
+
   function startNewGame() {
     playUiSfx('transition')
-    restart()
+    resetRun(null)
+    setSettingsOpen(false)
+    setCreditsOpen(false)
+    setScreen('founder')
+  }
+
+  function handleFounderTraitSelect(trait) {
+    playUiSfx('transition')
+    resetRun({ id: trait.id, name: trait.name, tone: trait.tone })
     setScreen('battle')
   }
 
@@ -395,6 +426,15 @@ function App() {
         {creditsOpen && <CreditsOverlay onClose={() => setCreditsOpen(false)} />}
         {hint && <div className="toast">{hint}</div>}
       </main>
+    )
+  }
+
+  if (screen === 'founder') {
+    return (
+      <FounderSelectScreen
+        onSelect={handleFounderTraitSelect}
+        onBack={() => setScreen('menu')}
+      />
     )
   }
 
@@ -2111,6 +2151,39 @@ function PileDrawer({ title, cards, onClose }) {
   )
 }
 
+function FounderSelectScreen({ onSelect, onBack }) {
+  return (
+    <main className="founder-select-shell">
+      <div className="founder-select-bg" aria-hidden="true" />
+      <section className="founder-select-stage">
+        <div className="founder-scene-card">
+          <img src={MEETING_ROOM_ASSETS.founder} alt="创业初期会议室" />
+        </div>
+        <aside className="founder-choice-panel">
+          <div className="founder-choice-kicker">NEW GAME</div>
+          <h1>选择人物属性</h1>
+          <div className="founder-trait-list">
+            {FOUNDER_TRAITS.map((trait) => {
+              const Icon = trait.icon
+              return (
+                <button
+                  key={trait.id}
+                  className={`founder-trait-card tone-${trait.tone}`}
+                  onClick={() => onSelect(trait)}
+                >
+                  <Icon size={34} strokeWidth={2.4} aria-hidden="true" />
+                  <strong>{trait.name}</strong>
+                </button>
+              )
+            })}
+          </div>
+          <button className="founder-back-button" onClick={onBack}>返回主菜单</button>
+        </aside>
+      </section>
+    </main>
+  )
+}
+
 // ============================================================================
 // 关间「董事会会议」UI (详见 BOARD_MEETING_DESIGN.md §8)
 // ============================================================================
@@ -2138,19 +2211,26 @@ function BoardMeetingHub({
 
   const nextLevelId = game.level.id + 1
   const isEventPhase = im.phase === 'event'
+  const roomAsset = getBoardMeetingAsset(game.level.id)
 
   return (
     <div className="bm-overlay">
+      <aside className="bm-scene-card">
+        <img src={roomAsset} alt="董事会会议室" />
+        <div className="bm-scene-caption">
+          <span>董事会会议</span>
+          <strong>第 {game.level.id} 关 → 第 {nextLevelId} 关</strong>
+        </div>
+      </aside>
       <section className="bm-panel">
         <header className="bm-panel-header">
-          <div className="bm-budget-chip">
-            <span aria-hidden="true">💰</span>
-            <strong>{game.strategicBudget}</strong>
-          </div>
           <div className="bm-panel-title">
-            <span>BOARD MEETING</span>
-            <strong>董事会会议</strong>
-            <em>第 {game.level.id} 轮 ▸ 第 {nextLevelId} 轮</em>
+            <strong>董事会决策</strong>
+            <em>{isEventPhase ? '先处理董事访谈' : '选择会后行动'}</em>
+          </div>
+          <div className="bm-budget-chip">
+            <span>预算</span>
+            <strong>{game.strategicBudget}</strong>
           </div>
           <button
             className="bm-next-button"
@@ -2216,34 +2296,30 @@ function BoardMeetingHub({
             <div className="bm-stations-grid">
               <StationCard
                 color="azure"
-                icon="💼"
                 title="投资部"
-                tag="SHOP"
-                description="epic / 传奇单卡 · 6 类卡包"
+                tag="买卡"
+                description="补强牌组"
                 onClick={() => setActiveStation('shop')}
               />
               <StationCard
                 color="rose"
-                icon="📋"
                 title="人事部"
-                tag="HR"
-                description={`升职 / “向社会输送人才” · 本场操作 ${im.hrActionsCount}`}
+                tag="调人"
+                description={`本场 ${im.hrActionsCount} 次`}
                 onClick={() => setActiveStation('hr')}
               />
               <StationCard
                 color="violet"
-                icon="🎓"
                 title="商学院"
-                tag="SCHOOL"
-                description={`已学 ${game.activeBusinessModels.length}/${game.businessModelSlotCap} 商业模式`}
+                tag="战略"
+                description={`${game.activeBusinessModels.length}/${game.businessModelSlotCap} 模式`}
                 onClick={() => setActiveStation('school')}
               />
               <StationCard
                 color="amber"
-                icon="📰"
                 title="董事访谈"
-                tag="RECORDS"
-                description="本场会议日志"
+                tag="日志"
+                description="查看记录"
                 onClick={() => setActiveStation('log')}
               />
             </div>
@@ -2266,31 +2342,29 @@ function BoardMeetingHub({
 
 function BoardEventModal({ event, budget, onSelect }) {
   return (
-    <div className="bm-event-overlay">
-      <section className="bm-event-modal">
-        <header>
-          <span className="event-tag">📰 董事访谈</span>
-          <strong>{event.title}</strong>
-        </header>
-        <p className="event-flavor">{event.flavor}</p>
-        <div className="event-options">
-          {event.options.map((opt) => {
-            const disabled = opt.cost && budget < opt.cost
-            return (
-              <button
-                key={opt.id}
-                className={`event-option ${disabled ? 'disabled' : ''}`}
-                disabled={disabled}
-                onClick={() => onSelect(opt.id)}
-              >
-                <strong>{opt.label}</strong>
-                <span>{disabled ? '💰 不足' : describeEventEffect(opt)}</span>
-              </button>
-            )
-          })}
-        </div>
-      </section>
-    </div>
+    <section className="bm-event-modal">
+      <header>
+        <span className="event-tag">董事访谈</span>
+        <strong>{event.title}</strong>
+      </header>
+      <p className="event-flavor">{event.flavor}</p>
+      <div className="event-options">
+        {event.options.map((opt) => {
+          const disabled = opt.cost && budget < opt.cost
+          return (
+            <button
+              key={opt.id}
+              className={`event-option ${disabled ? 'disabled' : ''}`}
+              disabled={disabled}
+              onClick={() => onSelect(opt.id)}
+            >
+              <strong>{opt.label}</strong>
+              <span>{disabled ? '预算不足' : describeEventEffect(opt)}</span>
+            </button>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 
@@ -2309,11 +2383,10 @@ function describeEventEffect(opt) {
   }
 }
 
-function StationCard({ icon, title, tag, description, color, onClick }) {
+function StationCard({ title, tag, description, color, onClick }) {
   return (
     <button className={`bm-station tone-${color}`} onClick={onClick}>
       <span className="bm-station-tag">{tag}</span>
-      <span className="bm-station-icon" aria-hidden="true">{icon}</span>
       <strong className="bm-station-title">{title}</strong>
       <em className="bm-station-desc">{description}</em>
       <span className="bm-station-arrow" aria-hidden="true">▸</span>
