@@ -130,6 +130,17 @@ describe('v3.2 Engine Core Tests', () => {
     const exitState = exitIntermission(finalImState, fixedRng).state
     expect(exitState.stage.id).toBe(2)
     expect(exitState.intermissionState).toBeNull()
+
+    // Assert active line is in planning state and card placement is allowed
+    const activeLine = exitState.lines.find(l => l.id === exitState.activeLineId)
+    expect(activeLine).toBeDefined()
+    expect(activeLine.status).toBe('planning')
+
+    const cardToPlace = exitState.hand[0]
+    expect(cardToPlace).toBeDefined()
+    const placeRes = placeCardInSlot(exitState, cardToPlace.uid, 0)
+    expect(placeRes.ok).toBe(true)
+    expect(placeRes.state.lines.find(l => l.id === exitState.activeLineId).slots[0].uid).toBe(cardToPlace.uid)
   })
 
   it('allows extraction of retained earnings in board meeting and updates cash', () => {
@@ -203,6 +214,28 @@ describe('v3.2 Engine Core Tests', () => {
     // Resolve month 6 -> stagnationAdvisorTriggered is true
     curState = resolveMonth(curState, fixedRng).state
     expect(curState.stagnationAdvisorTriggered).toBe(true)
+  })
+
+  it('allows placing card in slot and returning it to hand', () => {
+    const state = createInitialState({ rng: fixedRng })
+    const firstCard = state.hand[0]
+    expect(firstCard).toBeDefined()
+    
+    // Place card in slot 0
+    const placeResult = placeCardInSlot(state, firstCard.uid, 0)
+    expect(placeResult.ok).toBe(true)
+    
+    const placedState = placeResult.state
+    expect(placedState.hand.find(c => c.uid === firstCard.uid)).toBeUndefined()
+    expect(placedState.lines[0].slots[0].uid).toBe(firstCard.uid)
+    
+    // Return card to hand
+    const returnResult = returnSlotToHand(placedState, 'A', 0)
+    expect(returnResult.ok).toBe(true)
+    
+    const returnedState = returnResult.state
+    expect(returnedState.hand.find(c => c.uid === firstCard.uid)).toBeDefined()
+    expect(returnedState.lines[0].slots[0]).toBeNull()
   })
 })
 

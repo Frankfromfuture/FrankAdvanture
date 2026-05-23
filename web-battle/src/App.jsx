@@ -152,14 +152,45 @@ const LayoutEditCtx = React.createContext({
 function App() {
   const [screen, setScreen] = useState('menu')
   const [compendiumReturn, setCompendiumReturn] = useState('menu')
-  const [game, setGame] = useState(() => _loadGameState() ?? createInitialState())
+  const [game, setGame] = useState(() => {
+    const loaded = _loadGameState()
+    if (loaded) {
+      // Robustness: ensure active line has 'planning' status if not ended/intermission
+      if (!loaded.result && !loaded.intermissionState) {
+        const activeLine = loaded.lines?.find(l => l.id === loaded.activeLineId)
+        if (activeLine && activeLine.status !== 'planning') {
+          console.warn("Auto-correcting active line status to 'planning'")
+          loaded.lines = loaded.lines.map(line =>
+            line.id === loaded.activeLineId ? { ...line, status: 'planning' } : line
+          )
+        }
+      }
+      return loaded
+    }
+    return createInitialState()
+  })
   
   useEffect(() => {
     _saveGameState(game)
   }, [game])
 
   const [tutorialStep, setTutorialStep] = useState(0)
-  const [tutorialDone, setTutorialDone] = useState(false)
+  const [tutorialDone, setTutorialDone] = useState(() => {
+    try {
+      return localStorage.getItem('frank-battle-tutorial-done') === 'true'
+    } catch {
+      return false
+    }
+  })
+
+  function handleTutorialDone() {
+    setTutorialDone(true)
+    try {
+      localStorage.setItem('frank-battle-tutorial-done', 'true')
+    } catch (e) {
+      console.error(e)
+    }
+  }
   const [hint, setHint] = useState('')
   const [drawer, setDrawer] = useState(null)
   const [enteringHandUids, setEnteringHandUids] = useState(() => new Set())
@@ -676,12 +707,12 @@ function App() {
           step={tutorialStep}
           onNext={() => {
             if (tutorialStep >= TUTORIAL_STEPS.length - 1) {
-              setTutorialDone(true)
+              handleTutorialDone()
               return
             }
             setTutorialStep((current) => current + 1)
           }}
-          onSkip={() => setTutorialDone(true)}
+          onSkip={handleTutorialDone}
         />
       )}
       {game.revealedRecruitCard && (
@@ -1793,8 +1824,12 @@ function DeckButton({ label, count, onClick }) {
 
 function HandCount({ discardRequired, handCount }) {
   return (
-    <div className="hand-title" data-tip="待命员工" aria-label="待命员工">
-      <span className="meta-word-icon" aria-hidden="true">工作中</span>
+    <div className={`hand-title ${discardRequired > 0 ? 'discard-alert' : ''}`} data-tip="待命员工" aria-label="待命员工">
+      {discardRequired > 0 ? (
+        <span className="meta-word-icon discard-badge" aria-hidden="true">需弃牌 {discardRequired}</span>
+      ) : (
+        <span className="meta-word-icon" aria-hidden="true">工作中</span>
+      )}
       <span className="meta-copy">
         <strong>{handCount}/{GAME_CONFIG.handLimit}</strong>
       </span>

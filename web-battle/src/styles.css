@@ -8429,3 +8429,20 @@ button:disabled,
   margin-top: 2px;
   text-align: center;
 }
+
+/* ---- Discard warning animation ---- */
+.discard-badge {
+  background-color: #ef4444 !important;
+  color: #ffffff !important;
+  animation: discard-pulse 0.8s infinite alternate !important;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.7);
+}
+
+@keyframes discard-pulse {
+  from {
+    opacity: 0.75;
+  }
+  to {
+    opacity: 1;
+  }
+}

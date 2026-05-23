@@ -577,7 +577,9 @@ export function resolveMonth(state, rng = Math.random) {
   const nextHand = [...handAdjusted.hand, ...drawn.drawn.map((card) => ({ ...card, location: 'hand' }))]
   const nextActiveLineId = chooseNextPlanningLine(afterWork.lines, state.activeLineId)
   const nextLines = afterWork.lines.map((line) => (
-    line.id === nextActiveLineId ? { ...line, status: 'planning' } : line
+    line.id === nextActiveLineId 
+      ? { ...line, status: 'planning' } 
+      : (line.status === 'planning' ? { ...line, status: 'idle' } : line)
   ))
 
   const finalState = {
@@ -1597,18 +1599,59 @@ export function exitIntermission(state, rng = Math.random) {
     ? 0
     : state.legendaryRollStreak + 1
 
+  // Perform month transition into the first month of the new stage
+  const nextMonthNum = state.month + 1
+  let nextYear = state.year
+  let nextMonth = nextMonthNum
+  if (nextMonthNum > 12) {
+    nextMonth = 1
+    nextYear += 1
+  }
+  const elapsedMonths = (state.elapsedMonths ?? 0) + 1
+
+  const nextEvent = pickEvent(rng)
+  // Temporarily apply next active BMs to state to compute correct BM stats for draw count/AP
+  const tempState = { ...state, activeBusinessModels: rechargedBMs }
+  const bmStats = computeBusinessModelStats(tempState)
+
+  const apHandRich = bmStats.apIfHandRichEnabled && state.hand.length >= 6 ? 1 : 0
+  const nextApAvailable = Math.max(1, GAME_CONFIG.baseAp + state.apCarry + (nextEvent.apDelta ?? 0) + apHandRich)
+
+  const effectiveHandLimit = GAME_CONFIG.handLimit + bmStats.handLimitBonus + (nextEvent.handLimitDelta ?? 0)
+  const handAdjusted = applyEventHandDelta(state.hand, nextDrawPile, nextEvent.handDelta ?? 0, rng)
+  const drawPerMonth = GAME_CONFIG.drawPerMonth + bmStats.drawBonus + (nextEvent.drawBonus ?? 0)
+  const drawCount = Math.min(drawPerMonth, Math.max(0, effectiveHandLimit - handAdjusted.hand.length))
+  const drawn = drawCards(drawCount, handAdjusted.drawPile)
+  const nextHand = [...handAdjusted.hand, ...drawn.drawn.map((card) => ({ ...card, location: 'hand' }))]
+
+  const nextActiveLineId = chooseNextPlanningLine(state.lines, state.activeLineId)
+  const nextLines = state.lines.map((line) => (
+    line.id === nextActiveLineId 
+      ? { ...line, status: 'planning' } 
+      : (line.status === 'planning' ? { ...line, status: 'idle' } : line)
+  ))
+
   return accept({
     ...state,
     stage: nextStage,
-    drawPile: nextDrawPile,
+    year: nextYear,
+    month: nextMonth,
+    elapsedMonths,
+    event: nextEvent,
+    apAvailable: nextApAvailable,
+    hand: nextHand,
+    drawPile: drawn.drawPile,
     activeBusinessModels: rechargedBMs,
     intermissionState: null,
     result: null,
     legendaryRollStreak: newStreak,
     businessModelSlotCap: slotCap,
     nextLevelModifiers: { targetMultiplier: 1, handPenalty: 0, unlockedEpicDepts: [], pendingCards: [] },
+    activeLineId: nextActiveLineId,
+    lines: nextLines,
     log: [
       `🚀 进入阶段: ${nextStage.name} (${nextStage.theme})`,
+      `第 ${nextMonth} 月开始: ${nextEvent.name}`,
       ...state.log,
     ].slice(0, 7),
   })
