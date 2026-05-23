@@ -578,20 +578,6 @@ function App() {
           <EditableBlock id="ceo-heading" label="CEO 标题">
             <PanelHeading icon={Sparkles} title="CEO Frank" sub={game.stage.name} textId="ceo-heading" />
           </EditableBlock>
-          <EditableBlock id="ceo-stage" label="CEO 舞台">
-            <div className="ceo-stage">
-              <div className="ceo-avatar" aria-hidden="true">
-                <span className="pixel-hair" />
-                <span className="pixel-face" />
-                <span className="pixel-suit" />
-                <span className="pixel-tablet" />
-              </div>
-              <div className="speech-bubble">
-                <strong>{game.event.name}</strong>
-                <span>{game.event.description}</span>
-              </div>
-            </div>
-          </EditableBlock>
           <EditableBlock id="ceo-bizmodels" label="商业模式">
             <ActiveBusinessModelsPanel
               activeBusinessModels={game.activeBusinessModels}
