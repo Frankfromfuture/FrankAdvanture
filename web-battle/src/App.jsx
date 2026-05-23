@@ -575,9 +575,6 @@ function App() {
 
       <section className="battle-grid">
         <aside className="battle-panel ceo-panel">
-          <EditableBlock id="ceo-heading" label="CEO 标题">
-            <PanelHeading icon={Sparkles} title="CEO Frank" sub={game.stage.name} textId="ceo-heading" />
-          </EditableBlock>
           <EditableBlock id="ceo-bizmodels" label="商业模式">
             <ActiveBusinessModelsPanel
               activeBusinessModels={game.activeBusinessModels}
@@ -827,8 +824,7 @@ function TopHud({ game, preview, activeLineAp, apLimit, onCombo, onSettings }) {
       <EditableBlock id="hud-brand" label="品牌标题">
         <div className="brand-mark">
           <div>
-            <strong><EditableText id="hud-brand-title">FRANK'S ADVENTURE</EditableText></strong>
-            <small><EditableText id="hud-brand-sub">{`${game.stage.name} · ${game.stage.theme}`}</EditableText></small>
+            <strong><EditableText id="hud-brand-title">{`${game.stage.theme}期（${game.stage.name}）`}</EditableText></strong>
           </div>
         </div>
       </EditableBlock>

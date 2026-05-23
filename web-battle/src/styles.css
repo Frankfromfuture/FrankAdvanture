@@ -825,7 +825,7 @@ button {
 .brand-mark strong {
   display: inline-block;
   color: #05070a;
-  font-size: 37px;
+  font-size: 34px;
   line-height: 0.9;
   letter-spacing: 0;
   text-shadow:
@@ -6182,7 +6182,7 @@ button {
    ============================================================================ */
 
 .active-bm-panel {
-  --active-bm-slot-size: 183px;
+  --active-bm-slot-size: 128px;
   display: grid;
   gap: 8px;
   width: 100%;
@@ -6195,7 +6195,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 2px 4px;
+  padding: 0 16px 4px;
 }
 
 .active-bm-heading strong {
@@ -6219,7 +6219,8 @@ button {
 .active-bm-list {
   display: grid;
   grid-template-columns: var(--active-bm-slot-size);
-  justify-content: center;
+  justify-content: start;
+  padding-left: 16px;
   gap: 8px;
   max-height: none;
   overflow: visible;
@@ -6352,7 +6353,7 @@ button {
 .active-bm-card-top strong {
   display: block;
   color: #ffffff;
-  font-size: 15px;
+  font-size: 12px;
   letter-spacing: 1px;
   line-height: 1.15;
   overflow: hidden;
