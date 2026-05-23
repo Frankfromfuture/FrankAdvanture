@@ -351,7 +351,29 @@ function App() {
     commit(resolveMonth(game), { fx: true, animateNewHand: true })
   }
 
+  function sortHandByAp() {
+    setGame((current) => {
+      const sortedHand = [...current.hand].sort((a, b) => {
+        if (a.ap !== b.ap) return a.ap - b.ap
+        return a.name.localeCompare(b.name, 'zh-CN')
+      })
+      return { ...current, hand: sortedHand }
+    })
+  }
 
+  function sortHandByDept() {
+    const DEPT_ORDER = { 'R': 1, 'S': 2, 'O': 3, 'NONE': 4 }
+    setGame((current) => {
+      const sortedHand = [...current.hand].sort((a, b) => {
+        const orderA = DEPT_ORDER[a.dept] ?? 99
+        const orderB = DEPT_ORDER[b.dept] ?? 99
+        if (orderA !== orderB) return orderA - orderB
+        if (a.ap !== b.ap) return a.ap - b.ap
+        return a.name.localeCompare(b.name, 'zh-CN')
+      })
+      return { ...current, hand: sortedHand }
+    })
+  }
 
   function handleDismissReveal() {
     commit(dismissRecruitReveal(game), { sfx: 'open' })
@@ -580,6 +602,12 @@ function App() {
               activeBusinessModels={game.activeBusinessModels}
               slotCap={game.businessModelSlotCap}
             />
+          </EditableBlock>
+          <EditableBlock id="ceo-sort-actions" label="手牌排序">
+            <div className="hand-sort-actions">
+              <button className="sort-btn" onClick={sortHandByAp}>按 AP 排序</button>
+              <button className="sort-btn" onClick={sortHandByDept}>按部门排序</button>
+            </div>
           </EditableBlock>
           <EditableBlock id="ceo-log" label="操作日志">
             <LogList items={game.log} />

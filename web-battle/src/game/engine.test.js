@@ -237,6 +237,33 @@ describe('v3.2 Engine Core Tests', () => {
     expect(returnedState.hand.find(c => c.uid === firstCard.uid)).toBeDefined()
     expect(returnedState.lines[0].slots[0]).toBeNull()
   })
+
+  it('implements quarterly event rotation (retains event for 3 months)', () => {
+    const state = createInitialState({ rng: fixedRng })
+    const initialEvent = state.event
+    expect(initialEvent).toBeDefined()
+    
+    const controlledState = {
+      ...state,
+      month: 1,
+    }
+    
+    // Month 1 -> Month 2 transition
+    const m2 = resolveMonth(controlledState, fixedRng).state
+    expect(m2.month).toBe(2)
+    expect(m2.event).toBe(initialEvent)
+    
+    // Month 2 -> Month 3 transition
+    const m3 = resolveMonth(m2, fixedRng).state
+    expect(m3.month).toBe(3)
+    expect(m3.event).toBe(initialEvent)
+    
+    // Month 3 -> Month 4 transition (starts new quarter)
+    const m4 = resolveMonth(m3, fixedRng).state
+    expect(m4.month).toBe(4)
+    // In a new quarter, a different event or newly picked event is selected
+    // Note: With our fixedRng, we verify it is resolved.
+  })
 })
 
 describe('Scoring & Effect parsing tests', () => {

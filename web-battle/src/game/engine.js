@@ -566,7 +566,8 @@ export function resolveMonth(state, rng = Math.random) {
   }
 
   // Standard month transition
-  const nextEvent = pickEvent(rng)
+  const isNewQuarter = (nextMonth - 1) % 3 === 0
+  const nextEvent = isNewQuarter ? pickEvent(rng) : state.event
   const apHandRich = bmStats.apIfHandRichEnabled && rescuedState.hand.length >= 6 ? 1 : 0
   const nextApAvailable = Math.max(1, GAME_CONFIG.baseAp + apCarry + (nextEvent.apDelta ?? 0) + apHandRich)
   const effectiveHandLimit = GAME_CONFIG.handLimit + bmStats.handLimitBonus + (nextEvent.handLimitDelta ?? 0)
@@ -1609,7 +1610,8 @@ export function exitIntermission(state, rng = Math.random) {
   }
   const elapsedMonths = (state.elapsedMonths ?? 0) + 1
 
-  const nextEvent = pickEvent(rng)
+  const isNewQuarter = (nextMonth - 1) % 3 === 0
+  const nextEvent = isNewQuarter ? pickEvent(rng) : state.event
   // Temporarily apply next active BMs to state to compute correct BM stats for draw count/AP
   const tempState = { ...state, activeBusinessModels: rechargedBMs }
   const bmStats = computeBusinessModelStats(tempState)

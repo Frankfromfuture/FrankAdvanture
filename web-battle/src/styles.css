@@ -822,6 +822,7 @@ button {
 
 .brand-mark strong {
   display: inline-block;
+  white-space: nowrap;
   color: #05070a;
   font-size: 34px;
   line-height: 0.9;
@@ -2362,11 +2363,8 @@ button {
 .event-panel {
   display: flex !important;
   flex-direction: column !important;
-  height: 100% !important;
-}
-
-.event-panel > :last-child {
-  margin-top: auto !important;
+  gap: 16px !important;
+  height: auto !important;
 }
 
 .preview-card {
@@ -6394,6 +6392,50 @@ button {
 
 .active-bm-charge.ready { color: #fbbf24; }
 .active-bm-charge.spent { color: #64748b; }
+
+/* ---- 手牌排序按键 ---- */
+.hand-sort-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 8px 16px;
+  width: 100%;
+}
+
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 6px 12px;
+  border: 3px solid rgba(255, 200, 87, 0.76);
+  color: #fff4bd;
+  background: linear-gradient(180deg, #1e1b4b, #0f172a);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  clip-path: polygon(
+    5px 0, calc(100% - 5px) 0,
+    100% 5px, 100% calc(100% - 5px),
+    calc(100% - 5px) 100%, 5px 100%,
+    0 calc(100% - 5px), 0 5px
+  );
+  box-shadow: 2px 3px 0 rgba(0, 0, 0, 0.4);
+  transition: all 120ms ease;
+}
+
+.sort-btn:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+  box-shadow: 2px 4px 0 rgba(0, 0, 0, 0.45);
+}
+
+.sort-btn:active {
+  transform: translateY(1px);
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+}
 
 /* ============================================================================
    图鉴 Compendium · 像素 Retro 风格
