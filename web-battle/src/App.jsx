@@ -174,6 +174,27 @@ function App() {
     _saveGameState(game)
   }, [game])
 
+  useEffect(() => {
+    if (!game.result && !game.intermissionState) {
+      const activeLine = game.lines?.find(l => l.id === game.activeLineId)
+      if (activeLine && activeLine.status !== 'planning') {
+        console.warn("Auto-correcting active line status in useEffect...")
+        setGame(prev => {
+          const curActive = prev.lines?.find(l => l.id === prev.activeLineId)
+          if (curActive && curActive.status !== 'planning') {
+            return {
+              ...prev,
+              lines: prev.lines.map(line =>
+                line.id === prev.activeLineId ? { ...line, status: 'planning' } : line
+              )
+            }
+          }
+          return prev
+        })
+      }
+    }
+  }, [game.activeLineId, game.lines, game.result, game.intermissionState])
+
   const [tutorialStep, setTutorialStep] = useState(0)
   const [tutorialDone, setTutorialDone] = useState(() => {
     try {
