@@ -21,11 +21,32 @@ export const DEPT_META = {
   NONE: { label: '通用', short: '通用', color: 'neutral', icon: '*' },
 }
 
+/** @deprecated Use STAGES instead */
 export const LEVELS = [
   { id: 1, milestone: 'A 轮融资', theme: '起步打 PMF', target: 1200, startCash: 45, startBudget: 60, maintenance: 8 },
   { id: 2, milestone: 'B 轮融资', theme: '规模化', target: 2100, startCash: 60, startBudget: 95, maintenance: 12 },
   { id: 3, milestone: 'C 轮融资', theme: '抢市场', target: 3800, startCash: 80, startBudget: 150, maintenance: 18 },
 ]
+
+export const STAGES = [
+  { id: 1, key: 'angel',   name: '天使轮', threshold: 0,     entryGrant: 30, theme: '起步' },
+  { id: 2, key: 'seed',    name: '种子轮', threshold: 300,   entryGrant: 25, theme: '产品验证' },
+  { id: 3, key: 'seriesA', name: 'A 轮',   threshold: 1000,  entryGrant: 50, theme: '规模化' },
+  { id: 4, key: 'seriesB', name: 'B 轮',   threshold: 2500,  entryGrant: 100, theme: '增长' },
+  { id: 5, key: 'seriesC', name: 'C 轮',   threshold: 5000,  entryGrant: 200, theme: '扩张' },
+  { id: 6, key: 'seriesD', name: 'D 轮',   threshold: 10000, entryGrant: 400, theme: '深耕' },
+  { id: 7, key: 'ipo',     name: 'IPO',     threshold: 20000, entryGrant: 700, theme: '上市' },
+  { id: 8, key: 'giant',   name: '千亿',    threshold: 40000, entryGrant: 1200, theme: '巨头' },
+  { id: 9, key: 'first',   name: '行业第一', threshold: 80000, entryGrant: 2000, theme: '终极' },
+]
+
+export const RARITY_TABLE = {
+  common:    { baseBurn: 1, extraBurn: 0, assetValue: 5,   bmMonthlyCost: 2, bmAssetValue: 8   },
+  rare:      { baseBurn: 2, extraBurn: 1, assetValue: 15,  bmMonthlyCost: 4, bmAssetValue: 25  },
+  elite:     { baseBurn: 3, extraBurn: 1, assetValue: 30,  bmMonthlyCost: 6, bmAssetValue: 50  },
+  epic:      { baseBurn: 4, extraBurn: 2, assetValue: 50,  bmMonthlyCost: 8, bmAssetValue: 80  },
+  legendary: { baseBurn: 7, extraBurn: 4, assetValue: 150, bmMonthlyCost: 14, bmAssetValue: 240 },
+}
 
 export const EVENTS = [
   {
@@ -1651,72 +1672,18 @@ export const DEFAULT_DRAW_WEIGHTS = {
   legendary: 1,
 }
 
-// Mutate templates 一次性补齐 drawWeight 字段，让每张卡都明确带"抽卡概率"
+// Mutate templates 一次性补齐 drawWeight 字段，以及 burn/asset 字段
 for (const card of CARD_TEMPLATES) {
   if (card.drawWeight == null) {
     card.drawWeight = DEFAULT_DRAW_WEIGHTS[card.rarity] ?? 10
   }
+  const rarityInfo = RARITY_TABLE[card.rarity] || RARITY_TABLE.common
+  card.baseBurn = card.baseBurn ?? rarityInfo.baseBurn
+  card.extraBurn = card.extraBurn ?? rarityInfo.extraBurn
+  card.assetValue = card.assetValue ?? rarityInfo.assetValue
 }
 
-// ============================================================================
-// 战斗内招聘卡包 (5 种, 每月 5 选 3 出现)
-// ============================================================================
-/**
- * 玩家点击卡包 → 按 pack.filter 过滤卡池 → 用 drawWeight 加权随机抽 1 张 → 入牌堆
- * cost 用战略预算 💰 支付
- */
-export const RECRUIT_PACKS = [
-  {
-    id: 'PACK_RECRUIT_R',
-    name: '研发新员工',
-    shortName: '研发包',
-    svgVariant: 'rd',
-    color: '#2563eb',
-    cost: 12,
-    filter: { type: 'emp', dept: 'R' },
-    tagline: '招个写代码的',
-  },
-  {
-    id: 'PACK_RECRUIT_S',
-    name: '销售新员工',
-    shortName: '销售包',
-    svgVariant: 'sales',
-    color: '#b91c1c',
-    cost: 12,
-    filter: { type: 'emp', dept: 'S' },
-    tagline: '招个签单的',
-  },
-  {
-    id: 'PACK_RECRUIT_O',
-    name: '运营新员工',
-    shortName: '运营包',
-    svgVariant: 'ops',
-    color: '#15803d',
-    cost: 12,
-    filter: { type: 'emp', dept: 'O' },
-    tagline: '招个兜底的',
-  },
-  {
-    id: 'PACK_SRV_BATTLE',
-    name: '服务项目包',
-    shortName: '服务包',
-    svgVariant: 'srv',
-    color: '#a855f7',
-    cost: 10,
-    filter: { type: 'srv' },
-    tagline: '雇个外部顾问',
-  },
-  {
-    id: 'PACK_FUN_BATTLE',
-    name: '管理工具包',
-    shortName: '工具包',
-    svgVariant: 'tools',
-    color: '#fb923c',
-    cost: 10,
-    filter: { type: 'fun' },
-    tagline: '上一套系统',
-  },
-]
+
 
 // ============================================================================
 // 关间「董事会会议」数据 (详见 BOARD_MEETING_DESIGN.md)
@@ -2398,4 +2365,40 @@ export function getCardTemplate(id) {
 
 export function expandDeck(list) {
   return list.flatMap(([id, count]) => Array.from({ length: count }, () => id))
+}
+
+export function findStageByValuation(v) {
+  let current = STAGES[0]
+  for (const s of STAGES) {
+    if (v >= s.threshold) {
+      current = s
+    }
+  }
+  return current
+}
+
+export function getCardBurn(card) {
+  return card.baseBurn ?? RARITY_TABLE[card.rarity]?.baseBurn ?? 0
+}
+
+export function getCardExtraBurn(card) {
+  return card.extraBurn ?? RARITY_TABLE[card.rarity]?.extraBurn ?? 0
+}
+
+export function getBMMonthlyCost(bm) {
+  return bm.monthlyCost ?? RARITY_TABLE[bm.rarity]?.bmMonthlyCost ?? 0
+}
+
+export function getCardAssetValue(card) {
+  return card.assetValue ?? RARITY_TABLE[card.rarity]?.assetValue ?? 0
+}
+
+export function getBMAssetValue(bm) {
+  return bm.assetValue ?? RARITY_TABLE[bm.rarity]?.bmAssetValue ?? 0
+}
+
+for (const bm of BUSINESS_MODELS) {
+  const rarityInfo = RARITY_TABLE[bm.rarity] || RARITY_TABLE.common
+  bm.monthlyCost = bm.monthlyCost ?? rarityInfo.bmMonthlyCost
+  bm.assetValue = bm.assetValue ?? rarityInfo.bmAssetValue
 }

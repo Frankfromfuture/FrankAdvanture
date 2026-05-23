@@ -763,7 +763,7 @@ button {
 
 .top-hud {
   display: grid;
-  grid-template-columns: 270px minmax(0, 1fr) 132px;
+  grid-template-columns: 270px 1fr 132px;
   align-items: center;
   gap: 12px;
   min-width: 0;
@@ -771,20 +771,14 @@ button {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  perspective: 980px;
-  transform-style: preserve-3d;
 }
 
-/* 顶部 HUD 各组件整体放大 10% (锚点居中) */
-.top-hud > * {
-  transform: scale(1.1);
-  transform-origin: center center;
-}
-.top-hud > *:first-child {
-  transform-origin: left center;
-}
-.top-hud > *:last-child {
-  transform-origin: right center;
+/* 三栏居中统计组 */
+.hud-stats-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
 .brand-mark {
@@ -868,16 +862,7 @@ button {
   transform-origin: left center;
 }
 
-.hud-strip {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  min-width: 0;
-  /* 月份往左扩 10%：去掉左内边距；AP 等往左收 20%：右侧留空防止与设置按钮重叠 */
-  padding-left: 5%;
-  padding-right: 20%;
-  transform: scale(1.21);
-  transform-origin: left center;
-}
+/* hud-strip removed — replaced by .hud-stats-group */
 
 .hud-item {
   position: relative;
@@ -887,11 +872,8 @@ button {
   align-content: center;
   gap: 4px 8px;
   min-width: 0;
-  padding: 8px 8px;
+  padding: 8px 16px;
   border-right: 0;
-  perspective: 760px;
-  transform: scale(1.2) translateY(4px);
-  transform-origin: center center;
   isolation: isolate;
 }
 
@@ -7961,24 +7943,67 @@ button:disabled,
   z-index: 201;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
+  gap: 4px;
+  padding: 0 6px;
   background: rgba(255, 200, 87, 0.92);
   color: #1a1206;
   font-family: "Fusion Pixel SC", monospace;
   font-size: 11px;
   font-weight: 700;
-  cursor: move;
   user-select: none;
   pointer-events: all;
+}
+.edit-move-grip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  cursor: move;
+  min-width: 0;
 }
 .edit-move-icon {
   font-size: 14px;
   line-height: 1;
+  flex-shrink: 0;
 }
 .edit-move-label {
-  flex: 1;
   letter-spacing: 0.06em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Scale control */
+.edit-scale-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  cursor: default;
+}
+.edit-scale-btn {
+  all: unset;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 900;
+  border: 1.5px solid rgba(0,0,0,0.35);
+  border-radius: 2px;
+  cursor: pointer;
+  background: rgba(0,0,0,0.12);
+  line-height: 1;
+}
+.edit-scale-btn:hover {
+  background: rgba(0,0,0,0.25);
+}
+.edit-scale-value {
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 36px;
+  text-align: center;
+  letter-spacing: 0;
 }
 .edit-reset-btn {
   font-size: 16px;
@@ -7988,10 +8013,26 @@ button:disabled,
   border-radius: 2px;
   cursor: pointer;
   pointer-events: all;
+  flex-shrink: 0;
 }
 .edit-reset-btn:hover {
   opacity: 1;
   background: rgba(0,0,0,0.15);
+}
+
+/* Editable text field — contenteditable span in edit mode */
+.editable-text-field {
+  display: inline-block;
+  outline: 1.5px dashed rgba(26, 18, 6, 0.6);
+  border-radius: 2px;
+  padding: 0 2px;
+  cursor: text;
+  min-width: 1ch;
+  background: rgba(255, 200, 87, 0.18);
+}
+.editable-text-field:focus {
+  outline: 2px solid #1a1206;
+  background: rgba(255, 200, 87, 0.45);
 }
 
 /* 8 resize handles */
@@ -8119,4 +8160,272 @@ button:disabled,
 .hand-meta .deck-button,
 .hand-meta .hand-title {
   grid-template-columns: 128px 1fr !important;
+}
+
+/* ============================================================================
+   v3.2 HUD Tooltips, Progress Bar, Cash Warn & Finance Station Styles
+   ============================================================================ */
+
+/* ---- HUD item hover tooltip ---- */
+.hud-item {
+  position: relative;
+}
+
+.hud-item .hud-hover-tooltip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  padding: 10px 14px;
+  width: 280px;
+  border: 3px solid rgba(255, 200, 87, 0.86);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 32%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(3, 7, 18, 0.98));
+  color: #fff4bd;
+  font-family: "Fusion Pixel SC", "Fusion Pixel", monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  line-height: 1.65;
+  white-space: pre-line;
+  clip-path: polygon(
+    7px 0, calc(100% - 7px) 0,
+    100% 7px, 100% calc(100% - 7px),
+    calc(100% - 7px) 100%, 7px 100%,
+    0 calc(100% - 7px), 0 7px
+  );
+  box-shadow: 4px 5px 0 rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  text-shadow: none;
+  text-align: left;
+}
+
+.hud-item:hover .hud-hover-tooltip {
+  display: block;
+  animation: hud-tip-pop 160ms cubic-bezier(0.18, 0.9, 0.22, 1) both;
+}
+
+@keyframes hud-tip-pop {
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ---- Valuation progress bar ---- */
+.valuation-progress-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.stage-progress-track {
+  width: 130px;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  margin-top: 5px;
+  position: relative;
+  overflow: hidden;
+  clip-path: polygon(2px 0, calc(100% - 2px) 0, 100% 2px, 100% calc(100% - 2px), calc(100% - 2px) 100%, 2px 100%, 0 calc(100% - 2px), 0 2px);
+}
+
+.stage-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #a78bfa, #8b5cf6);
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.8);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ---- Cash warn warning pulse ---- */
+.hud-item.hud-cash.warn strong {
+  color: #ef4444;
+  animation: cash-emergency-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes cash-emergency-pulse {
+  0%, 100% {
+    text-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.86),
+      3px 4px 0 rgba(127, 29, 29, 0.42),
+      6px 8px 0 rgba(24, 18, 34, 0.18),
+      0 0 8px rgba(239, 68, 68, 0.2);
+  }
+  50% {
+    text-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.95),
+      3px 4px 0 rgba(127, 29, 29, 0.6),
+      6px 8px 0 rgba(24, 18, 34, 0.25),
+      0 0 20px rgba(239, 68, 68, 0.9);
+  }
+}
+
+/* ---- Board room finance station & layout ---- */
+.bm-menu-and-finance {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.finance-station {
+  padding: 16px 20px;
+  border: 3px solid rgba(255, 200, 87, 0.6);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.05), transparent 30%),
+    rgba(15, 23, 42, 0.94);
+  clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px), calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
+  font-family: "Fusion Pixel SC", "Fusion Pixel", monospace;
+  color: #e2e8f0;
+}
+
+.finance-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #ffe28a;
+  border-bottom: 2px dashed rgba(255, 200, 87, 0.3);
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.finance-withdrawn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.finance-withdrawn strong {
+  color: #10b981;
+  font-size: 18px;
+}
+.finance-withdrawn em {
+  font-style: normal;
+  color: #94a3b8;
+}
+
+.finance-active {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.finance-retained,
+.finance-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.finance-retained span,
+.finance-preview span {
+  font-size: 11px;
+  color: #94a3b8;
+}
+.finance-retained strong {
+  font-size: 20px;
+  color: #fbbf24;
+}
+.finance-preview strong {
+  font-size: 20px;
+  color: #10b981;
+}
+
+.finance-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.finance-controls label {
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.ratio-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.ratio-btn {
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 200, 87, 0.4);
+  color: #e2e8f0;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  clip-path: polygon(4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px), 0 4px);
+}
+.ratio-btn.selected {
+  background: #fbbf24;
+  border-color: #fbbf24;
+  color: #0f172a;
+  font-weight: bold;
+}
+.ratio-btn:hover:not(.selected) {
+  background: rgba(255, 200, 87, 0.15);
+}
+
+.finance-confirm-btn {
+  padding: 8px 16px;
+  background: linear-gradient(180deg, #10b981, #047857);
+  border: 2px solid #10b981;
+  color: white;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.3);
+  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
+}
+.finance-confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #4b5563;
+  border-color: #4b5563;
+}
+.finance-confirm-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+/* ---- Business Model slot actions & unsubscribe ---- */
+.bm-slot-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.bm-slot-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.bm-slot-cost {
+  font-size: 9px;
+  color: #a78bfa;
+}
+
+.bm-unsubscribe-btn {
+  padding: 2px 8px;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid #ef4444;
+  color: #fca5a5;
+  font-family: inherit;
+  font-size: 9px;
+  cursor: pointer;
+  clip-path: polygon(3px 0, calc(100% - 3px) 0, 100% 3px, 100% calc(100% - 3px), calc(100% - 3px) 100%, 3px 100%, 0 calc(100% - 3px), 0 3px);
+}
+.bm-unsubscribe-btn:hover {
+  background: #ef4444;
+  color: white;
+}
+
+.bm-card-burn-label {
+  font-size: 9px;
+  color: #fb923c;
+  margin-top: 2px;
+  text-align: center;
 }

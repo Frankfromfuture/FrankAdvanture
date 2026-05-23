@@ -32,10 +32,15 @@ import {
   PACK_DEFINITIONS,
   RARITY_LABELS,
   UPGRADE_PATHS,
+  STAGES,
+  getCardBurn,
+  getCardExtraBurn,
+  getBMMonthlyCost,
+  getCardAssetValue,
+  getBMAssetValue,
 } from './game/cards.js'
 import {
   GAME_CONFIG,
-  buyRecruit,
   dismissRecruitReveal,
   clearPlanningLine,
   computeBattlePreview,
@@ -57,6 +62,13 @@ import {
   rollSchool,
   rollShop,
   upgradeCard,
+  applyWithdrawal,
+  dismissCardInBoardMeeting,
+  applyStagnationAdvice,
+  unsubscribeBusinessModel,
+  computeValuation,
+  computeQuarterlyAvgProfit,
+  getAllCards,
 } from './game/engine.js'
 
 const TUTORIAL_STEPS = [
@@ -94,16 +106,58 @@ const TUTORIAL_STEPS = [
 // Layout Editor — context + localStorage helpers
 // ============================================================
 const LAYOUT_STORAGE_KEY = 'frank-battle-layout-v1'
+const TEXT_STORAGE_KEY   = 'frank-battle-texts-v1'
 function _loadLayout() {
   try { return JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY) ?? 'null') ?? {} }
   catch { return {} }
 }
-const LayoutEditCtx = React.createContext({ editMode: false, overrides: {}, update: () => {} })
+function _loadTexts() {
+  try { return JSON.parse(localStorage.getItem(TEXT_STORAGE_KEY) ?? 'null') ?? {} }
+  catch { return {} }
+}
+const GAME_STATE_STORAGE_KEY = 'frank-battle-state-v1'
+
+function _loadGameState() {
+  try {
+    const raw = localStorage.getItem(GAME_STATE_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (parsed && parsed.version === 1 && parsed.state) {
+      return parsed.state
+    }
+  } catch (e) {
+    console.error("Failed to load game state:", e)
+  }
+  return null
+}
+
+function _saveGameState(state) {
+  try {
+    if (state) {
+      localStorage.setItem(GAME_STATE_STORAGE_KEY, JSON.stringify({ version: 1, state }))
+    }
+  } catch (e) {
+    console.error("Failed to save game state:", e)
+  }
+}
+
+const LayoutEditCtx = React.createContext({
+  editMode: false,
+  overrides: {},
+  update: () => {},
+  textOverrides: {},
+  updateText: () => {},
+})
 
 function App() {
   const [screen, setScreen] = useState('menu')
   const [compendiumReturn, setCompendiumReturn] = useState('menu')
-  const [game, setGame] = useState(() => createInitialState())
+  const [game, setGame] = useState(() => _loadGameState() ?? createInitialState())
+  
+  useEffect(() => {
+    _saveGameState(game)
+  }, [game])
+
   const [tutorialStep, setTutorialStep] = useState(0)
   const [tutorialDone, setTutorialDone] = useState(false)
   const [hint, setHint] = useState('')
@@ -117,17 +171,24 @@ function App() {
   const [creditsOpen, setCreditsOpen] = useState(false)
   const [layoutEditMode, setLayoutEditMode] = useState(false)
   const [layoutOverrides, setLayoutOverrides] = useState(_loadLayout)
+  const [textOverrides, setTextOverrides] = useState(_loadTexts)
 
   function updateLayoutOv(id, next) {
     setLayoutOverrides(prev => ({ ...prev, [id]: next }))
   }
+  function updateText(id, value) {
+    setTextOverrides(prev => ({ ...prev, [id]: value }))
+  }
   function saveLayout() {
     localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layoutOverrides))
+    localStorage.setItem(TEXT_STORAGE_KEY, JSON.stringify(textOverrides))
     setLayoutEditMode(false)
   }
   function resetLayout() {
     setLayoutOverrides({})
+    setTextOverrides({})
     localStorage.removeItem(LAYOUT_STORAGE_KEY)
+    localStorage.removeItem(TEXT_STORAGE_KEY)
   }
   function openLayoutEdit() {
     setSettingsOpen(false)
@@ -143,7 +204,6 @@ function App() {
   const preview = useMemo(() => computeBattlePreview(game), [game])
   const activeLineAp = getLineAp(activeLine?.slots ?? [])
   const apLimit = getEffectiveApLimit(game)
-  const progress = Math.min(100, Math.round((game.cumulativeIncome / game.level.target) * 100))
 
   useEffect(() => () => {
     window.clearTimeout(hintTimerRef.current)
@@ -239,9 +299,7 @@ function App() {
     commit(resolveMonth(game), { fx: true, animateNewHand: true })
   }
 
-  function handleRecruit(packUid) {
-    commit(buyRecruit(game, packUid), { sfx: 'buy' })
-  }
+
 
   function handleDismissReveal() {
     commit(dismissRecruitReveal(game), { sfx: 'open' })
@@ -252,6 +310,7 @@ function App() {
   }
 
   function restart() {
+    localStorage.removeItem(GAME_STATE_STORAGE_KEY)
     setGame(createInitialState())
     setHint('')
     setDrawer(null)
@@ -274,16 +333,31 @@ function App() {
   }
 
   function forcePassLevel() {
+    const currentStageIndex = STAGES.findIndex(s => s.id === game.stage.id)
+    const nextStage = STAGES[currentStageIndex + 1]
+    if (!nextStage) {
+      showHint("已经是最高阶段了")
+      setSettingsOpen(false)
+      return
+    }
     setGame((current) => ({
       ...current,
-      cumulativeIncome: Math.max(current.cumulativeIncome, current.level.target),
-      result: {
-        passed: true,
-        rating: 'S',
-        bestMonth: current.lastSettlement?.income ?? 0,
-        reason: '直接过关',
-      },
-      log: [`${current.level.milestone} 直接过关`, ...current.log].slice(0, 7),
+      valuation: nextStage.threshold,
+      result: nextStage.id === 9
+        ? {
+            passed: true,
+            gameWon: true,
+            reason: '终极胜利',
+            bestMonth: current.lastSettlement?.income ?? 0,
+          }
+        : {
+            passed: true,
+            stagePromotion: true,
+            nextStage: nextStage,
+            reason: '估值达标',
+            bestMonth: current.lastSettlement?.income ?? 0,
+          },
+      log: [`强制达成阶段晋升: ${nextStage.name}`, ...current.log].slice(0, 7),
     }))
     setSettingsOpen(false)
   }
@@ -307,20 +381,31 @@ function App() {
     playUiSfx('transition')
     setSettingsOpen(false)
     setGame((current) => {
+      const currentStageIndex = STAGES.findIndex(s => s.id === current.stage.id)
+      const nextStage = STAGES[currentStageIndex + 1]
+      if (!nextStage) return current
+
       const passedState = {
         ...current,
-        cumulativeIncome: Math.max(current.cumulativeIncome, current.level.target),
+        valuation: nextStage.threshold,
         result: {
           passed: true,
-          rating: 'S',
+          stagePromotion: true,
+          nextStage: nextStage,
+          reason: '直接过关',
           bestMonth: current.lastSettlement?.income ?? 0,
-          reason: '直接过关 → 董事会会议',
         },
-        log: [`${current.level.milestone} 直接过关 → 进入董事会会议`, ...current.log].slice(0, 7),
+        log: [`直接过关 → 董事会`, ...current.log].slice(0, 7),
       }
       const next = enterIntermission(passedState)
       return next.ok ? next.state : passedState
     })
+  }
+
+  function handleClearArchive() {
+    localStorage.removeItem(GAME_STATE_STORAGE_KEY)
+    restart()
+    setScreen('menu')
   }
 
   function handleResolveEvent(optionId) {
@@ -344,7 +429,7 @@ function App() {
   }
 
   function handleFire(cardUid) {
-    commit(fireCard(game, cardUid), { sfx: 'fire' })
+    commit(dismissCardInBoardMeeting(game, cardUid), { sfx: 'fire' })
   }
 
   function handleBmBuy(schoolSlotIdx, replaceIdx) {
@@ -357,6 +442,18 @@ function App() {
 
   function handleExitIntermission() {
     commit(exitIntermission(game), { sfx: 'transition' })
+  }
+
+  function handleWithdrawal(ratio) {
+    commit(applyWithdrawal(game, ratio), { sfx: 'buy' })
+  }
+
+  function handleBmUnsubscribe(id) {
+    commit(unsubscribeBusinessModel(game, id), { sfx: 'fire' })
+  }
+
+  function handleStagnationAdvice(choice) {
+    commit(applyStagnationAdvice(game, choice), { sfx: 'choice' })
   }
 
   function handleOpenCompendium() {
@@ -373,7 +470,13 @@ function App() {
         <img className="main-menu-logo" src="/assets/menu/FR.svg" alt="FRANK'S ADVANTURE" />
         <section className="main-menu-panel">
           <div className="main-menu-actions">
-            <MenuTiltButton onClick={() => setScreen('battle')}>继续上一局</MenuTiltButton>
+            <MenuTiltButton onClick={() => {
+              if (localStorage.getItem(GAME_STATE_STORAGE_KEY) === null) {
+                showHint("没有找到存档，请开始新游戏")
+              } else {
+                setScreen('battle')
+              }
+            }}>继续上一局</MenuTiltButton>
             <MenuTiltButton onClick={startNewGame}>开始新游戏</MenuTiltButton>
             <MenuTiltButton onClick={() => { setCompendiumReturn('menu'); setScreen('compendium') }}>图鉴</MenuTiltButton>
             <MenuTiltButton onClick={() => setSettingsOpen(true)}>设置</MenuTiltButton>
@@ -385,6 +488,7 @@ function App() {
           <SettingsOverlay
             onClose={() => setSettingsOpen(false)}
             onRestart={startNewGame}
+            onClearArchive={handleClearArchive}
             onOpenCompendium={() => {
               setSettingsOpen(false)
               setCompendiumReturn('menu')
@@ -403,27 +507,26 @@ function App() {
   }
 
   return (
-    <LayoutEditCtx.Provider value={{ editMode: layoutEditMode, overrides: layoutOverrides, update: updateLayoutOv }}>
+    <LayoutEditCtx.Provider value={{ editMode: layoutEditMode, overrides: layoutOverrides, update: updateLayoutOv, textOverrides, updateText }}>
     <main className="battle-shell">
       <div className="battle-photo-bg" aria-hidden="true" />
       <div className="battle-crt-overlay" aria-hidden="true" />
 
-      <EditableBlock id="topHud" label="顶部 HUD">
-        <TopHud
-          game={game}
-          progress={progress}
-          activeLineAp={activeLineAp}
-          apLimit={apLimit}
-          onRestart={restart}
-          onCombo={() => setComboOpen(true)}
-          onSettings={() => setSettingsOpen(true)}
-        />
-      </EditableBlock>
+      <TopHud
+        game={game}
+        preview={preview}
+        activeLineAp={activeLineAp}
+        apLimit={apLimit}
+        onCombo={() => setComboOpen(true)}
+        onSettings={() => setSettingsOpen(true)}
+      />
 
       <section className="battle-grid">
-        <EditableBlock id="ceoPanel" label="CEO 面板">
-          <aside className="battle-panel ceo-panel">
-            <PanelHeading icon={Sparkles} title="CEO Frank" sub="Year 1 / A Round" />
+        <aside className="battle-panel ceo-panel">
+          <EditableBlock id="ceo-heading" label="CEO 标题">
+            <PanelHeading icon={Sparkles} title="CEO Frank" sub={game.stage.name} textId="ceo-heading" />
+          </EditableBlock>
+          <EditableBlock id="ceo-stage" label="CEO 舞台">
             <div className="ceo-stage">
               <div className="ceo-avatar" aria-hidden="true">
                 <span className="pixel-hair" />
@@ -436,25 +539,29 @@ function App() {
                 <span>{game.event.description}</span>
               </div>
             </div>
+          </EditableBlock>
+          <EditableBlock id="ceo-bizmodels" label="商业模式">
             <ActiveBusinessModelsPanel
               activeBusinessModels={game.activeBusinessModels}
               slotCap={game.businessModelSlotCap}
             />
+          </EditableBlock>
+          <EditableBlock id="ceo-log" label="操作日志">
             <LogList items={game.log} />
-          </aside>
-        </EditableBlock>
+          </EditableBlock>
+        </aside>
 
-        <EditableBlock id="arenaPanel" label="战斗舞台">
-          <section className="arena-panel">
-            {settlementFx?.totalFx && (
-              <div className="settlement-center-fx" style={{ '--fx-delay': `${settlementFx.totalFx.delay}ms` }}>
-                <span>总产能</span>
-                <strong>+¥{settlementFx.totalFx.gain}</strong>
-              </div>
-            )}
-            <div className="arena-floor">
-              <div className="floor-grid" />
+        <section className="arena-panel">
+          {settlementFx?.totalFx && (
+            <div className="settlement-center-fx" style={{ '--fx-delay': `${settlementFx.totalFx.delay}ms` }}>
+              <span>总产能</span>
+              <strong>+¥{settlementFx.totalFx.gain}</strong>
+            </div>
+          )}
+          <div className="arena-floor">
+            <div className="floor-grid" />
 
+            <EditableBlock id="lineBoard-A" label="产线 A">
               <LineBoard
                 line={game.lines[0]}
                 activeLineId={game.activeLineId}
@@ -469,6 +576,8 @@ function App() {
                 onCardDrop={handleCardDrop}
                 disabled={isSettling}
               />
+            </EditableBlock>
+            <EditableBlock id="lineBoard-B" label="产线 B">
               <LineBoard
                 line={game.lines[1]}
                 activeLineId={game.activeLineId}
@@ -483,72 +592,86 @@ function App() {
                 onCardDrop={handleCardDrop}
                 disabled={isSettling}
               />
-            </div>
-          </section>
-        </EditableBlock>
+            </EditableBlock>
+          </div>
+        </section>
 
-        <EditableBlock id="eventPanel" label="事件面板">
-          <aside className="battle-panel event-panel">
-            <PanelHeading icon={ClipboardList} title="本月事件" sub={game.event.tone} tone={game.event.tone} />
+        <aside className="battle-panel event-panel">
+          <EditableBlock id="event-heading" label="事件标题">
+            <PanelHeading icon={ClipboardList} title="本月事件" sub={game.event.tone} tone={game.event.tone} textId="event-heading" />
+          </EditableBlock>
+          <EditableBlock id="event-card" label="事件卡片">
             <div className={`event-card tone-${game.event.tone}`}>
               <strong>{game.event.name}</strong>
               <p>{game.event.description}</p>
               {game.event.effectLines.map((line) => <span key={line}>{line}</span>)}
             </div>
-            <div className="preview-card">
-              <span>本月预估</span>
+          </EditableBlock>
+          <EditableBlock id="event-preview" label="预估收益">
+            <div className="preview-card hud-item">
+              <span><EditableText id="event-preview-label">本月预估</EditableText></span>
               <strong>¥{preview.eventIncome}</strong>
-              <em>维持费 -¥{preview.maintenance} / 净现金 {preview.netCash >= 0 ? '+' : ''}{preview.netCash}</em>
+              <em>月 burn -¥{preview.maintenance} / 净利润 {preview.netCash >= 0 ? '+' : ''}{preview.netCash}</em>
+              <div className="hud-hover-tooltip preview-tooltip">
+                <div className="tooltip-title">收支分解</div>
+                <div>产线预估收入: ¥{preview.eventIncome}</div>
+                <div>预估 Monthly Burn: ¥{preview.maintenance}</div>
+                <div className="tooltip-divider" />
+                <div>预估净增留存利润: {preview.netCash >= 0 ? `+¥${preview.netCash}` : `-¥${Math.abs(preview.netCash)}`}</div>
+              </div>
             </div>
-            <PackMarket packs={game.recruitMarket} budget={game.strategicBudget} used={game.recruitChoiceUsed} onOpen={handleRecruit} />
-          </aside>
-        </EditableBlock>
+          </EditableBlock>
+        </aside>
       </section>
 
       <footer className="hand-dock">
-        <div className="hand-fan">
-          {game.hand.map((card, index) => (
-            <CardView
-              key={card.uid}
-              card={card}
-              entering={enteringHandUids.has(card.uid)}
-              selected={game.selectedCardUid === card.uid}
-              dragging={draggingCardUid === card.uid}
-              mode="hand"
-              draggable={game.discardRequired === 0 && !isSettling}
-              onDragStart={(event) => {
-                event.dataTransfer.effectAllowed = 'move'
-                event.dataTransfer.setData('text/plain', card.uid)
-                setDraggingCardUid(card.uid)
-              }}
-              onDragEnd={() => setDraggingCardUid(null)}
-              style={{
-                ...getHandCardStyle(index, game.hand.length),
-                '--enter-delay': `${Math.max(0, [...enteringHandUids].indexOf(card.uid)) * 70}ms`,
-              }}
-              onClick={() => {
-                if (game.discardRequired > 0) {
-                  handleDiscard(card.uid)
-                  return
-                }
-                setGame((current) => ({
-                  ...current,
-                  selectedCardUid: current.selectedCardUid === card.uid ? null : card.uid,
-                }))
-              }}
-            />
-          ))}
-        </div>
+        <EditableBlock id="hand-fan" label="手牌区">
+          <div className="hand-fan">
+            {game.hand.map((card, index) => (
+              <CardView
+                key={card.uid}
+                card={card}
+                entering={enteringHandUids.has(card.uid)}
+                selected={game.selectedCardUid === card.uid}
+                dragging={draggingCardUid === card.uid}
+                mode="hand"
+                draggable={game.discardRequired === 0 && !isSettling}
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData('text/plain', card.uid)
+                  setDraggingCardUid(card.uid)
+                }}
+                onDragEnd={() => setDraggingCardUid(null)}
+                style={{
+                  ...getHandCardStyle(index, game.hand.length),
+                  '--enter-delay': `${Math.max(0, [...enteringHandUids].indexOf(card.uid)) * 70}ms`,
+                }}
+                onClick={() => {
+                  if (game.discardRequired > 0) {
+                    handleDiscard(card.uid)
+                    return
+                  }
+                  setGame((current) => ({
+                    ...current,
+                    selectedCardUid: current.selectedCardUid === card.uid ? null : card.uid,
+                  }))
+                }}
+              />
+            ))}
+          </div>
+        </EditableBlock>
 
-        <div className="hand-meta">
-          <DeckButton icon={Layers3} label="牌堆" count={game.drawPile.length} onClick={() => setDrawer('deck')} />
-          <DeckButton icon={Archive} label="冷却" count={game.coolingPile.length} onClick={() => setDrawer('cooling')} />
-          <HandCount discardRequired={game.discardRequired} handCount={game.hand.length} />
-        </div>
+        <EditableBlock id="hand-meta" label="牌堆信息">
+          <div className="hand-meta">
+            <DeckButton icon={Layers3} label="牌堆" count={game.drawPile.length} onClick={() => setDrawer('deck')} />
+            <DeckButton icon={Archive} label="冷却" count={game.coolingPile.length} onClick={() => setDrawer('cooling')} />
+            <HandCount discardRequired={game.discardRequired} handCount={game.hand.length} />
+          </div>
+        </EditableBlock>
       </footer>
 
       {hint && <div className="toast">{hint}</div>}
-      {!tutorialDone && game.level.id === 1 && game.month === 1 && !game.result && !game.intermissionState && (
+      {!tutorialDone && game.stage.id === 1 && game.month === 1 && !game.result && !game.intermissionState && (
         <TutorialOverlay
           step={tutorialStep}
           onNext={() => {
@@ -569,12 +692,19 @@ function App() {
         <SettingsOverlay
           onClose={() => setSettingsOpen(false)}
           onRestart={restart}
+          onClearArchive={handleClearArchive}
           onPass={forcePassLevel}
           onMain={returnMain}
-          canEnterBoardMeeting={!game.intermissionState && game.level.id < 3}
+          canEnterBoardMeeting={!game.intermissionState && game.stage.id < 9}
           onEnterBoardMeeting={handleQuickEnterBoardMeeting}
           onOpenCompendium={handleOpenCompendium}
           onEditLayout={openLayoutEdit}
+        />
+      )}
+      {game.stagnationAdvisorTriggered && (
+        <StagnationAdvisor
+          onSelect={handleStagnationAdvice}
+          onClose={() => setGame(prev => ({ ...prev, stagnationAdvisorTriggered: false }))}
         />
       )}
       {game.result && !game.intermissionState && (
@@ -597,6 +727,8 @@ function App() {
           onFire={handleFire}
           onBmBuy={handleBmBuy}
           onSchoolRoll={handleSchoolRoll}
+          onWithdrawal={handleWithdrawal}
+          onBmUnsubscribe={handleBmUnsubscribe}
           onExit={handleExitIntermission}
         />
       )}
@@ -613,54 +745,150 @@ function App() {
   )
 }
 
-function TopHud({ game, progress, activeLineAp, apLimit, onCombo, onSettings }) {
+function TopHud({ game, preview, activeLineAp, apLimit, onCombo, onSettings }) {
+  const currentStageIndex = STAGES.findIndex(s => s.id === game.stage.id)
+  const nextStage = STAGES[currentStageIndex + 1]
+
+  const dateStr = `${game.year}.${String(game.month).padStart(2, '0')}`;
+
+  // Valuation breakdown
+  const avgProfit = computeQuarterlyAvgProfit(game.profitHistory)
+  const peValue = Math.max(0, avgProfit * 20)
+  
+  const allCards = getAllCards(game)
+  let cardAssetSum = 0
+  for (const card of allCards) {
+    cardAssetSum += getCardAssetValue(card)
+  }
+  let bmAssetSum = 0
+  if (game.activeBusinessModels) {
+    for (const slot of game.activeBusinessModels) {
+      const bm = BUSINESS_MODELS.find((b) => b.id === slot.id)
+      if (bm) {
+        bmAssetSum += getBMAssetValue(bm)
+      }
+    }
+  }
+  const assetValue = cardAssetSum * 0.5 + bmAssetSum * 0.5
+  const treasuryValue = Math.max(0, game.cash) * 0.3
+  const totalV = game.valuation
+
+  const minV = game.stage.threshold;
+  const maxV = nextStage ? nextStage.threshold : game.stage.threshold;
+  const range = maxV - minV;
+  const pct = range > 0 ? Math.min(100, Math.max(0, ((totalV - minV) / range) * 100)) : 100;
+
+  // Cash warn
+  const isCashWarn = game.cash < preview.maintenance * 1.5;
+
+  // AP breakdown
+  const serviceBonus = apLimit - game.apAvailable;
+
   return (
     <header className="top-hud">
-      <div className="brand-mark">
-        <div>
-          <strong>FRANK'S ADVENTURE</strong>
-          <small>{game.level.milestone} · {game.level.theme}</small>
+      <EditableBlock id="hud-brand" label="品牌标题">
+        <div className="brand-mark">
+          <div>
+            <strong><EditableText id="hud-brand-title">FRANK'S ADVENTURE</EditableText></strong>
+            <small><EditableText id="hud-brand-sub">{`${game.stage.name} · ${game.stage.theme}`}</EditableText></small>
+          </div>
         </div>
+      </EditableBlock>
+      <div className="hud-stats-group">
+        <EditableBlock id="hud-month" label="HUD · 月份">
+          <div className="hud-item hud-month">
+            <img className="hud-icon-img" src="/assets/ui-icons/month.png" alt="" aria-hidden="true" />
+            <span>日期</span>
+            <strong>{dateStr}</strong>
+            <div className="hud-hover-tooltip">
+              <div className="tooltip-title">经营时间</div>
+              <div>已经营: {game.elapsedMonths} 个月</div>
+              <div>当前融资阶段: {game.stage.name}</div>
+              <div>阶段主题: {game.stage.theme}</div>
+            </div>
+          </div>
+        </EditableBlock>
+        
+        <EditableBlock id="hud-valuation" label="HUD · 估值">
+          <div className="hud-item hud-valuation-progress">
+            <img className="hud-icon-img" src="/assets/ui-icons/cumulative-cash.png" alt="" aria-hidden="true" />
+            <span>估值</span>
+            <div className="valuation-progress-container">
+              <strong>V {totalV}{nextStage ? ` / ${maxV}` : ''}</strong>
+              <div className="stage-progress-track">
+                <div className="stage-progress-fill" style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+            <div className="hud-hover-tooltip">
+              <div className="tooltip-title">估值分析 (V = PE + 资产 + 现金溢价)</div>
+              <div>PE 估值: ¥{peValue} (3月均利润 ¥{avgProfit.toFixed(1)} × 20)</div>
+              <div>资产折现: ¥{assetValue.toFixed(1)} (员工卡 ¥{cardAssetSum} + BM ¥{bmAssetSum} 各折半)</div>
+              <div>现金溢价: ¥{treasuryValue.toFixed(1)} (现金 ¥{game.cash} × 0.3)</div>
+              <div className="tooltip-divider" />
+              <div>下一阶段: {nextStage ? `${nextStage.name} (门槛 V ${maxV})` : '已达最高阶段'}</div>
+            </div>
+          </div>
+        </EditableBlock>
+
+        <EditableBlock id="hud-cash" label="HUD · 现金">
+          <div className={`hud-item hud-cash ${isCashWarn ? 'warn' : ''}`}>
+            <img className="hud-icon-img" src="/assets/ui-icons/cash.png" alt="" aria-hidden="true" />
+            <span>现金</span>
+            <strong>¥{game.cash}</strong>
+            <div className="hud-hover-tooltip">
+              <div className="tooltip-title">现金与利润</div>
+              <div>现金余额: ¥{game.cash} (唯一可支配)</div>
+              <div>留存利润: ¥{game.retainedEarnings} (不可直接花，董事会可提取)</div>
+              <div className="tooltip-divider" />
+              <div>下月预估 Monthly Burn: ¥{preview.maintenance}</div>
+              <div>下月预估净利润: {preview.netCash >= 0 ? `+¥${preview.netCash}` : `-¥${Math.abs(preview.netCash)}`}</div>
+            </div>
+          </div>
+        </EditableBlock>
+
+        <EditableBlock id="hud-ap" label="HUD · AP">
+          <div className="hud-item hud-ap">
+            <img className="hud-icon-img" src="/assets/ui-icons/ap.png" alt="" aria-hidden="true" />
+            <span>行动力</span>
+            <strong>{activeLineAp}/{apLimit}</strong>
+            <div className="hud-hover-tooltip">
+              <div className="tooltip-title">行动力 (AP) 组成</div>
+              <div>已分配: {activeLineAp} / {apLimit} AP</div>
+              <div className="tooltip-divider" />
+              <div>基础 AP: {GAME_CONFIG.baseAp} AP</div>
+              <div>跨月保留: +{game.apCarry} AP</div>
+              <div>事件调整: {game.event.apDelta >= 0 ? `+${game.event.apDelta}` : `${game.event.apDelta}`} AP</div>
+              {serviceBonus !== 0 && (
+                <div>产线服务卡加成: {serviceBonus >= 0 ? `+${serviceBonus}` : `${serviceBonus}`} AP</div>
+              )}
+              {game.apAvailable - GAME_CONFIG.baseAp - game.apCarry - (game.event.apDelta ?? 0) > 0 && (
+                <div>商业模式加成: +{game.apAvailable - GAME_CONFIG.baseAp - game.apCarry - (game.event.apDelta ?? 0)} AP</div>
+              )}
+            </div>
+          </div>
+        </EditableBlock>
       </div>
-      <div className="hud-strip">
-        <HudItem iconSrc="/assets/ui-icons/month.png" label="月份" value={`${game.month}/${GAME_CONFIG.monthsPerStage}`} />
-        <HudItem iconSrc="/assets/ui-icons/cumulative-cash.png" label="累计 ¥" value={`${game.cumulativeIncome}/${game.level.target}`} />
-        <HudItem iconSrc="/assets/ui-icons/cash.png" label="现金" value={`¥${game.cash}`} />
-        <HudItem iconSrc="/assets/ui-icons/strategy-budget.png" label="战略预算" value={`💰${game.strategicBudget}`} />
-        <HudItem iconSrc="/assets/ui-icons/ap.png" label="AP" value={`${activeLineAp}/${apLimit}`} />
-      </div>
-      <div className="hud-progress" aria-hidden="true">
-        <span style={{ width: `${progress}%` }} />
-      </div>
-      <div className="hud-actions">
-        <button className="top-icon-button" onClick={onCombo} aria-label="Combo 规则" data-tip="Combo 规则">
-          <img src="/assets/ui-icons/combo-rules.png" alt="" aria-hidden="true" />
-        </button>
-        <button className="top-icon-button" onClick={onSettings} aria-label="设置" data-tip="设置">
-          <img src="/assets/ui-icons/settings.png" alt="" aria-hidden="true" />
-        </button>
-      </div>
+      <EditableBlock id="hud-actions" label="操作按钮">
+        <div className="hud-actions">
+          <button className="top-icon-button" onClick={onCombo} aria-label="Combo 规则" data-tip="Combo 规则">
+            <img src="/assets/ui-icons/combo-rules.png" alt="" aria-hidden="true" />
+          </button>
+          <button className="top-icon-button" onClick={onSettings} aria-label="设置" data-tip="设置">
+            <img src="/assets/ui-icons/settings.png" alt="" aria-hidden="true" />
+          </button>
+        </div>
+      </EditableBlock>
     </header>
   )
 }
 
-function HudItem({ iconSrc, label, value }) {
-  return (
-    <div className="hud-item">
-      <img className="hud-icon-img" src={iconSrc} alt="" aria-hidden="true" />
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  )
-}
-
-function PanelHeading({ icon: Icon, title, sub, tone = '' }) {
+function PanelHeading({ icon: Icon, title, sub, tone = '', textId }) {
   return (
     <div className={`panel-heading ${tone ? `tone-${tone}` : ''}`}>
       <Icon size={18} />
       <div>
-        <strong>{title}</strong>
-        <span>{sub}</span>
+        <strong>{textId ? <EditableText id={`${textId}-title`}>{title}</EditableText> : title}</strong>
+        <span>{textId ? <EditableText id={`${textId}-sub`}>{sub}</EditableText> : sub}</span>
       </div>
     </div>
   )
@@ -893,59 +1121,65 @@ function LineBoard({
   const statusLabel = getLineStatus(line, isActive)
   return (
     <section className={`line-board ${isActive ? 'active' : ''} ${line.status}`}>
-      <div className="line-rail">
-        <Factory size={17} />
-        <strong>产线 {line.id}</strong>
-        <span>{statusLabel}</span>
-        <em>¥{report?.total ?? 0}</em>
-      </div>
-      <div className={`slot-row ${fxReport?.multFx ? 'has-mult-fx' : ''}`}>
-        {line.slots.map((card, index) => {
-          const slotOutput = report?.slotResults[index]?.output
-          const canPlaceSelected = canPlaceCard(line, index, selectedCard)
-          const canDropDragged = canPlaceCard(line, index, draggingCard)
-          return (
-            <div className="line-slot-cell" key={`${line.id}-${index}`}>
-              <button
-                className={`line-slot pos-${index + 1} ${card ? 'filled' : ''} ${canPlaceSelected ? 'can-place' : ''} ${canDropDragged ? 'drop-ready' : ''}`}
-                onClick={() => onSlotClick(line, index)}
-                onDragOver={(event) => {
-                  if (!canDropDragged) return
-                  event.preventDefault()
-                  event.dataTransfer.dropEffect = 'move'
-                }}
-                onDrop={(event) => {
-                  event.preventDefault()
-                  const cardUid = event.dataTransfer.getData('text/plain')
-                  if (canDropDragged) onCardDrop(cardUid, index)
-                }}
-              >
-                <span className="slot-label">P{index + 1}</span>
-                {canPlaceSelected && <span className="placement-arrow" aria-hidden="true" />}
-                {card ? <CardView card={card} mode="slot" outputOverride={slotOutput} /> : <i>{slotRole(index)}</i>}
-                {slotOutput > 0 && <b>¥{slotOutput}</b>}
-              </button>
-              {fxReport?.slotResults[index]?.output > 0 && (
-                <span
-                  className="slot-fx-number"
-                  style={{
-                    '--fx-delay': `${fxReport.slotResults[index].fxDelay}ms`,
-                    '--fx-scale': fxReport.slotResults[index].fxScale,
+      <EditableBlock id={`line-${line.id}-rail`} label={`产线 ${line.id} · 轨道栏`}>
+        <div className="line-rail">
+          <Factory size={17} />
+          <strong>产线 {line.id}</strong>
+          <span>{statusLabel}</span>
+          <em>¥{report?.total ?? 0}</em>
+        </div>
+      </EditableBlock>
+      <EditableBlock id={`line-${line.id}-slots`} label={`产线 ${line.id} · 卡槽排`}>
+        <div className={`slot-row ${fxReport?.multFx ? 'has-mult-fx' : ''}`}>
+          {line.slots.map((card, index) => {
+            const slotOutput = report?.slotResults[index]?.output
+            const canPlaceSelected = canPlaceCard(line, index, selectedCard)
+            const canDropDragged = canPlaceCard(line, index, draggingCard)
+            return (
+              <div className="line-slot-cell" key={`${line.id}-${index}`}>
+                <button
+                  className={`line-slot pos-${index + 1} ${card ? 'filled' : ''} ${canPlaceSelected ? 'can-place' : ''} ${canDropDragged ? 'drop-ready' : ''}`}
+                  onClick={() => onSlotClick(line, index)}
+                  onDragOver={(event) => {
+                    if (!canDropDragged) return
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    const cardUid = event.dataTransfer.getData('text/plain')
+                    if (canDropDragged) onCardDrop(cardUid, index)
                   }}
                 >
-                  <span>+¥{fxReport.slotResults[index].output}</span>
-                </span>
-              )}
+                  <span className="slot-label">P{index + 1}</span>
+                  {canPlaceSelected && <span className="placement-arrow" aria-hidden="true" />}
+                  {card ? <CardView card={card} mode="slot" outputOverride={slotOutput} /> : <i>{slotRole(index)}</i>}
+                  {slotOutput > 0 && <b>¥{slotOutput}</b>}
+                </button>
+                {fxReport?.slotResults[index]?.output > 0 && (
+                  <span
+                    className="slot-fx-number"
+                    style={{
+                      '--fx-delay': `${fxReport.slotResults[index].fxDelay}ms`,
+                      '--fx-scale': fxReport.slotResults[index].fxScale,
+                    }}
+                  >
+                    <span>+¥{fxReport.slotResults[index].output}</span>
+                  </span>
+                )}
+              </div>
+            )
+          })}
+          {fxReport?.multFx && (
+            <div className="line-mult-fx" style={{ '--fx-delay': `${fxReport.multFx.delay}ms` }}>
+              <span>倍率</span>
+              <strong>x{fxReport.multFx.value}</strong>
             </div>
-          )
-        })}
-        {fxReport?.multFx && (
-          <div className="line-mult-fx" style={{ '--fx-delay': `${fxReport.multFx.delay}ms` }}>
-            <span>倍率</span>
-            <strong>x{fxReport.multFx.value}</strong>
-          </div>
-        )}
-        {isActive && (
+          )}
+        </div>
+      </EditableBlock>
+      {isActive && (
+        <EditableBlock id={`line-${line.id}-actions`} label={`产线 ${line.id} · 操作按钮`}>
           <div className="line-actions" aria-label="产线操作">
             <button
               className="line-action-button start"
@@ -974,8 +1208,8 @@ function LineBoard({
               <Trash2 size={21} />
             </button>
           </div>
-        )}
-      </div>
+        </EditableBlock>
+      )}
     </section>
   )
 }
@@ -1480,12 +1714,12 @@ function effectValueVerb(value = '') {
   return `加强 ${value}`
 }
 
-function PackMarket({ packs, budget, used, onOpen }) {
+function PackMarket({ packs, budget, used, onOpen, textId }) {
   const visiblePackCount = used ? 0 : packs.length
   return (
     <section className="recruit-market pack-market">
       <div className="active-bm-heading pack-market-heading">
-        <strong>招聘卡包</strong>
+        <strong>{textId ? <EditableText id={`${textId}-title`}>招聘卡包</EditableText> : '招聘卡包'}</strong>
         <span>({visiblePackCount}/3)</span>
       </div>
       <div className="pack-list">
@@ -1600,7 +1834,7 @@ function ComboRulesOverlay({ onClose }) {
   )
 }
 
-function SettingsOverlay({ onClose, onRestart, onPass, onMain, onEnterBoardMeeting, canEnterBoardMeeting, onOpenCompendium, onEditLayout }) {
+function SettingsOverlay({ onClose, onRestart, onClearArchive, onPass, onMain, onEnterBoardMeeting, canEnterBoardMeeting, onOpenCompendium, onEditLayout }) {
   const [master, setMaster] = useState(() => AUDIO_VOLUME.master)
   const [sfx, setSfx] = useState(() => AUDIO_VOLUME.sfx)
   const blipTimerRef = useRef(null)
@@ -1634,6 +1868,7 @@ function SettingsOverlay({ onClose, onRestart, onPass, onMain, onEnterBoardMeeti
         {onEditLayout && <button className="settings-edit-layout-btn" onClick={onEditLayout}>✎ 编辑布局</button>}
         {onOpenCompendium && <button onClick={onOpenCompendium}>图鉴</button>}
         {onRestart && <button onClick={onRestart}>重新开始</button>}
+        {onClearArchive && <button onClick={onClearArchive}>清除存档并重开</button>}
         {onPass && <button onClick={onPass}>直接过关 → 结算画面</button>}
         {canEnterBoardMeeting && (
           <button onClick={onEnterBoardMeeting}>直接进入董事会会议</button>
@@ -1662,18 +1897,53 @@ function VolumeSlider({ label, value, onChange }) {
   )
 }
 
+function StagnationAdvisor({ onSelect, onClose }) {
+  return (
+    <div className="modal-backdrop retro-backdrop" onMouseDown={onClose}>
+      <section className="retro-panel stagnation-advisor-panel" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="retro-title">
+          <strong>滞涨顾问建议</strong>
+        </div>
+        <p className="stagnation-intro">
+          老板，公司已连续 6 个月估值未能创新高。为打破焦灼状态，请从以下三个战略建议中选择一个执行：
+        </p>
+        <div className="advisor-options">
+          <button className="advisor-opt-btn" onClick={() => onSelect('A')}>
+            <strong>A. 精简团队</strong>
+            <span>免费解雇月 burn 最高的一张卡牌</span>
+          </button>
+          <button className="advisor-opt-btn" onClick={() => onSelect('B')}>
+            <strong>B. 注资援助</strong>
+            <span>获得紧急资金注资 +¥50</span>
+          </button>
+          <button className="advisor-opt-btn" onClick={() => onSelect('C')}>
+            <strong>C. 战略冲刺</strong>
+            <span>下个月所有生产线产出提升 30% (×1.3)</span>
+          </button>
+        </div>
+        <button className="advisor-close-btn" onClick={onClose}>暂不理会</button>
+      </section>
+    </div>
+  )
+}
+
 // ============================================================
-// EditableBlock — drag + resize wrapper for battle layout editor
+// EditableBlock — drag + resize + scale wrapper for battle layout editor
 // ============================================================
 function EditableBlock({ id, label, children }) {
   const { editMode, overrides, update } = React.useContext(LayoutEditCtx)
   const ov = overrides[id] ?? {}
   const elRef = React.useRef(null)
 
-  // Build override style (applied even outside edit mode for saved positions)
+  const elemScale = ov.scale ?? 1
+
+  // Build override style (applied even outside edit mode for saved state)
   const style = {}
-  if (ov.dx != null || ov.dy != null) {
-    style.transform = `translate(${ov.dx ?? 0}px, ${ov.dy ?? 0}px)`
+  const hasMoved = ov.dx != null || ov.dy != null
+  const hasScale  = ov.scale != null && ov.scale !== 1
+  if (hasMoved || hasScale) {
+    style.transform = `translate(${ov.dx ?? 0}px, ${ov.dy ?? 0}px) scale(${elemScale})`
+    style.transformOrigin = 'top left'
   }
   if (ov.w != null) style.width = `${ov.w}px`
   if (ov.h != null) style.height = `${ov.h}px`
@@ -1687,23 +1957,24 @@ function EditableBlock({ id, label, children }) {
     if (!editMode) return
     event.preventDefault()
     event.stopPropagation()
-    const scale = parseFloat(
+    const appScale = parseFloat(
       document.documentElement.style.getPropertyValue('--app-scale') || '1'
     ) || 1
     const rect = elRef.current.getBoundingClientRect()
-    const naturalW = rect.width / scale
-    const naturalH = rect.height / scale
+    const naturalW = rect.width / appScale
+    const naturalH = rect.height / appScale
     const startOv = {
       dx: ov.dx ?? 0,
       dy: ov.dy ?? 0,
       w: ov.w ?? naturalW,
       h: ov.h ?? naturalH,
+      scale: elemScale,
     }
-    const drag = { type, startCX: event.clientX, startCY: event.clientY, startOv, scale }
+    const drag = { type, startCX: event.clientX, startCY: event.clientY, startOv, appScale }
 
     function onMove(e) {
-      const ddx = (e.clientX - drag.startCX) / drag.scale
-      const ddy = (e.clientY - drag.startCY) / drag.scale
+      const ddx = (e.clientX - drag.startCX) / drag.appScale
+      const ddy = (e.clientY - drag.startCY) / drag.appScale
       const s = drag.startOv
       const next = { ...s }
       if (drag.type === 'move') {
@@ -1725,10 +1996,14 @@ function EditableBlock({ id, label, children }) {
     window.addEventListener('pointerup', onUp)
   }
 
+  function adjustScale(delta) {
+    const next = Math.max(0.1, Math.min(5, parseFloat((elemScale + delta).toFixed(2))))
+    update(id, { ...ov, scale: next })
+  }
+
   if (!editMode) {
-    const hasOverride = ov.dx != null || ov.dy != null || ov.w != null || ov.h != null
-    if (!hasOverride) return <>{children}</>   // 透明透传，不破坏 grid
-    // 有保存的偏移/尺寸时才包一层，同时让 wrapper 撑满原格子
+    const hasOverride = hasMoved || hasScale || ov.w != null || ov.h != null
+    if (!hasOverride) return <>{children}</>
     return (
       <div ref={elRef} style={{ height: '100%', minHeight: 0, ...style }}>
         {children}
@@ -1739,17 +2014,21 @@ function EditableBlock({ id, label, children }) {
   const HANDLES = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']
   return (
     <div ref={elRef} className="edit-block" style={style}>
-      {/* Move bar — drag entire element */}
-      <div
-        className="edit-move-bar"
-        onPointerDown={(e) => startPointerDrag('move', e)}
-      >
-        <span className="edit-move-icon">✥</span>
-        <span className="edit-move-label">{label}</span>
+      {/* Move bar */}
+      <div className="edit-move-bar">
+        <div className="edit-move-grip" onPointerDown={(e) => startPointerDrag('move', e)}>
+          <span className="edit-move-icon">✥</span>
+          <span className="edit-move-label">{label}</span>
+        </div>
+        <div className="edit-scale-ctrl" onPointerDown={e => e.stopPropagation()}>
+          <button className="edit-scale-btn" onClick={() => adjustScale(-0.05)}>−</button>
+          <span className="edit-scale-value">{elemScale.toFixed(2)}×</span>
+          <button className="edit-scale-btn" onClick={() => adjustScale(+0.05)}>+</button>
+        </div>
         <span className="edit-reset-btn" onPointerDown={(e) => {
           e.stopPropagation()
           const next = { ...ov }
-          delete next.dx; delete next.dy; delete next.w; delete next.h
+          delete next.dx; delete next.dy; delete next.w; delete next.h; delete next.scale
           update(id, next)
         }}>↺</span>
       </div>
@@ -1767,13 +2046,38 @@ function EditableBlock({ id, label, children }) {
 }
 
 // ============================================================
+// EditableText — inline text editor for layout edit mode
+// ============================================================
+function EditableText({ id, children }) {
+  const { editMode, textOverrides, updateText } = React.useContext(LayoutEditCtx)
+  const stored = textOverrides[id]
+  const display = stored ?? children
+  if (!editMode) return <>{display}</>
+  return (
+    <span
+      contentEditable
+      suppressContentEditableWarning
+      className="editable-text-field"
+      onBlur={e => {
+        const val = e.currentTarget.textContent
+        updateText(id, val !== '' ? val : children)
+      }}
+      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+      onPointerDown={e => e.stopPropagation()}
+    >
+      {display}
+    </span>
+  )
+}
+
+// ============================================================
 // LayoutEditorBar — floating toolbar shown in edit mode
 // ============================================================
 function LayoutEditorBar({ onSave, onReset, onExit }) {
   return (
     <div className="layout-editor-bar">
       <span className="layout-editor-title">✎ 布局编辑模式</span>
-      <span className="layout-editor-hint">拖动顶部金条移动 · 拖动角点/边线调整大小</span>
+      <span className="layout-editor-hint">金条拖动位置 · 边角调整大小 · [−/+] 矢量缩放 · 点击文字直接编辑</span>
       <div className="layout-editor-actions">
         <button className="layout-btn layout-btn-save" onClick={onSave}>💾 保存布局</button>
         <button className="layout-btn layout-btn-reset" onClick={onReset}>↺ 重置默认</button>
@@ -2031,39 +2335,32 @@ function isComboRule(effect = '') {
 
 function ResultOverlay({ game, onRestart, onEnterIntermission }) {
   const result = game.result
-  const hasNextLevel = game.level.id < 3 // LEVELS 当前 3 关 (v0.3 占位)
-  const canEnterIntermission = result.passed && hasNextLevel
-  const report = buildRunReport(game)
+  if (!result) return null
+
+  const isGameWon = result.gameWon
+  const nextStage = result.nextStage
+
   return (
-    <div className="modal-backdrop">
-      <section className={`result-panel ${result.passed ? 'passed' : 'failed'}`}>
-        <span>{result.passed ? '通关' : '失败'}</span>
-        <h1>{game.level.milestone}</h1>
+    <div className="modal-backdrop retro-backdrop">
+      <section className={`result-panel ${isGameWon ? 'passed' : 'promoted'}`}>
+        <span>{isGameWon ? '终极胜利' : '阶段达成'}</span>
+        <h1>{isGameWon ? '行业第一' : `${game.stage.name} → ${nextStage?.name}`}</h1>
         <div className="result-stats">
-          <Metric label="累计 ¥" value={game.cumulativeIncome} />
-          <Metric label="目标 ¥" value={game.level.target} />
-          <Metric label="评级" value={result.rating} />
-          <Metric label="原因" value={result.reason} />
+          <Metric label="当前估值" value={`¥${game.valuation}`} />
+          {!isGameWon && nextStage && <Metric label="下阶段门槛" value={`¥${nextStage.threshold}`} />}
+          <Metric label="经营月数" value={`${game.elapsedMonths} 月`} />
         </div>
-        {!result.passed && (
-          <div className="failure-report">
-            <strong>本局战报</strong>
-            <span>最佳月收入 ¥{report.bestMonth}</span>
-            <span>击败你的事件: {report.defeatedByEvent}</span>
-            <span>主力风格: {report.buildStyle}</span>
-            <p>{report.advice}</p>
-          </div>
-        )}
+
         <div className="result-actions">
-          {canEnterIntermission && (
+          {!isGameWon && onEnterIntermission && (
             <button className="command-button primary" onClick={onEnterIntermission}>
               <Sparkles size={18} />
               进入董事会会议
             </button>
           )}
-          <button className={`command-button ${canEnterIntermission ? 'quiet' : 'primary'}`} onClick={onRestart}>
+          <button className={`command-button ${!isGameWon ? 'quiet' : 'primary'}`} onClick={onRestart}>
             <RotateCcw size={18} />
-            重开本关
+            {isGameWon ? '再玩一局' : '重新开始'}
           </button>
         </div>
       </section>
@@ -2125,6 +2422,8 @@ function BoardMeetingHub({
   onFire,
   onBmBuy,
   onSchoolRoll,
+  onWithdrawal,
+  onBmUnsubscribe,
   onExit,
 }) {
   const [activeStation, setActiveStation] = useState(null)
@@ -2136,21 +2435,22 @@ function BoardMeetingHub({
   const im = game.intermissionState
   if (!im) return null
 
-  const nextLevelId = game.level.id + 1
+  const currentStageIndex = STAGES.findIndex(s => s.id === game.stage.id)
+  const nextStage = STAGES[currentStageIndex + 1]
   const isEventPhase = im.phase === 'event'
 
   return (
     <div className="bm-overlay">
       <section className="bm-panel">
         <header className="bm-panel-header">
-          <div className="bm-budget-chip">
-            <span aria-hidden="true">💰</span>
-            <strong>{game.strategicBudget}</strong>
+          <div className="bm-cash-chip">
+            <span aria-hidden="true">¥</span>
+            <strong>{game.cash}</strong>
           </div>
           <div className="bm-panel-title">
             <span>BOARD MEETING</span>
             <strong>董事会会议</strong>
-            <em>第 {game.level.id} 轮 ▸ 第 {nextLevelId} 轮</em>
+            <em>{game.stage.name} ▸ {nextStage ? nextStage.name : '最高阶段'}</em>
           </div>
           <button
             className="bm-next-button"
@@ -2170,7 +2470,7 @@ function BoardMeetingHub({
           {isEventPhase ? (
             <BoardEventModal
               event={im.event}
-              budget={game.strategicBudget}
+              budget={game.cash}
               onSelect={(optId) => onResolveEvent(optId)}
             />
           ) : activeStation ? (
@@ -2180,8 +2480,8 @@ function BoardMeetingHub({
                 <ShopDrawer
                   shopRoll={im.shopRoll}
                   purchased={im.purchased}
-                  budget={game.strategicBudget}
-                  nextLevelId={nextLevelId}
+                  budget={game.cash}
+                  nextLevelId={nextStage ? nextStage.id : 9}
                   onBuy={onShopBuy}
                   onPack={onPack}
                   onRoll={onShopRoll}
@@ -2205,6 +2505,7 @@ function BoardMeetingHub({
                   pendingBmSchoolIdx={pendingBmSchoolIdx}
                   setPendingBmSchoolIdx={setPendingBmSchoolIdx}
                   onBmBuy={onBmBuy}
+                  onBmUnsubscribe={onBmUnsubscribe}
                   onRoll={onSchoolRoll}
                 />
               )}
@@ -2213,39 +2514,43 @@ function BoardMeetingHub({
               )}
             </div>
           ) : (
-            <div className="bm-stations-grid">
-              <StationCard
-                color="azure"
-                icon="💼"
-                title="投资部"
-                tag="SHOP"
-                description="epic / 传奇单卡 · 6 类卡包"
-                onClick={() => setActiveStation('shop')}
-              />
-              <StationCard
-                color="rose"
-                icon="📋"
-                title="人事部"
-                tag="HR"
-                description={`升职 / “向社会输送人才” · 本场操作 ${im.hrActionsCount}`}
-                onClick={() => setActiveStation('hr')}
-              />
-              <StationCard
-                color="violet"
-                icon="🎓"
-                title="商学院"
-                tag="SCHOOL"
-                description={`已学 ${game.activeBusinessModels.length}/${game.businessModelSlotCap} 商业模式`}
-                onClick={() => setActiveStation('school')}
-              />
-              <StationCard
-                color="amber"
-                icon="📰"
-                title="董事访谈"
-                tag="RECORDS"
-                description="本场会议日志"
-                onClick={() => setActiveStation('log')}
-              />
+            <div className="bm-menu-and-finance">
+              <FinanceStation game={game} im={im} onWithdrawal={onWithdrawal} />
+              
+              <div className="bm-stations-grid">
+                <StationCard
+                  color="azure"
+                  icon="💼"
+                  title="投资部"
+                  tag="SHOP"
+                  description="epic / 传奇单卡 · 6 类卡包"
+                  onClick={() => setActiveStation('shop')}
+                />
+                <StationCard
+                  color="rose"
+                  icon="📋"
+                  title="人事部"
+                  tag="HR"
+                  description={`升职 / 免费解雇 · 本场操作 ${im.hrActionsCount}`}
+                  onClick={() => setActiveStation('hr')}
+                />
+                <StationCard
+                  color="violet"
+                  icon="🎓"
+                  title="商学院"
+                  tag="SCHOOL"
+                  description={`已学 ${game.activeBusinessModels.length}/${game.businessModelSlotCap} 商业模式`}
+                  onClick={() => setActiveStation('school')}
+                />
+                <StationCard
+                  color="amber"
+                  icon="📰"
+                  title="董事访谈"
+                  tag="RECORDS"
+                  description="本场会议日志"
+                  onClick={() => setActiveStation('log')}
+                />
+              </div>
             </div>
           )}
         </main>
@@ -2253,12 +2558,62 @@ function BoardMeetingHub({
 
       {confirmExit && (
         <ConfirmExitModal
-          budget={game.strategicBudget}
+          budget={game.cash}
           activeBMs={game.activeBusinessModels.length}
-          nextLevelId={nextLevelId}
+          nextStageName={nextStage ? nextStage.name : '终极阶段'}
           onConfirm={() => { setConfirmExit(false); onExit() }}
           onCancel={() => setConfirmExit(false)}
         />
+      )}
+    </div>
+  )
+}
+
+function FinanceStation({ game, im, onWithdrawal }) {
+  const [withdrawRatio, setWithdrawRatio] = useState(0.3)
+  const previewExtracted = Math.floor(game.retainedEarnings * withdrawRatio)
+  
+  return (
+    <div className="finance-station">
+      <div className="finance-title">🏢 财务部 (Finance Department)</div>
+      {im.withdrawn ? (
+        <div className="finance-withdrawn">
+          <span>已完成本阶段资金提取：</span>
+          <strong>+¥{im.extractedAmount}</strong>
+          <em>({Math.round((im.withdrawalRatio || 0) * 100)}% 留存利润)</em>
+        </div>
+      ) : (
+        <div className="finance-active">
+          <div className="finance-retained">
+            <span>当前留存利润:</span>
+            <strong>¥{game.retainedEarnings}</strong>
+          </div>
+          <div className="finance-controls">
+            <label>提取比例:</label>
+            <div className="ratio-buttons">
+              {[0, 0.3, 0.6, 1.0].map((r) => (
+                <button
+                  key={r}
+                  className={`ratio-btn ${withdrawRatio === r ? 'selected' : ''}`}
+                  onClick={() => setWithdrawRatio(r)}
+                >
+                  {r * 100}%
+                </button>
+              ))}
+            </div>
+            <div className="finance-preview">
+              <span>预计提取:</span>
+              <strong>+¥{previewExtracted}</strong>
+            </div>
+            <button
+              className="finance-confirm-btn"
+              disabled={game.retainedEarnings <= 0}
+              onClick={() => onWithdrawal(withdrawRatio)}
+            >
+              确认提取并注入现金
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -2284,7 +2639,7 @@ function BoardEventModal({ event, budget, onSelect }) {
                 onClick={() => onSelect(opt.id)}
               >
                 <strong>{opt.label}</strong>
-                <span>{disabled ? '💰 不足' : describeEventEffect(opt)}</span>
+                <span>{disabled ? '¥ 不足' : describeEventEffect(opt)}</span>
               </button>
             )
           })}
@@ -2297,14 +2652,14 @@ function BoardEventModal({ event, budget, onSelect }) {
 function describeEventEffect(opt) {
   switch (opt.effect?.type) {
     case 'noop': return '无副作用'
-    case 'removeBudgetBonus': return `失去一员大将，+💰${opt.effect.value}`
+    case 'removeBudgetBonus': return `失去一员大将，+¥${opt.effect.value}`
     case 'recruitLegendary': return `下关获得 1 张 ${opt.effect.dept} 传奇`
-    case 'increaseNextTarget': return `下关目标 +${opt.effect.value * 100}%`
-    case 'budgetGainNextMonthPenalty': return `+💰${opt.effect.budget}, 下关首月手牌 -1`
-    case 'unlockEpic': return `下关招聘池 +1 ${opt.effect.dept} epic`
-    case 'gamble': return `50/50: +💰${opt.effect.win} / ${opt.effect.lose} 💰`
+    case 'increaseNextTarget': return `下阶段目标增加`
+    case 'budgetGainNextMonthPenalty': return `+¥${opt.effect.budget}, 首月手牌 -1`
+    case 'unlockEpic': return `下阶段招聘池 +1 ${opt.effect.dept} epic`
+    case 'gamble': return `50/50: +¥${opt.effect.win} / -¥${Math.abs(opt.effect.lose)}`
     case 'increaseBmSlot': return '永久 +1 商业模式槽位'
-    case 'budgetGain': return `+💰${opt.effect.value}`
+    case 'budgetGain': return `+¥${opt.effect.value}`
     default: return '—'
   }
 }
@@ -2327,7 +2682,7 @@ function ShopDrawer({ shopRoll, purchased, budget, nextLevelId, onBuy, onPack, o
       <header>
         <strong>💼 投资部 · Shop</strong>
         <div className="drawer-actions">
-          <button className="bm-roll-btn" disabled={budget < 5} onClick={onRoll}>刷新 (−💰5)</button>
+          <button className="bm-roll-btn" disabled={budget < 5} onClick={onRoll}>刷新 (−¥5)</button>
           <button className="bm-close-btn" onClick={onClose}>×</button>
         </div>
       </header>
@@ -2346,7 +2701,7 @@ function ShopDrawer({ shopRoll, purchased, budget, nextLevelId, onBuy, onPack, o
                   className="shop-buy-btn"
                   disabled={budget < shopRoll.epicCost}
                   onClick={() => onBuy('epic')}
-                >买入 −💰{shopRoll.epicCost}</button>
+                >买入 −¥{shopRoll.epicCost}</button>
               </>
             )
           ) : (
@@ -2367,7 +2722,7 @@ function ShopDrawer({ shopRoll, purchased, budget, nextLevelId, onBuy, onPack, o
                   className="shop-buy-btn legendary"
                   disabled={budget < shopRoll.legendaryCost}
                   onClick={() => onBuy('legendary')}
-                >买入 −💰{shopRoll.legendaryCost}</button>
+                >买入 −¥{shopRoll.legendaryCost}</button>
               </>
             )
           ) : (
@@ -2388,7 +2743,7 @@ function ShopDrawer({ shopRoll, purchased, budget, nextLevelId, onBuy, onPack, o
                   className="shop-buy-btn"
                   disabled={budget < entry.cost}
                   onClick={() => onPack(idx)}
-                >买入 −💰{entry.cost}</button>
+                >买入 −¥{entry.cost}</button>
               )}
               {state?.opened && state.pickIndex === null && (
                 <div className="pack-picks">
@@ -2423,7 +2778,7 @@ function HrDrawer({ game, hrCardUid, setHrCardUid, onUpgrade, onFire, onClose })
   const im = game.intermissionState
   const allCards = [...game.hand, ...game.drawPile, ...game.coolingPile]
   const selectedCard = allCards.find((c) => c.uid === hrCardUid)
-  const fireCost = game.level.id <= 3 ? 3 : game.level.id <= 6 ? 5 : 8
+  const fireCost = 0 // Dismiss is free now
   const upgradePath = selectedCard ? UPGRADE_PATHS[selectedCard.rarity] : null
   const [affixChoice, setAffixChoice] = useState(null)
 
@@ -2443,7 +2798,7 @@ function HrDrawer({ game, hrCardUid, setHrCardUid, onUpgrade, onFire, onClose })
       <header>
         <strong>📋 人事部 · HR Office</strong>
         <div className="drawer-actions">
-          <span className="hr-stat">“向社会输送人才” {im.fireActionsCount}/5</span>
+          <span className="hr-stat">解雇员工限额 {im.fireActionsCount}/5</span>
           <button className="bm-close-btn" onClick={onClose}>×</button>
         </div>
       </header>
@@ -2462,7 +2817,7 @@ function HrDrawer({ game, hrCardUid, setHrCardUid, onUpgrade, onFire, onClose })
                   onClick={() => { setHrCardUid(card.uid); setAffixChoice(null) }}
                 >
                   <CardView card={card} mode="drawer" />
-                  {acted && <div className="acted-label">{acted === 'upgraded' ? '已升职' : '已“向社会输送人才”'}</div>}
+                  {acted && <div className="acted-label">{acted === 'upgraded' ? '已升职' : '已解雇'}</div>}
                 </button>
               )
             })}
@@ -2471,7 +2826,7 @@ function HrDrawer({ game, hrCardUid, setHrCardUid, onUpgrade, onFire, onClose })
 
         <div className="hr-action-panel">
           {!selectedCard ? (
-            <p className="hr-hint">←  从左侧选一张员工卡</p>
+            <p className="hr-hint">← 从左侧选一张员工卡</p>
           ) : (
             <>
               <h4>对 <em>{selectedCard.name}</em> 执行：</h4>
@@ -2479,23 +2834,23 @@ function HrDrawer({ game, hrCardUid, setHrCardUid, onUpgrade, onFire, onClose })
               {upgradePath ? (
                 <button
                   className="hr-action-btn upgrade-rarity"
-                  disabled={game.strategicBudget < upgradePath.cost}
+                  disabled={game.cash < upgradePath.cost}
                   onClick={() => { onUpgrade(selectedCard.uid, 'rarity'); setHrCardUid(null) }}
                 >
-                  ① 升稀有度 {selectedCard.rarity} → {upgradePath.next} （−💰{upgradePath.cost}）
+                  ① 升稀有度 {selectedCard.rarity} → {upgradePath.next} （−¥{upgradePath.cost}）
                 </button>
               ) : (
                 <button className="hr-action-btn disabled" disabled>① 已达稀有度上限</button>
               )}
 
               <div className="hr-action-section">
-                <span className="hr-section-label">② 附加词缀（3 选 1，−💰8）</span>
+                <span className="hr-section-label">② 附加词缀（3 选 1，−¥8）</span>
                 <div className="hr-affix-row">
                   {randomAffixes.map((aff) => (
                     <button
                       key={aff.id}
                       className={`hr-affix-pick ${affixChoice === aff.id ? 'selected' : ''}`}
-                      disabled={game.strategicBudget < 8}
+                      disabled={game.cash < 8}
                       onClick={() => setAffixChoice(aff.id)}
                     >
                       {aff.label}
@@ -2504,7 +2859,7 @@ function HrDrawer({ game, hrCardUid, setHrCardUid, onUpgrade, onFire, onClose })
                 </div>
                 <button
                   className="hr-action-btn confirm-affix"
-                  disabled={!affixChoice || game.strategicBudget < 8}
+                  disabled={!affixChoice || game.cash < 8}
                   onClick={() => { onUpgrade(selectedCard.uid, 'affix', affixChoice); setHrCardUid(null); setAffixChoice(null) }}
                 >
                   确认词缀
@@ -2513,10 +2868,10 @@ function HrDrawer({ game, hrCardUid, setHrCardUid, onUpgrade, onFire, onClose })
 
               <button
                 className="hr-action-btn fire"
-                disabled={game.strategicBudget < fireCost || im.fireActionsCount >= 5}
+                disabled={im.fireActionsCount >= 5}
                 onClick={() => { onFire(selectedCard.uid); setHrCardUid(null) }}
               >
-                ✗ “向社会输送人才”（−💰{fireCost}）
+                ✗ “向社会输送人才”（免费解雇）
               </button>
             </>
           )}
@@ -2534,6 +2889,7 @@ function SchoolDrawer({
   pendingBmSchoolIdx,
   setPendingBmSchoolIdx,
   onBmBuy,
+  onBmUnsubscribe,
   onRoll,
   onClose,
 }) {
@@ -2563,25 +2919,32 @@ function SchoolDrawer({
         <strong>🎓 商学院 · Business School</strong>
         <div className="drawer-actions">
           <span className="school-stat">{activeBMs.length} / {slotCap} 槽位</span>
-          <button className="bm-roll-btn" disabled={game.strategicBudget < 4} onClick={onRoll}>刷新 (−💰4)</button>
+          <button className="bm-roll-btn" disabled={game.cash < 4} onClick={onRoll}>刷新 (−¥4)</button>
           <button className="bm-close-btn" onClick={onClose}>×</button>
         </div>
       </header>
 
       <div className="school-section">
-        <h4>已习得</h4>
+        <h4>已习得 (可选择退订)</h4>
         <div className="bm-slot-row">
           {Array.from({ length: slotCap }).map((_, i) => {
             const slot = activeBMs[i]
             const bm = slot ? BUSINESS_MODELS.find((b) => b.id === slot.id) : null
             const replaceMode = pendingBmSchoolIdx !== null && i < activeBMs.length
             return (
-              <div
-                key={i}
-                className={`bm-slot ${slot ? 'filled' : 'empty'} ${replaceMode ? 'replaceable' : ''} ${pendingReplaceIdx === i ? 'selected' : ''}`}
-                onClick={() => replaceMode && setPendingReplaceIdx(i)}
-              >
-                {bm ? <BmCardMini bm={bm} charged={slot.charged} /> : <div className="bm-empty-text">空</div>}
+              <div key={i} className="bm-slot-container">
+                <div
+                  className={`bm-slot ${slot ? 'filled' : 'empty'} ${replaceMode ? 'replaceable' : ''} ${pendingReplaceIdx === i ? 'selected' : ''}`}
+                  onClick={() => replaceMode && setPendingReplaceIdx(i)}
+                >
+                  {bm ? <BmCardMini bm={bm} charged={slot.charged} /> : <div className="bm-empty-text">空</div>}
+                </div>
+                {bm && (
+                  <div className="bm-slot-actions">
+                    <div className="bm-slot-cost">月费: ¥{getBMMonthlyCost(bm)}</div>
+                    <button className="bm-unsubscribe-btn" onClick={() => onBmUnsubscribe(bm.id)}>退订</button>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -2611,9 +2974,9 @@ function SchoolDrawer({
                 <BmCardMini bm={bm} />
                 <button
                   className="bm-buy-btn"
-                  disabled={game.strategicBudget < bm.cost}
+                  disabled={game.cash < bm.cost}
                   onClick={() => attemptBuy(idx)}
-                >习得 −💰{bm.cost}</button>
+                >订阅 −¥{bm.cost}</button>
               </div>
             )
           })}
@@ -2624,6 +2987,7 @@ function SchoolDrawer({
 }
 
 function BmCardMini({ bm, charged }) {
+  const monthlyCost = getBMMonthlyCost(bm);
   return (
     <div className={`bm-card rarity-${bm.rarity}`} data-bm-tip={bm.flavor}>
       {businessModeImageSrc(bm) && (
@@ -2634,6 +2998,7 @@ function BmCardMini({ bm, charged }) {
         <span>{RARITY_LABELS[bm.rarity] ?? bm.rarity}</span>
       </div>
       <p className="bm-card-desc">{bm.description}</p>
+      <div className="bm-card-burn-label">月费: ¥{monthlyCost} / 资产: +¥{getBMAssetValue(bm)}</div>
       {bm.hook && (
         <span className={`bm-hook-tag hook-${bm.hook}`}>
           {bm.hook === 'onMonthStart' ? '月初' : bm.hook === 'onSettle' ? '结算' : '充能'}
@@ -2668,13 +3033,13 @@ function LogDrawer({ logTrail, onClose }) {
   )
 }
 
-function ConfirmExitModal({ budget, activeBMs, nextLevelId, onConfirm, onCancel }) {
+function ConfirmExitModal({ budget, activeBMs, nextStageName, onConfirm, onCancel }) {
   return (
     <div className="bm-confirm-overlay" onMouseDown={onCancel}>
       <section className="bm-confirm-modal" onMouseDown={(e) => e.stopPropagation()}>
         <strong>进入下一阶段？</strong>
-        <p>当前 💰 余额 <em>{budget}</em> 将全部带入下关。</p>
-        <p>已激活商业模式 <em>{activeBMs}</em> 个，进入第 {nextLevelId} 轮融资。</p>
+        <p>当前 ¥ 现金 <em>{budget}</em> 将全部带入下一阶段。</p>
+        <p>已激活商业模式 <em>{activeBMs}</em> 个，进入 {nextStageName} 阶段。</p>
         <div className="bm-confirm-actions">
           <button className="bm-cancel-btn" onClick={onCancel}>取消</button>
           <button className="bm-confirm-btn primary" onClick={onConfirm}>确认进入</button>

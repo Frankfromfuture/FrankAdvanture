@@ -8,7 +8,6 @@ import {
   LARGE_AFFIXES,
   LEVELS,
   PACK_DEFINITIONS,
-  RECRUIT_PACKS,
   RARITY_VARIANCE,
   SMALL_AFFIXES,
   STARTER_DECK,
@@ -16,6 +15,13 @@ import {
   UPGRADE_PATHS,
   expandDeck,
   getCardTemplate,
+  STAGES,
+  findStageByValuation,
+  getCardBurn,
+  getCardExtraBurn,
+  getBMMonthlyCost,
+  getCardAssetValue,
+  getBMAssetValue,
 } from './cards.js'
 
 export const GAME_CONFIG = {
@@ -30,38 +36,55 @@ export const GAME_CONFIG = {
   recruitChoices: 3,
 }
 
-const RECRUIT_RARITY_TABLE = {
-  1: { common: 1, rare: 0, elite: 0, epic: 0 },
-  2: { common: 0.75, rare: 0.25, elite: 0, epic: 0 },
-  3: { common: 0.65, rare: 0.35, elite: 0, epic: 0 },
-  4: { common: 0.55, rare: 0.35, elite: 0.1, epic: 0 },
-  5: { common: 0.45, rare: 0.4, elite: 0.15, epic: 0 },
-  6: { common: 0.4, rare: 0.4, elite: 0.15, epic: 0.05 },
-  7: { common: 0.35, rare: 0.4, elite: 0.2, epic: 0.05 },
-  8: { common: 0.3, rare: 0.4, elite: 0.22, epic: 0.08 },
-  9: { common: 0.25, rare: 0.38, elite: 0.27, epic: 0.1 },
-  10: { common: 0.2, rare: 0.35, elite: 0.32, epic: 0.13 },
-}
 
 const DEPT_LABELS = { R: '研发', S: '销售', O: '运营' }
 
 let instanceCounter = 0
 
-export function createInitialState({ levelId = 1, rng = Math.random } = {}) {
+export function getAllCards(state) {
+  const cards = []
+  if (state.hand) cards.push(...state.hand)
+  if (state.drawPile) cards.push(...state.drawPile)
+  if (state.coolingPile) cards.push(...state.coolingPile)
+  if (state.lines) {
+    for (const line of state.lines) {
+      if (line.slots) {
+        for (const card of line.slots) {
+          if (card) cards.push(card)
+        }
+      }
+    }
+  }
+  return cards
+}
+
+export function createInitialState({ rng = Math.random } = {}) {
   instanceCounter = 0
-  const level = LEVELS.find((item) => item.id === levelId) ?? LEVELS[0]
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth() + 1
+  
   const hand = expandDeck(STARTER_HAND).map((id) => createCardInstance(id, 'hand', rng))
   const drawPile = shuffle(expandDeck(STARTER_DECK).map((id) => createCardInstance(id, 'deck', rng)), rng)
   const event = pickEvent(rng)
-  const recruitMarket = createRecruitMarket(level.id, getRecruitMarketSize(1), rng)
   const apAvailable = Math.max(1, GAME_CONFIG.baseAp + (event.apDelta ?? 0))
+  const stage = STAGES[0]
 
-  return {
-    level,
-    month: 1,
-    cash: level.startCash + (event.cashDelta ?? 0),
-    cumulativeIncome: 0,
-    strategicBudget: level.startBudget,
+  const initialState = {
+    stage,
+    year,
+    month,
+    elapsedMonths: 0,
+    cash: 30 + (event.cashDelta ?? 0),
+    retainedEarnings: 0,
+    valuation: 0,
+    highestValuation: 0,
+    profitHistory: [],
+    valuationHistory: [],
+    stagnationCounter: 0,
+    stagnationCooldown: 0,
+    consecutiveAboveThreshold: 0,
+    consecutiveCashEmergency: 0,
     apCarry: 0,
     apAvailable,
     activeLineId: 'A',
@@ -69,9 +92,6 @@ export function createInitialState({ levelId = 1, rng = Math.random } = {}) {
     hand,
     drawPile,
     coolingPile: [],
-    recruitMarket,
-    recruitChoiceUsed: false,
-    revealedRecruitCard: null,
     event,
     lines: [
       createLine('A', 'planning'),
@@ -80,22 +100,25 @@ export function createInitialState({ levelId = 1, rng = Math.random } = {}) {
     discardRequired: Math.max(0, hand.length - GAME_CONFIG.handLimit),
     lastSettlement: null,
     result: null,
-    // ===== 关间「董事会会议」相关 state =====
-    activeBusinessModels: [],         // Array<{ id, charged: boolean }>
-    intermissionState: null,          // null | { phase, event, ... } (见 enterIntermission)
-    legendaryRollStreak: 0,           // 连续未刷出传奇关数（保底用）
-    businessModelSlotCap: 4,          // 商业模式槽位上限 (战斗区 2×2 起步, 关 7 → 5)
-    nextLevelModifiers: {             // 事件 / charge 影响下关
+    activeBusinessModels: [],
+    intermissionState: null,
+    legendaryRollStreak: 0,
+    businessModelSlotCap: 4,
+    nextLevelModifiers: {
       targetMultiplier: 1,
       handPenalty: 0,
       unlockedEpicDepts: [],
-      pendingCards: [],               // 进入下关初始牌堆的卡 id 列表
+      pendingCards: [],
     },
     log: [
       `第 1 月开始: ${event.name}`,
-      `${level.milestone} 目标 ¥${level.target}`,
+      `进入阶段: ${stage.name} (${stage.theme})`,
     ],
   }
+
+  initialState.valuation = computeValuation(initialState)
+  initialState.highestValuation = initialState.valuation
+  return initialState
 }
 
 export function createCardInstance(templateId, location = 'deck', rng = Math.random) {
@@ -128,6 +151,72 @@ export function createCardInstance(templateId, location = 'deck', rng = Math.ran
     coolingRemaining: 0,
   }
 }
+export function computeMonthlyBurn(state) {
+  const allCards = getAllCards(state)
+  let burnSum = 0
+  for (const card of allCards) {
+    burnSum += getCardBurn(card)
+  }
+
+  // Newly played cards on the active planning line that is starting production this month
+  const activeLine = getActiveLine(state)
+  const hasNewLine = activeLine?.slots.some(Boolean)
+  if (hasNewLine) {
+    for (const card of activeLine.slots) {
+      if (card) {
+        burnSum += getCardExtraBurn(card)
+      }
+    }
+  }
+
+  // Business Model monthly cost
+  if (state.activeBusinessModels) {
+    for (const slot of state.activeBusinessModels) {
+      const bm = BUSINESS_MODELS.find((b) => b.id === slot.id)
+      if (bm) {
+        burnSum += getBMMonthlyCost(bm)
+      }
+    }
+  }
+
+  return burnSum
+}
+
+export function computeQuarterlyAvgProfit(profitHistory) {
+  if (!profitHistory || profitHistory.length === 0) return 0
+  const last3 = profitHistory.slice(-3)
+  const sum = last3.reduce((acc, p) => acc + p, 0)
+  return sum / last3.length
+}
+
+export function computeValuation(state) {
+  const avgProfit = computeQuarterlyAvgProfit(state.profitHistory)
+  const peValue = Math.max(0, avgProfit * 20)
+
+  // Card asset value
+  const allCards = getAllCards(state)
+  let cardAssetSum = 0
+  for (const card of allCards) {
+    cardAssetSum += getCardAssetValue(card)
+  }
+
+  // BM asset value
+  let bmAssetSum = 0
+  if (state.activeBusinessModels) {
+    for (const slot of state.activeBusinessModels) {
+      const bm = BUSINESS_MODELS.find((b) => b.id === slot.id)
+      if (bm) {
+        bmAssetSum += getBMAssetValue(bm)
+      }
+    }
+  }
+
+  const assetValue = cardAssetSum * 0.5 + bmAssetSum * 0.5
+  const treasuryValue = Math.max(0, state.cash) * 0.3
+
+  return Math.round(peValue + assetValue + treasuryValue)
+}
+
 
 export function makeFixedCard(templateId, overrides = {}) {
   const template = getCardTemplate(templateId)
@@ -245,30 +334,7 @@ export function discardFromHand(state, cardUid) {
   })
 }
 
-/**
- * 战斗内开卡包：candidateUid 现在指向 packMarket 里某个卡包的 uid
- * 旧 API 名保留 (buyRecruit) 兼容测试与上游调用
- *
- * 返回 state 时附加 `revealedRecruitCard` 字段 —— UI 拿去做开包动画
- */
-export function buyRecruit(state, candidateUid, rng = Math.random) {
-  if (state.recruitChoiceUsed) return reject(state, '本月已经完成一次招聘选择')
-  const pack = state.recruitMarket.find((item) => item.uid === candidateUid)
-  if (!pack) return reject(state, '卡包已离开市场')
-  if (pack.cost > state.strategicBudget) return reject(state, `战略预算不足: 需要 💰${pack.cost}`)
-  const template = pickCardFromPack(pack, state.level.id, rng)
-  if (!template) return reject(state, `${pack.name} 当前没有可用卡`)
-  const card = createCardInstance(template.id, 'deck', rng)
-  return accept({
-    ...state,
-    strategicBudget: state.strategicBudget - pack.cost,
-    drawPile: [card, ...state.drawPile],
-    recruitMarket: [],
-    recruitChoiceUsed: true,
-    revealedRecruitCard: card,
-    log: [`开 ${pack.name}: 抽到 ${card.name}`, ...state.log].slice(0, 7),
-  })
-}
+
 
 /**
  * 清空 revealedRecruitCard（关闭开包动画后 UI 调用）
@@ -297,15 +363,111 @@ export function resolveMonth(state, rng = Math.random) {
     lineId: line.id,
     ...computeLineOutput(line.slots, { event: state.event, bmStats }),
   }))
+
   const rawIncome = lineReports.reduce((sum, report) => sum + report.total, 0)
-  const eventIncome = Math.round(rawIncome * (state.event.incomeMultiplier ?? 1))
-  const maintenanceWaived = lineReports.some((report) => report.maintenanceWaived)
-  const rawMaintenance = maintenanceWaived
-    ? 0
-    : Math.round(state.level.maintenance * (state.event.maintenanceMultiplier ?? 1))
-  const maintenance = Math.max(0, Math.round(rawMaintenance * (1 - bmStats.maintenanceDiscount)))
-  const nextCash = state.cash + eventIncome - maintenance
-  const nextCumulativeIncome = state.cumulativeIncome + eventIncome
+  
+  // Stagnation sprint multiplier
+  const sprintMultiplier = state.stagnationSprintActive ? 1.3 : 1.0
+  const eventIncome = Math.round(rawIncome * (state.event.incomeMultiplier ?? 1) * sprintMultiplier)
+
+  // Calculate Monthly Burn
+  const baseBurn = computeMonthlyBurn(state)
+  const isMaintenanceWaivedByLine = lineReports.some((report) => report.maintenanceWaived)
+  const isMaintenanceWaivedByBM = bmStats.chargedWaiveMaintenance
+  const maintenanceWaived = isMaintenanceWaivedByLine || isMaintenanceWaivedByBM
+
+  let monthlyBurn = baseBurn
+  if (maintenanceWaived) {
+    monthlyBurn = 0
+  } else {
+    monthlyBurn = Math.round(monthlyBurn * (state.event.maintenanceMultiplier ?? 1))
+    monthlyBurn = Math.max(0, Math.round(monthlyBurn * (1 - bmStats.maintenanceDiscount)))
+  }
+
+  // Consume waiveMaintenance if used
+  let nextActiveBusinessModels = state.activeBusinessModels
+  if (isMaintenanceWaivedByBM && !isMaintenanceWaivedByLine) {
+    nextActiveBusinessModels = state.activeBusinessModels.map((slot) => {
+      const bm = BUSINESS_MODELS.find((b) => b.id === slot.id)
+      if (bm?.payload?.type === 'waiveMaintenance') {
+        return { ...slot, charged: false }
+      }
+      return slot
+    })
+  }
+
+  const profit = eventIncome - monthlyBurn
+  const nextProfitHistory = [...(state.profitHistory ?? []), profit].slice(-6)
+  const nextRetainedEarnings = Math.max(0, (state.retainedEarnings ?? 0) + profit)
+
+  // Temp state for valuation
+  let tempState = {
+    ...state,
+    cash: state.cash,
+    retainedEarnings: nextRetainedEarnings,
+    activeBusinessModels: nextActiveBusinessModels,
+    profitHistory: nextProfitHistory,
+  }
+  let nextV = computeValuation(tempState)
+
+  // Stagnation detection
+  let nextHighestValuation = Math.max(state.highestValuation ?? 0, nextV)
+  let nextStagnationCounter = state.stagnationCounter ?? 0
+  if (nextV < nextHighestValuation) {
+    nextStagnationCounter += 1
+  } else {
+    nextStagnationCounter = 0
+  }
+  
+  let nextStagnationCooldown = Math.max(0, (state.stagnationCooldown ?? 0) - 1)
+  let triggerStagnationAdvisor = false
+  if (nextStagnationCounter >= 6 && nextStagnationCooldown <= 0) {
+    triggerStagnationAdvisor = true
+    nextStagnationCounter = 0
+  }
+
+  // Cash emergency check
+  let nextConsecutiveCashEmergency = state.consecutiveCashEmergency ?? 0
+  if (nextRetainedEarnings === 0 && state.cash <= 0) {
+    nextConsecutiveCashEmergency += 1
+  } else {
+    nextConsecutiveCashEmergency = 0
+  }
+
+  let rescueApplied = false
+  let rescueLogMessage = ''
+  let finalCash = state.cash
+  let rescuedState = { ...tempState }
+
+  if (nextConsecutiveCashEmergency >= 3) {
+    rescueApplied = true
+    finalCash = finalCash + 30
+    nextConsecutiveCashEmergency = 0
+
+    // Dismiss highest burn card
+    const allCards = getAllCards(state)
+    if (allCards.length > 0) {
+      let highestBurnCard = allCards[0]
+      for (const card of allCards) {
+        if (getCardBurn(card) > getCardBurn(highestBurnCard)) {
+          highestBurnCard = card
+        }
+      }
+      rescuedState = removeCardAcrossPiles(rescuedState, highestBurnCard.uid)
+      rescueLogMessage = `[现金告急救助] 自动发放 ¥30 救助金，并解雇了员工 ${highestBurnCard.name} (减少月 burn ${getCardBurn(highestBurnCard)})`
+    } else {
+      rescueLogMessage = `[现金告急救助] 自动发放 ¥30 救助金`
+    }
+  }
+
+  // Re-calculate V after potential rescue
+  rescuedState.cash = finalCash
+  if (rescueApplied) {
+    nextV = computeValuation(rescuedState)
+    nextHighestValuation = Math.max(nextHighestValuation, nextV)
+  }
+
+  // AP Calculation
   const usedAp = hasNewLine ? getLineAp(activeLine.slots) : 0
   const apLimit = getEffectiveApLimit(state)
   const apCarry = Math.min(GAME_CONFIG.carryApCap, Math.floor(Math.max(0, apLimit - usedAp) * 0.5))
@@ -322,54 +484,93 @@ export function resolveMonth(state, rng = Math.random) {
     }
   })
 
-  const drawPool = shuffle([...returned, ...afterWork.instantReturn, ...state.drawPile], rng)
-  const isFinalMonth = state.month >= GAME_CONFIG.monthsPerStage
-  const rating = getRating(nextCumulativeIncome, state.level.target)
-  const bossCheck = evaluateBossRule(state.event, activeProducingLines)
-  const result = isFinalMonth || nextCash <= 0
-    ? {
-        passed: nextCumulativeIncome >= state.level.target && nextCash > 0 && bossCheck.passed,
-        rating,
+  const drawPool = shuffle([...returned, ...afterWork.instantReturn, ...rescuedState.drawPile], rng)
+
+  // Stage promotion check
+  const currentStageIndex = STAGES.findIndex(s => s.id === state.stage.id)
+  const nextStage = STAGES[currentStageIndex + 1]
+  
+  let nextConsecutiveAboveThreshold = state.consecutiveAboveThreshold ?? 0
+  let isStagePromoted = false
+  
+  if (nextStage && nextV >= nextStage.threshold) {
+    nextConsecutiveAboveThreshold += 1
+    if (nextConsecutiveAboveThreshold >= 2) {
+      isStagePromoted = true
+    }
+  } else {
+    nextConsecutiveAboveThreshold = 0
+  }
+
+  let result = null
+  if (isStagePromoted) {
+    if (nextStage.id === 9) {
+      result = {
+        passed: true,
+        gameWon: true,
+        reason: '终极胜利',
         bestMonth: Math.max(eventIncome, state.lastSettlement?.income ?? 0),
-        reason: nextCash <= 0 ? '现金归零' : bossCheck.passed ? '半年结算' : bossCheck.reason,
-        defeatedByEvent: nextCash <= 0 ? state.event.name : bossCheck.passed ? '' : state.event.name,
       }
-    : null
+    } else {
+      result = {
+        passed: true,
+        stagePromotion: true,
+        nextStage: nextStage,
+        reason: '估值达标',
+        bestMonth: Math.max(eventIncome, state.lastSettlement?.income ?? 0),
+      }
+    }
+  }
+
+  const nextMonthNum = state.month + 1
+  let nextYear = state.year
+  let nextMonth = nextMonthNum
+  if (nextMonthNum > 12) {
+    nextMonth = 1
+    nextYear += 1
+  }
+  const elapsedMonths = (state.elapsedMonths ?? 0) + 1
 
   if (result) {
     return accept({
-      ...state,
-      cash: nextCash,
-      cumulativeIncome: nextCumulativeIncome,
+      ...rescuedState,
+      valuation: nextV,
+      highestValuation: nextHighestValuation,
       apCarry,
       lines: afterWork.lines,
       coolingPile: [...stillCooling, ...afterWork.newCooling],
       drawPile: drawPool,
       selectedCardUid: null,
+      consecutiveAboveThreshold: 0,
+      stagnationCounter: 0,
+      stagnationCooldown: nextStagnationCooldown,
+      consecutiveCashEmergency: nextConsecutiveCashEmergency,
+      stagnationSprintActive: false,
       lastSettlement: buildSettlementReport({
         month: state.month,
         eventIncome,
         rawIncome,
-        maintenance,
+        maintenance: monthlyBurn,
         lineReports,
         apCarry,
         usedAp,
       }),
       result,
       log: [
-        result.passed ? `${state.level.milestone} 达成: ${rating}` : `${state.level.milestone} 未达成`,
-        `第 ${state.month} 月收入 ¥${eventIncome}, 维持费 ¥${maintenance}`,
+        result.gameWon ? `行业第一！终极胜利达成！` : `达成阶段晋升: ${nextStage.name}`,
+        `第 ${state.month} 月收入 ¥${eventIncome}, 月 burn ¥${monthlyBurn}`,
+        ...(rescueApplied ? [rescueLogMessage] : []),
         ...state.log,
       ].slice(0, 7),
     })
   }
 
-  const nextMonth = state.month + 1
-  const nextEvent = pickEventForMonth(state.level.id, nextMonth, rng)
-  const apHandRich = bmStats.apIfHandRichEnabled && state.hand.length >= 6 ? 1 : 0
+  // Standard month transition
+  const nextEvent = pickEvent(rng)
+  const apHandRich = bmStats.apIfHandRichEnabled && rescuedState.hand.length >= 6 ? 1 : 0
   const nextApAvailable = Math.max(1, GAME_CONFIG.baseAp + apCarry + (nextEvent.apDelta ?? 0) + apHandRich)
   const effectiveHandLimit = GAME_CONFIG.handLimit + bmStats.handLimitBonus + (nextEvent.handLimitDelta ?? 0)
-  const handAdjusted = applyEventHandDelta(state.hand, drawPool, nextEvent.handDelta ?? 0, rng)
+  const handAdjusted = applyEventHandDelta(rescuedState.hand, drawPool, nextEvent.handDelta ?? 0, rng)
   const drawPerMonth = GAME_CONFIG.drawPerMonth + bmStats.drawBonus + (nextEvent.drawBonus ?? 0)
   const drawCount = Math.min(drawPerMonth, Math.max(0, effectiveHandLimit - handAdjusted.hand.length))
   const drawn = drawCards(drawCount, handAdjusted.drawPile)
@@ -379,40 +580,49 @@ export function resolveMonth(state, rng = Math.random) {
     line.id === nextActiveLineId ? { ...line, status: 'planning' } : line
   ))
 
-  return accept({
-    ...state,
+  const finalState = {
+    ...rescuedState,
+    year: nextYear,
     month: nextMonth,
+    elapsedMonths,
+    valuation: nextV,
+    highestValuation: nextHighestValuation,
     event: nextEvent,
-    cash: nextCash + (nextEvent.cashDelta ?? 0),
-    cumulativeIncome: nextCumulativeIncome,
+    cash: finalCash + (nextEvent.cashDelta ?? 0),
     apCarry,
     apAvailable: nextApAvailable,
     activeLineId: nextActiveLineId,
     hand: nextHand,
     drawPile: drawn.drawPile,
     coolingPile: [...stillCooling, ...afterWork.newCooling],
-    recruitMarket: createRecruitMarket(state.level.id, getRecruitMarketSize(nextMonth), rng),
-    recruitChoiceUsed: false,
-    revealedRecruitCard: null,
     lines: nextLines,
     selectedCardUid: null,
     discardRequired: Math.max(0, nextHand.length - effectiveHandLimit),
+    consecutiveAboveThreshold: nextConsecutiveAboveThreshold,
+    stagnationCounter: nextStagnationCounter,
+    stagnationCooldown: nextStagnationCooldown,
+    consecutiveCashEmergency: nextConsecutiveCashEmergency,
+    stagnationAdvisorTriggered: triggerStagnationAdvisor,
+    stagnationSprintActive: false,
     lastSettlement: buildSettlementReport({
       month: state.month,
       eventIncome,
       rawIncome,
-      maintenance,
+      maintenance: monthlyBurn,
       lineReports,
       apCarry,
       usedAp,
     }),
     log: [
-      `第 ${state.month} 月收入 ¥${eventIncome}, 维持费 ¥${maintenance}`,
+      `第 ${state.month} 月收入 ¥${eventIncome}, 月 burn ¥${monthlyBurn}`,
       returned.length ? `${returned.length} 张卡冷却结束回到牌堆` : '无冷却回归',
+      ...(rescueApplied ? [rescueLogMessage] : []),
       `第 ${nextMonth} 月事件: ${nextEvent.name}`,
       ...state.log,
     ].slice(0, 7),
-  })
+  }
+
+  return accept(finalState)
 }
 
 export function computeBattlePreview(state) {
@@ -426,14 +636,27 @@ export function computeBattlePreview(state) {
     }))
   const rawIncome = reports.reduce((sum, report) => sum + report.total, 0)
   const eventIncome = Math.round(rawIncome * (state.event.incomeMultiplier ?? 1))
-  const maintenanceWaived = reports.some((report) => report.maintenanceWaived)
-  const maintenance = maintenanceWaived ? 0 : Math.round(state.level.maintenance * (state.event.maintenanceMultiplier ?? 1))
+  
+  // Calculate preview monthly burn
+  const baseBurn = computeMonthlyBurn(state)
+  const isMaintenanceWaivedByLine = reports.some((report) => report.maintenanceWaived)
+  const isMaintenanceWaivedByBM = bmStats.chargedWaiveMaintenance
+  const maintenanceWaived = isMaintenanceWaivedByLine || isMaintenanceWaivedByBM
+
+  let monthlyBurn = baseBurn
+  if (maintenanceWaived) {
+    monthlyBurn = 0
+  } else {
+    monthlyBurn = Math.round(monthlyBurn * (state.event.maintenanceMultiplier ?? 1))
+    monthlyBurn = Math.max(0, Math.round(monthlyBurn * (1 - bmStats.maintenanceDiscount)))
+  }
+
   return {
     reports,
     rawIncome,
     eventIncome,
-    maintenance,
-    netCash: eventIncome - maintenance,
+    maintenance: monthlyBurn,
+    netCash: eventIncome - monthlyBurn,
   }
 }
 
@@ -640,66 +863,9 @@ function drawCards(count, drawPile) {
     drawPile: drawPile.slice(count),
   }
 }
-
-export function createRecruitMarket(levelId, count, rng = Math.random) {
-  // 5 选 3 随机抽包：洗牌 RECRUIT_PACKS，取前 count 个，附带 uid 以便 UI key/选中
-  const shuffled = shuffle([...RECRUIT_PACKS], rng).slice(0, count)
-  return shuffled.map((pack) => ({
-    ...pack,
-    uid: `${pack.id}-${++instanceCounter}`,
-    levelId,
-  }))
-}
-
-export function getRecruitMarketSize(month) {
-  return month >= 1 ? GAME_CONFIG.recruitChoices : 0
-}
-
-/**
- * 按 pack.filter 过滤可入池卡，再以 drawWeight + 关卡稀有度权重综合加权抽 1 张
- * 返回卡片模板（caller 负责 createCardInstance）
- */
-function pickCardFromPack(pack, levelId, rng) {
-  const rarityWeights = RECRUIT_RARITY_TABLE[levelId] ?? RECRUIT_RARITY_TABLE[1]
-  const pool = CARD_TEMPLATES.filter((card) => {
-    if (!card.inRecruitPool) return false
-    if (card.unlockLevel > levelId) return false
-    if (card.type === 'leg') return false
-    if (pack.filter.type && card.type !== pack.filter.type) return false
-    if (pack.filter.dept && card.dept !== pack.filter.dept) return false
-    return true
-  })
-  if (!pool.length) return null
-  // 综合权重 = drawWeight × 关卡稀有度倾向
-  const weighted = pool.map((card) => ({
-    card,
-    weight: (card.drawWeight ?? 10) * (rarityWeights[card.rarity] ?? 0.5),
-  }))
-  return weightedRandomPick(weighted, rng)
-}
-
-function weightedRandomPick(items, rng) {
-  const total = items.reduce((sum, x) => sum + x.weight, 0)
-  if (total <= 0) return items[0]?.card ?? null
-  let roll = rng() * total
-  for (const x of items) {
-    roll -= x.weight
-    if (roll <= 0) return x.card
-  }
-  return items[items.length - 1].card
-}
-
 function pickEvent(rng) {
   return randomItem(EVENTS, rng)
 }
-
-function pickEventForMonth(levelId, month, rng) {
-  if (month >= GAME_CONFIG.monthsPerStage) {
-    return BOSS_EVENTS.find((event) => event.levelId === levelId) ?? BOSS_EVENTS[levelId - 1] ?? pickEvent(rng)
-  }
-  return pickEvent(rng)
-}
-
 function applyEventHandDelta(hand, drawPile, delta, rng) {
   if (!delta) return { hand, drawPile }
   if (delta > 0) {
@@ -994,25 +1160,20 @@ export function computeBusinessModelStats(state) {
  * 生成事件 + 商店刷出 + 商学院刷出
  */
 export function enterIntermission(state, rng = Math.random) {
-  if (!state.result?.passed) return reject(state, '关卡未通关，无法进入董事会会议')
+  if (!state.result?.stagePromotion) return reject(state, '未达晋升条件，无法进入董事会')
   if (state.intermissionState) return reject(state, '已在董事会会议中')
-  if (state.level.id >= LEVELS.length) return reject(state, '已是最终关，无关间环节')
+  
+  const nextStage = state.result.nextStage
+  if (!nextStage) return reject(state, '下阶段无效')
 
-  // 评级 → 战略预算奖励
-  const ratingBonus = { S: 10, A: 5, B: 0, C: 0 }[state.result.rating] ?? 0
-  const baseBudget = 20
-  const bmStats = computeBusinessModelStats(state)
-  const chargedBonus = Math.round((baseBudget + ratingBonus) * bmStats.levelEndBudgetBonus)
-  const grantedBudget = baseBudget + ratingBonus + chargedBonus
-
-  const nextLevelId = state.level.id + 1
+  const grantedBudget = nextStage.entryGrant
   const event = randomItem(BOARD_EVENTS, rng)
-  const shopRoll = rollShopRoll(nextLevelId, state.legendaryRollStreak, rng)
-  const schoolRoll = rollSchoolRoll(nextLevelId, state.activeBusinessModels, rng)
+  const shopRoll = rollShopRoll(nextStage.id, state.legendaryRollStreak, rng)
+  const schoolRoll = rollSchoolRoll(nextStage.id, state.activeBusinessModels, rng)
 
   return accept({
     ...state,
-    strategicBudget: state.strategicBudget + grantedBudget,
+    cash: state.cash + grantedBudget,
     intermissionState: {
       phase: 'event',
       event,
@@ -1023,33 +1184,32 @@ export function enterIntermission(state, rng = Math.random) {
       purchased: {
         epic: false,
         legendary: false,
-        packs: shopRoll.packs.map(() => null),  // null = 未购买 | { pickIndex }
+        packs: shopRoll.packs.map(() => null),
       },
       hrActionsCount: 0,
       fireActionsCount: 0,
-      cardActionLog: {},  // uid -> 'upgraded' | 'fired'
+      cardActionLog: {},
       grantedBudget,
-      ratingBonus,
-      chargedBudgetBonus: chargedBonus,
-      logTrail: [`关 ${state.level.id} 末发放 💰${grantedBudget}（基础 ${baseBudget} + 评级 ${ratingBonus}${chargedBonus ? ' + ESG ' + chargedBonus : ''}）`],
+      withdrawn: false,
+      withdrawalRatio: 0,
+      extractedAmount: 0,
+      nextStageId: nextStage.id,
+      logTrail: [`晋升至 ${nextStage.name}，获得投资人注资 ¥${grantedBudget}`],
     },
-    log: [`💼 进入第 ${nextLevelId - 1}→${nextLevelId} 轮董事会会议`, ...state.log].slice(0, 7),
+    log: [`💼 进入阶段晋升董事会会议: ${nextStage.name}`, ...state.log].slice(0, 7),
   })
 }
 
-/**
- * 解析事件选项
- */
 export function resolveEvent(state, optionId, rng = Math.random) {
   const im = state.intermissionState
   if (!im || im.phase !== 'event') return reject(state, '当前不在事件阶段')
   const option = im.event.options.find((o) => o.id === optionId)
   if (!option) return reject(state, '选项无效')
-  if (option.cost && state.strategicBudget < option.cost) return reject(state, '💰 战略预算不足')
+  if (option.cost && state.cash < option.cost) return reject(state, '¥ 现金不足')
 
   let nextState = { ...state }
   if (option.cost) {
-    nextState.strategicBudget -= option.cost
+    nextState.cash -= option.cost
   }
   let resultMessage = option.result || ''
   const eff = option.effect
@@ -1058,7 +1218,7 @@ export function resolveEvent(state, optionId, rng = Math.random) {
   switch (eff.type) {
     case 'noop': break
     case 'removeBudgetBonus':
-      nextState.strategicBudget += eff.value ?? 0
+      nextState.cash += eff.value ?? 0
       break
     case 'recruitLegendary': {
       const legPool = CARD_TEMPLATES.filter((c) => c.rarity === 'legendary' && c.dept === eff.dept)
@@ -1072,7 +1232,7 @@ export function resolveEvent(state, optionId, rng = Math.random) {
       nextMods.targetMultiplier = (nextMods.targetMultiplier ?? 1) + (eff.value ?? 0)
       break
     case 'budgetGainNextMonthPenalty':
-      nextState.strategicBudget += eff.budget ?? 0
+      nextState.cash += eff.budget ?? 0
       nextMods.handPenalty = (nextMods.handPenalty ?? 0) + 1
       break
     case 'unlockEpic':
@@ -1081,17 +1241,20 @@ export function resolveEvent(state, optionId, rng = Math.random) {
     case 'gamble': {
       const win = rng() < 0.5
       const delta = win ? eff.win : eff.lose
-      nextState.strategicBudget = Math.max(0, nextState.strategicBudget + delta)
-      resultMessage = win ? `✓ 抄底成功 +💰${eff.win}` : `✗ 抄错方向 ${delta} 💰`
+      nextState.cash = Math.max(0, nextState.cash + delta)
+      resultMessage = win ? `✓ 抄底成功 +¥${eff.win}` : `✗ 抄错方向 ${delta} ¥`
       break
     }
     case 'increaseBmSlot':
       nextState.businessModelSlotCap += 1
       break
     case 'budgetGain':
-      nextState.strategicBudget += eff.value ?? 0
+      nextState.cash += eff.value ?? 0
       break
   }
+
+  // Update option label format in logTrail
+  const cleanedLabel = option.label.replace(/💰/g, '¥')
 
   return accept({
     ...nextState,
@@ -1101,23 +1264,20 @@ export function resolveEvent(state, optionId, rng = Math.random) {
       phase: 'hub',
       resolvedOptionId: optionId,
       resolvedMessage: resultMessage,
-      logTrail: [resultMessage, ...im.logTrail],
+      logTrail: [resultMessage, `选择: ${cleanedLabel}`, ...im.logTrail],
     },
   })
 }
 
-/**
- * 商店刷新（💰5）
- */
 export function rollShop(state, rng = Math.random) {
   const im = state.intermissionState
   if (!im) return reject(state, '不在董事会会议中')
-  if (state.strategicBudget < 5) return reject(state, '💰 不足以刷新（需 5）')
-  const nextLevelId = state.level.id + 1
-  const newRoll = rollShopRoll(nextLevelId, state.legendaryRollStreak, rng)
+  if (state.cash < 5) return reject(state, '¥ 不足以刷新（需 5）')
+  const nextStageId = im.nextStageId
+  const newRoll = rollShopRoll(nextStageId, state.legendaryRollStreak, rng)
   return accept({
     ...state,
-    strategicBudget: state.strategicBudget - 5,
+    cash: state.cash - 5,
     intermissionState: {
       ...im,
       shopRoll: newRoll,
@@ -1126,9 +1286,6 @@ export function rollShop(state, rng = Math.random) {
   })
 }
 
-/**
- * 购买商店商品 (epic / legendary)
- */
 export function purchaseShopItem(state, slotKey) {
   const im = state.intermissionState
   if (!im) return reject(state, '不在董事会会议中')
@@ -1136,29 +1293,24 @@ export function purchaseShopItem(state, slotKey) {
   const item = im.shopRoll[slotKey === 'epic' ? 'epicCard' : 'legendaryCard']
   if (!item) return reject(state, '该槽位无商品')
   const cost = im.shopRoll[slotKey === 'epic' ? 'epicCost' : 'legendaryCost']
-  if (state.strategicBudget < cost) return reject(state, '💰 不足')
+  if (state.cash < cost) return reject(state, '¥ 不足')
 
   const nextMods = { ...state.nextLevelModifiers }
   nextMods.pendingCards = [...(nextMods.pendingCards ?? []), item.id]
 
   return accept({
     ...state,
-    strategicBudget: state.strategicBudget - cost,
+    cash: state.cash - cost,
     nextLevelModifiers: nextMods,
-    revealedRecruitCard: item,        // 触发开卡动画
+    revealedRecruitCard: item,
     intermissionState: {
       ...im,
       purchased: { ...im.purchased, [slotKey]: true },
-      logTrail: [`购买 ${item.name} (-💰${cost})`, ...im.logTrail],
+      logTrail: [`购买 ${item.name} (-¥${cost})`, ...im.logTrail],
     },
   })
 }
 
-/**
- * 抽卡包：购买卡包并指定从 fromN 张中挑选哪一张
- * pickIndex: 0..fromN-1 (用户在 UI 中选定)
- * 如未提供 pickIndex，仅扣费并展开 3 张候选；后续再选
- */
 export function openPack(state, packSlotIdx, pickIndex) {
   const im = state.intermissionState
   if (!im) return reject(state, '不在董事会会议中')
@@ -1166,24 +1318,22 @@ export function openPack(state, packSlotIdx, pickIndex) {
   if (!packEntry) return reject(state, '该卡包槽位为空')
   const already = im.purchased.packs[packSlotIdx]
 
-  // 第一步：扣费 + 展开
   if (!already) {
-    if (state.strategicBudget < packEntry.cost) return reject(state, '💰 不足')
+    if (state.cash < packEntry.cost) return reject(state, '¥ 不足')
     return accept({
       ...state,
-      strategicBudget: state.strategicBudget - packEntry.cost,
+      cash: state.cash - packEntry.cost,
       intermissionState: {
         ...im,
         purchased: {
           ...im.purchased,
           packs: im.purchased.packs.map((p, i) => i === packSlotIdx ? { opened: true, pickIndex: null } : p),
         },
-        logTrail: [`购买 ${packEntry.packDef.name} (-💰${packEntry.cost})`, ...im.logTrail],
+        logTrail: [`购买 ${packEntry.packDef.name} (-¥${packEntry.cost})`, ...im.logTrail],
       },
     })
   }
 
-  // 第二步：已展开 → 选定 pickIndex
   if (already.pickIndex !== null) return reject(state, '已挑选完毕')
   if (pickIndex === undefined || pickIndex < 0 || pickIndex >= packEntry.contents.length) {
     return reject(state, '选项无效')
@@ -1191,12 +1341,10 @@ export function openPack(state, packSlotIdx, pickIndex) {
   const picked = packEntry.contents[pickIndex]
   const nextMods = { ...state.nextLevelModifiers }
 
-  // 商业模式特殊处理：直接进商业模式槽位
   if (packEntry.packDef.poolType === 'business_model' || (packEntry.packDef.poolType === 'mystery' && picked.isBusinessModel)) {
-    // 自动加入 activeBusinessModels（若超槽位由 UI 引导 replace）
     const slotCap = state.businessModelSlotCap
     if (state.activeBusinessModels.length >= slotCap) {
-      return reject(state, '商业模式槽位已满，请先到商学院替换')
+      return reject(state, '商业模式槽位已满，请先退订部分模式')
     }
     return accept({
       ...state,
@@ -1207,17 +1355,16 @@ export function openPack(state, packSlotIdx, pickIndex) {
           ...im.purchased,
           packs: im.purchased.packs.map((p, i) => i === packSlotIdx ? { opened: true, pickIndex } : p),
         },
-        logTrail: [`商业洞察 → ${picked.bmName}`, ...im.logTrail],
+        logTrail: [`商业模式 → ${picked.bmName}`, ...im.logTrail],
       },
     })
   }
 
-  // 普通卡牌进下关牌堆
   nextMods.pendingCards = [...(nextMods.pendingCards ?? []), picked.id]
   return accept({
     ...state,
     nextLevelModifiers: nextMods,
-    revealedRecruitCard: picked,      // 触发开卡动画
+    revealedRecruitCard: picked,
     intermissionState: {
       ...im,
       purchased: {
@@ -1229,9 +1376,6 @@ export function openPack(state, packSlotIdx, pickIndex) {
   })
 }
 
-/**
- * 升职：mode='rarity' 升稀有度 / mode='affix' 加词缀
- */
 export function upgradeCard(state, cardUid, mode, affixId) {
   const im = state.intermissionState
   if (!im) return reject(state, '不在董事会会议中')
@@ -1250,12 +1394,12 @@ export function upgradeCard(state, cardUid, mode, affixId) {
     const path = UPGRADE_PATHS[card.rarity]
     if (!path) return reject(state, '该稀有度已达上限')
     cost = path.cost
-    if (state.strategicBudget < cost) return reject(state, '💰 不足')
+    if (state.cash < cost) return reject(state, '¥ 现金不足')
     upgraded.rarity = path.next
     upgraded.baseOutput = Math.round(card.baseOutput * 1.25)
   } else if (mode === 'affix') {
     cost = 8
-    if (state.strategicBudget < cost) return reject(state, '💰 不足')
+    if (state.cash < cost) return reject(state, '¥ 现金不足')
     const affix = AFFIX_POOL.find((a) => a.id === affixId)
     if (!affix) return reject(state, '词缀无效')
     upgraded.affixes = [...(card.affixes || []), { id: affix.id, name: affix.label, effects: affix.effects }]
@@ -1266,19 +1410,16 @@ export function upgradeCard(state, cardUid, mode, affixId) {
 
   return accept({
     ...replaceCardAcrossPiles(state, cardUid, upgraded),
-    strategicBudget: state.strategicBudget - cost,
+    cash: state.cash - cost,
     intermissionState: {
       ...im,
       cardActionLog: { ...im.cardActionLog, [cardUid]: 'upgraded' },
       hrActionsCount: im.hrActionsCount + 1,
-      logTrail: [`${card.name} 升职 → ${mode === 'rarity' ? upgraded.rarity : affixId}`, ...im.logTrail],
+      logTrail: [`${card.name} 升职 → ${mode === 'rarity' ? upgraded.rarity : affixId} (-¥${cost})`, ...im.logTrail],
     },
   })
 }
 
-/**
- * “向社会输送人才”：永久移除一张卡
- */
 export function fireCard(state, cardUid) {
   const im = state.intermissionState
   if (!im) return reject(state, '不在董事会会议中')
@@ -1288,26 +1429,23 @@ export function fireCard(state, cardUid) {
   const card = findCardAcrossPiles(state, cardUid)
   if (!card) return reject(state, '卡牌未找到')
 
-  const levelId = state.level.id
-  const cost = levelId <= 3 ? 3 : levelId <= 6 ? 5 : 8
-  if (state.strategicBudget < cost) return reject(state, '💰 不足')
+  const stageId = state.stage.id
+  const cost = stageId <= 3 ? 3 : stageId <= 6 ? 5 : 8
+  if (state.cash < cost) return reject(state, '¥ 现金不足')
 
   return accept({
     ...removeCardAcrossPiles(state, cardUid),
-    strategicBudget: state.strategicBudget - cost,
+    cash: state.cash - cost,
     intermissionState: {
       ...im,
       cardActionLog: { ...im.cardActionLog, [cardUid]: 'fired' },
       fireActionsCount: im.fireActionsCount + 1,
       hrActionsCount: im.hrActionsCount + 1,
-      logTrail: [`“向社会输送人才” ${card.name} (-💰${cost})`, ...im.logTrail],
+      logTrail: [`“向社会输送人才” ${card.name} (-¥${cost})`, ...im.logTrail],
     },
   })
 }
 
-/**
- * 购买商业模式
- */
 export function purchaseBusinessModel(state, schoolSlotIdx, replaceIdx = null) {
   const im = state.intermissionState
   if (!im) return reject(state, '不在董事会会议中')
@@ -1315,7 +1453,7 @@ export function purchaseBusinessModel(state, schoolSlotIdx, replaceIdx = null) {
   if (!bmId) return reject(state, '该槽位为空')
   const bm = BUSINESS_MODELS.find((b) => b.id === bmId)
   if (!bm) return reject(state, '商业模式未找到')
-  if (state.strategicBudget < bm.cost) return reject(state, '💰 不足')
+  if (state.cash < bm.cost) return reject(state, '¥ 不足')
 
   const slotCap = state.businessModelSlotCap
   let nextActive = [...state.activeBusinessModels]
@@ -1324,120 +1462,155 @@ export function purchaseBusinessModel(state, schoolSlotIdx, replaceIdx = null) {
     nextActive = nextActive.filter((_, i) => i !== replaceIdx)
   }
   nextActive.push({ id: bmId, charged: true })
-
-  // 标记该商业模式已购买
   const nextSchoolRoll = im.schoolRoll.map((id, i) => i === schoolSlotIdx ? null : id)
 
   return accept({
     ...state,
-    strategicBudget: state.strategicBudget - bm.cost,
+    cash: state.cash - bm.cost,
     activeBusinessModels: nextActive,
     intermissionState: {
       ...im,
       schoolRoll: nextSchoolRoll,
-      logTrail: [`商学院: 习得 ${bm.name} (-💰${bm.cost})`, ...im.logTrail],
+      logTrail: [`商学院: 订阅 ${bm.name} (-¥${bm.cost})`, ...im.logTrail],
     },
   })
 }
 
-/**
- * 商学院刷新（💰4）
- */
 export function rollSchool(state, rng = Math.random) {
   const im = state.intermissionState
   if (!im) return reject(state, '不在董事会会议中')
-  if (state.strategicBudget < 4) return reject(state, '💰 不足以刷新（需 4）')
-  const newRoll = rollSchoolRoll(state.level.id + 1, state.activeBusinessModels, rng)
+  if (state.cash < 4) return reject(state, '¥ 不足以刷新（需 4）')
+  const nextStageId = im.nextStageId
+  const newRoll = rollSchoolRoll(nextStageId, state.activeBusinessModels, rng)
   return accept({
     ...state,
-    strategicBudget: state.strategicBudget - 4,
+    cash: state.cash - 4,
     intermissionState: { ...im, schoolRoll: newRoll },
   })
 }
 
-/**
- * 退出董事会会议：构建下关初始 state
- * 保留：strategicBudget / activeBusinessModels / businessModelSlotCap
- * 重置：lines / month / cumulativeIncome / event / cash
- * 重建：drawPile + hand 来自 (上关 drawPile + hand + coolingPile - 已“向社会输送人才” + 已购买卡 + 事件奖励卡)
- */
+export function applyWithdrawal(state, ratio) {
+  const im = state.intermissionState
+  if (!im) return reject(state, '不在董事会会议中')
+  if (im.withdrawn) return reject(state, '已提取过本期留存利润')
+  
+  const amount = Math.floor(state.retainedEarnings * ratio)
+  const nextCash = state.cash + amount
+  const nextRetained = state.retainedEarnings - amount
+  
+  return accept({
+    ...state,
+    cash: nextCash,
+    retainedEarnings: nextRetained,
+    intermissionState: {
+      ...im,
+      withdrawn: true,
+      withdrawalRatio: ratio,
+      extractedAmount: amount,
+      logTrail: [`从财务部提取留存利润 ¥${amount} (${Math.round(ratio * 100)}%)`, ...im.logTrail]
+    }
+  })
+}
+
+export function dismissCardInBoardMeeting(state, cardUid) {
+  const card = findCardAcrossPiles(state, cardUid)
+  if (!card) return reject(state, '卡牌未找到')
+  
+  return accept({
+    ...removeCardAcrossPiles(state, cardUid),
+    log: [`[滞涨救济] 免费解雇了 ${card.name} (减少月 burn ${getCardBurn(card)})`, ...state.log].slice(0, 7)
+  })
+}
+
+export function applyStagnationAdvice(state, choice) {
+  if (state.stagnationCooldown > 0) return reject(state, '滞涨救济冷却中')
+  
+  let nextState = { ...state, stagnationCooldown: 6 }
+  
+  if (choice === 'A') {
+    const allCards = getAllCards(state)
+    if (allCards.length === 0) return reject(state, '没有可解雇的员工')
+    
+    let highestBurnCard = allCards[0]
+    for (const card of allCards) {
+      if (getCardBurn(card) > getCardBurn(highestBurnCard)) {
+        highestBurnCard = card
+      }
+    }
+    
+    nextState = {
+      ...removeCardAcrossPiles(nextState, highestBurnCard.uid),
+      log: [`[滞涨救济] 免费解雇了 ${highestBurnCard.name} (减少月 burn ${getCardBurn(highestBurnCard)})`, ...nextState.log].slice(0, 7)
+    }
+  } else if (choice === 'B') {
+    nextState.cash += 50
+    nextState.log = [`[滞涨救济] 获得注资 +¥50`, ...nextState.log].slice(0, 7)
+  } else if (choice === 'C') {
+    nextState.stagnationSprintActive = true
+    nextState.log = [`[滞涨救济] 启动战略冲刺 (下月产产出 ×1.3)`, ...nextState.log].slice(0, 7)
+  } else {
+    return reject(state, '无效的选项')
+  }
+  
+  return accept(nextState)
+}
+
+export function unsubscribeBusinessModel(state, id) {
+  const im = state.intermissionState
+  if (!im) return reject(state, '不在董事会会议中')
+  
+  if (!state.activeBusinessModels.some(b => b.id === id)) {
+    return reject(state, '未订阅该商业模式')
+  }
+  
+  const nextActive = state.activeBusinessModels.filter(b => b.id !== id)
+  return accept({
+    ...state,
+    activeBusinessModels: nextActive,
+    intermissionState: {
+      ...im,
+      logTrail: [`退订商业模式 ${BUSINESS_MODELS.find(b => b.id === id)?.name ?? id}`, ...im.logTrail]
+    }
+  })
+}
+
 export function exitIntermission(state, rng = Math.random) {
   const im = state.intermissionState
   if (!im) return reject(state, '不在董事会会议中')
 
-  const nextLevelId = state.level.id + 1
-  const nextLevelDef = LEVELS.find((l) => l.id === nextLevelId)
-  if (!nextLevelDef) return reject(state, '已是最终关')
+  const nextStageId = im.nextStageId
+  const nextStage = STAGES.find((s) => s.id === nextStageId)
+  if (!nextStage) return reject(state, '阶段无效')
 
-  // 收集所有持续到下关的卡
-  const allCards = [
-    ...state.hand,
-    ...state.drawPile,
-    ...state.coolingPile,
-  ]
+  const rechargedBMs = state.activeBusinessModels.map((b) => ({ ...b, charged: true }))
 
-  // 加入本次会议买的卡
-  const pendingCards = (state.nextLevelModifiers.pendingCards ?? [])
+  const pendingCards = state.nextLevelModifiers.pendingCards ?? []
   const purchasedCards = pendingCards.map((cardId) => createCardInstance(cardId, 'deck', rng))
+  const nextDrawPile = shuffle([...state.drawPile, ...purchasedCards], rng)
 
-  const combined = [...allCards, ...purchasedCards].map((c) => ({ ...c, location: 'deck', coolingRemaining: 0 }))
-
-  // 抽起手 10 张
-  const shuffled = shuffle(combined, rng)
-  const handLimit = GAME_CONFIG.handLimit - (state.nextLevelModifiers.handPenalty ?? 0)
-  const startingHandSize = Math.min(handLimit, shuffled.length)
-  const startingHand = shuffled.slice(0, startingHandSize).map((c) => ({ ...c, location: 'hand' }))
-  const remainingDeck = shuffled.slice(startingHandSize)
-
-  // 应用目标倍率
-  const adjustedTarget = Math.round(nextLevelDef.target * (state.nextLevelModifiers.targetMultiplier ?? 1))
-
-  const event = pickEvent(rng)
-  const apAvailable = Math.max(1, GAME_CONFIG.baseAp + (event.apDelta ?? 0))
-
-  // 商业模式槽位上限按关卡推进
-  const slotCap = nextLevelId >= 7 ? Math.max(5, state.businessModelSlotCap)
-    : nextLevelId >= 4 ? Math.max(4, state.businessModelSlotCap)
+  const slotCap = nextStage.id >= 7 ? Math.max(5, state.businessModelSlotCap)
+    : nextStage.id >= 4 ? Math.max(4, state.businessModelSlotCap)
     : state.businessModelSlotCap
 
-  // 关末更新传奇连续未刷计数
   const purchasedLegendary = im.purchased.legendary
   const newStreak = purchasedLegendary || im.shopRoll.legendaryCard
     ? 0
     : state.legendaryRollStreak + 1
 
-  // 重新充能所有 onCharge BM
-  const rechargedBMs = state.activeBusinessModels.map((b) => ({ ...b, charged: true }))
-
   return accept({
-    level: { ...nextLevelDef, target: adjustedTarget },
-    month: 1,
-    cash: nextLevelDef.startCash + (event.cashDelta ?? 0),
-    cumulativeIncome: 0,
-    strategicBudget: state.strategicBudget,  // 全保留
-    apCarry: 0,
-    apAvailable,
-    activeLineId: 'A',
-    selectedCardUid: null,
-    hand: startingHand,
-    drawPile: remainingDeck,
-    coolingPile: [],
-    recruitMarket: createRecruitMarket(nextLevelId, getRecruitMarketSize(1), rng),
-    recruitChoiceUsed: false,
-    event,
-    lines: [createLine('A', 'planning'), createLine('B', 'idle')],
-    discardRequired: Math.max(0, startingHand.length - GAME_CONFIG.handLimit),
-    lastSettlement: null,
-    result: null,
+    ...state,
+    stage: nextStage,
+    drawPile: nextDrawPile,
     activeBusinessModels: rechargedBMs,
     intermissionState: null,
+    result: null,
     legendaryRollStreak: newStreak,
     businessModelSlotCap: slotCap,
     nextLevelModifiers: { targetMultiplier: 1, handPenalty: 0, unlockedEpicDepts: [], pendingCards: [] },
     log: [
-      `🚀 进入 ${nextLevelDef.milestone} (目标 ¥${adjustedTarget})`,
-      `携带 💰${state.strategicBudget} + ${state.activeBusinessModels.length} 个商业模式`,
-    ],
+      `🚀 进入阶段: ${nextStage.name} (${nextStage.theme})`,
+      ...state.log,
+    ].slice(0, 7),
   })
 }
 
