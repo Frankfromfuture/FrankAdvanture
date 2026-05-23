@@ -58,8 +58,6 @@ html, body {
 
 body {
   font-family: "Fusion Pixel SC", "Fusion Pixel", "Press Start 2P", monospace;
-  /* 全局像素 2.5D 鼠标指针：金色箭头 + 阴影，热点 (1,0) */
-  cursor: url("/cursors/arrow.svg?v=solid-black-20260521") 7 2, default;
 }
 
 #root {
@@ -84,7 +82,7 @@ body {
   will-change: transform;
 }
 
-/* 所有可点击元素：侧面食指，热点对齐右侧指尖 */
+/* 所有可点击元素 */
 button,
 a,
 [role="button"],
@@ -112,21 +110,21 @@ input[type="range"],
 input[type="range"]::-webkit-slider-thumb,
 input[type="checkbox"],
 select {
-  cursor: url("/cursors/hand.svg?v=white-black-fill-20260521") 10 0, pointer;
+  cursor: pointer;
 }
 
-/* 禁用态按钮恢复箭头 */
+/* 禁用态按钮 */
 button:disabled,
 .candidate:disabled,
 .pack-card:disabled,
 [aria-disabled="true"] {
-  cursor: url("/cursors/arrow.svg?v=solid-black-20260521") 7 2, not-allowed;
+  cursor: not-allowed;
 }
 
-/* 拖拽中的卡牌：沿用侧面食指，保留 grabbing fallback */
+/* 拖拽中的卡牌 */
 .card-view.dragging,
 .card-view[draggable="true"]:active {
-  cursor: url("/cursors/hand.svg?v=white-black-fill-20260521") 10 0, grabbing;
+  cursor: grabbing;
 }
 
 button {
@@ -393,7 +391,7 @@ button {
     perspective(700px)
     rotateX(var(--btn-tilt-x, 0deg))
     rotateY(var(--btn-tilt-y, 0deg))
-    translateZ(-4px);
+    translateY(2px);
 }
 
 @media (orientation: landscape) and (max-height: 520px) {

@@ -2146,7 +2146,15 @@ function MenuTiltButton({ onClick, children }) {
   }
   return (
     <button
-      onClick={onClick}
+      onPointerDown={(event) => {
+        if (event.button === 0) {
+          event.preventDefault()
+          onClick?.(event)
+        }
+      }}
+      onClick={(event) => {
+        onClick?.(event)
+      }}
       onPointerMove={handleMove}
       onPointerLeave={handleLeave}
     >
