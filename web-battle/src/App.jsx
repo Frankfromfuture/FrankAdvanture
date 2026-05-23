@@ -1214,40 +1214,40 @@ function LineBoard({
               <strong>x{fxReport.multFx.value}</strong>
             </div>
           )}
+          {isActive && (
+            <EditableBlock id={`line-${line.id}-actions`} label={`产线 ${line.id} · 操作按钮`}>
+              <div className="line-actions" aria-label="产线操作">
+                <button
+                  className="line-action-button start"
+                  disabled={disabled}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onSettle()
+                  }}
+                  data-tip="启动工作"
+                  aria-label="启动工作"
+                  title="启动工作"
+                >
+                  <Play size={22} />
+                </button>
+                <button
+                  className="line-action-button clear"
+                  disabled={disabled}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onClear()
+                  }}
+                  data-tip="清空工位"
+                  aria-label="清空工位"
+                  title="清空工位"
+                >
+                  <Trash2 size={21} />
+                </button>
+              </div>
+            </EditableBlock>
+          )}
         </div>
       </EditableBlock>
-      {isActive && (
-        <EditableBlock id={`line-${line.id}-actions`} label={`产线 ${line.id} · 操作按钮`}>
-          <div className="line-actions" aria-label="产线操作">
-            <button
-              className="line-action-button start"
-              disabled={disabled}
-              onClick={(event) => {
-                event.stopPropagation()
-                onSettle()
-              }}
-              data-tip="启动工作"
-              aria-label="启动工作"
-              title="启动工作"
-            >
-              <Play size={22} />
-            </button>
-            <button
-              className="line-action-button clear"
-              disabled={disabled}
-              onClick={(event) => {
-                event.stopPropagation()
-                onClear()
-              }}
-              data-tip="清空工位"
-              aria-label="清空工位"
-              title="清空工位"
-            >
-              <Trash2 size={21} />
-            </button>
-          </div>
-        </EditableBlock>
-      )}
     </section>
   )
 }

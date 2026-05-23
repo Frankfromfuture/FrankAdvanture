@@ -1646,6 +1646,7 @@ button {
   min-width: 54px;
   height: 195px;
   padding: 2px 0;
+  align-self: center;
 }
 
 .line-action-button {
@@ -2360,10 +2361,22 @@ button {
   color: var(--green);
 }
 
+.event-panel {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+}
+
+.event-panel > :last-child {
+  margin-top: auto !important;
+}
+
 .preview-card {
   position: relative;
-  display: grid;
-  gap: 4px;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 8px !important;
   padding: 0;
   border: none;
   border-radius: 0;
