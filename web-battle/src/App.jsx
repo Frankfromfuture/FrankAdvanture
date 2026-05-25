@@ -27,6 +27,7 @@ import {
   Trash2,
   UserPlus,
   Zap,
+  AlertTriangle,
 } from 'lucide-react'
 import {
   AFFIX_POOL,
@@ -1480,31 +1481,13 @@ function App() {
               {game.event.effectLines.map((line) => <span key={line}>{line}</span>)}
             </div>
           </EditableBlock>
-          <EditableBlock id="event-preview" label="预估收益">
-            <div
-              className="preview-card hud-item"
-              onPointerEnter={(e) => appTooltip.showTooltip(
-                <div>
-                  <div className="tooltip-title">收支分解</div>
-                  <div>产线预估收入: ¥{preview.eventIncome}</div>
-                  <div>预估 Monthly Burn: ¥{preview.maintenance}</div>
-                  <div>本月利润: {preview.profit >= 0 ? `+¥${preview.profit}` : `-¥${Math.abs(preview.profit)}`}</div>
-                  <div className="tooltip-divider" />
-                  <div>现金转化率 CCR: {Math.round((preview.ccr ?? 0.7) * 100)}%</div>
-                  <div>入账现金: {preview.cashGain >= 0 ? `+¥${preview.cashGain}` : `-¥${Math.abs(preview.cashGain)}`}</div>
-                  <div>月度运营成本: -¥{preview.monthlyOpCost ?? 0}</div>
-                  <div className="tooltip-divider" />
-                  <div>预估现金变化: {preview.cashDelta >= 0 ? `+¥${preview.cashDelta}` : `-¥${Math.abs(preview.cashDelta)}`}</div>
-                </div>,
-                e
-              )}
-              onPointerMove={appTooltip.updateTooltip}
-              onPointerLeave={appTooltip.hideTooltip}
-            >
-              <span><EditableText id="event-preview-label">本月预估</EditableText></span>
-              <strong>¥{preview.eventIncome}</strong>
-              <em>月 burn -¥{preview.maintenance} / 净利润 {preview.netCash >= 0 ? '+' : ''}{preview.netCash}</em>
-            </div>
+          <EditableBlock id="event-preview" label="年度大事件">
+            <BossEventPreview
+              majorEvent={game.majorEvent}
+              upcomingMajorEvent={game.upcomingMajorEvent}
+              countdown={game.majorEventCountdown}
+              tooltipCtx={appTooltip}
+            />
           </EditableBlock>
           <div className="event-ap-slot">
             <EditableBlock id="event-ap" label="行动力 AP">
@@ -1512,6 +1495,7 @@ function App() {
             </EditableBlock>
           </div>
         </aside>
+
       </section>
 
       <footer className="hand-dock">
@@ -1676,12 +1660,12 @@ function App() {
 }
 
 function TopHud({ game, preview, onCombo, onSettings }) {
-  const currentStageIndex = STAGES.findIndex(s => s.id === game.stage.id)
-  const nextStage = STAGES[currentStageIndex + 1]
+  const currentStageIndex = STAGES.findIndex((stage) => stage.id === game.stage.id)
+  const nextStage = STAGES[currentStageIndex + 1] ?? null
 
   const dateStr = `${game.year}.${String(game.month).padStart(2, '0')}`;
 
-  // Valuation breakdown: V = cash + (cardAsset + bmAsset)×2 + recent 3-month avg positive profit×4
+  // Valuation breakdown: V = cash×0.35 + (cardAsset + bmAsset)×1.4 + recent 3-month avg positive profit×5
   const allCards = getAllCards(game)
   let cardAssetSum = 0
   for (const card of allCards) {
@@ -1696,14 +1680,14 @@ function TopHud({ game, preview, onCombo, onSettings }) {
       }
     }
   }
-  const cashValue = Math.max(0, game.cash)
-  const assetValue = (cardAssetSum + bmAssetSum) * 2
+  const cashValue = Math.round(Math.max(0, game.cash) * 0.35)
+  const assetValue = Math.round((cardAssetSum + bmAssetSum) * 1.4)
   const profitSamples = (game.profitHistory?.length ? game.profitHistory.slice(-3) : [game.lastMonthProfit ?? 0])
     .map((profit) => Math.max(0, profit ?? 0))
   const avgProfit = profitSamples.length
     ? profitSamples.reduce((sum, profit) => sum + profit, 0) / profitSamples.length
     : 0
-  const profitValue = Math.round(avgProfit * 4)
+  const profitValue = Math.round(avgProfit * 5)
   const totalV = game.valuation
 
   const minV = game.stage.threshold;
@@ -1765,40 +1749,20 @@ function TopHud({ game, preview, onCombo, onSettings }) {
         >
           <div>
             <strong><EditableText id="hud-brand-title">{`${game.stage.theme}期（${game.stage.name}）`}</EditableText></strong>
+            <span className="brand-mark-date">{dateStr}</span>
           </div>
         </div>
       </EditableBlock>
       <div className="hud-stats-group">
-        <EditableBlock id="hud-month" label="HUD · 月份">
-          <div
-            className="hud-item hud-month"
-            onPointerEnter={(e) => tooltipCtx.showTooltip(
-              <div>
-                <div className="tooltip-title">经营时间</div>
-                <div>已经营: {game.elapsedMonths} 个月</div>
-                <div>当前融资阶段: {game.stage.name}</div>
-                <div>阶段主题: {game.stage.theme}</div>
-              </div>,
-              e
-            )}
-            onPointerMove={tooltipCtx.updateTooltip}
-            onPointerLeave={tooltipCtx.hideTooltip}
-          >
-            <img className="hud-icon-img" src="/assets/ui-icons/month.png" alt="" aria-hidden="true" />
-            <span><EditableText id="hud-month-label">日期</EditableText></span>
-            <strong>{dateStr}</strong>
-          </div>
-        </EditableBlock>
-        
         <EditableBlock id="hud-valuation" label="HUD · 估值">
           <div
             className="hud-item hud-valuation-progress"
             onPointerEnter={(e) => tooltipCtx.showTooltip(
               <div>
-                <div className="tooltip-title">估值分析 (V = 现金 + 资产×2 + 近 3 月均利×4)</div>
+                <div className="tooltip-title">估值分析 (V = 现金×0.35 + 资产×1.4 + 近 3 月均利×5)</div>
                 <div>现金价值: ¥{cashValue}</div>
-                <div>资产价值: ¥{assetValue} (员工卡 ¥{cardAssetSum} + BM ¥{bmAssetSum}) × 2</div>
-                <div>利润质量: ¥{profitValue} (近 3 月平均 ¥{Math.round(avgProfit)} × 4)</div>
+                <div>资产价值: ¥{assetValue} (员工卡 ¥{cardAssetSum} + BM ¥{bmAssetSum}) × 1.4</div>
+                <div>利润质量: ¥{profitValue} (近 3 月平均 ¥{Math.round(avgProfit)} × 5)</div>
                 <div className="tooltip-divider" />
                 <div>下一阶段: {nextStage ? `${nextStage.name} (门槛 V ${maxV})` : '已达最高阶段'}</div>
               </div>,
@@ -1842,6 +1806,28 @@ function TopHud({ game, preview, onCombo, onSettings }) {
             <img className="hud-icon-img" src="/assets/ui-icons/cash.png" alt="" aria-hidden="true" />
             <span><EditableText id="hud-cash-label">现金</EditableText></span>
             <strong>¥{game.cash}</strong>
+          </div>
+        </EditableBlock>
+
+        <EditableBlock id="hud-opcost" label="HUD · 月度运营成本">
+          <div
+            className="hud-item hud-opcost"
+            onPointerEnter={(e) => tooltipCtx.showTooltip(
+              <div>
+                <div className="tooltip-title">月度运营成本</div>
+                <div>员工 &amp; BM 维持费: ¥{preview.maintenance}</div>
+                <div>月度运营成本: ¥{preview.monthlyOpCost ?? 0}</div>
+                <div className="tooltip-divider" />
+                <div>合计每月支出: ¥{(preview.maintenance ?? 0) + (preview.monthlyOpCost ?? 0)}</div>
+              </div>,
+              e
+            )}
+            onPointerMove={tooltipCtx.updateTooltip}
+            onPointerLeave={tooltipCtx.hideTooltip}
+          >
+            <img className="hud-icon-img" src="/assets/ui-icons/hand-staff.png" alt="" aria-hidden="true" />
+            <span><EditableText id="hud-opcost-label">月度运营成本</EditableText></span>
+            <strong>-¥{(preview.maintenance ?? 0) + (preview.monthlyOpCost ?? 0)}</strong>
           </div>
         </EditableBlock>
 
@@ -1907,6 +1893,76 @@ function ActionPowerHud({ game, activeLineAp, apLimit }) {
     </div>
   )
 }
+
+// 紧凑版：放在 event-panel 里，沿用 preview-card hud-item 字体风格
+function BossEventPreview({ majorEvent, upcomingMajorEvent, countdown, tooltipCtx }) {
+  const tierLabels = { 1: '轻度', 2: '中度', 3: '高度', 4: '重度', 5: '毁灭级' }
+
+  const buildTooltip = (ev, label) => (
+    <div>
+      <div className="tooltip-title">{label}</div>
+      {ev && <><div>事件: {ev.name}</div><div>难度: T{ev.tier}（{tierLabels[ev.tier] ?? ''}）</div><div className="tooltip-divider" /></>}
+      {(ev?.effectLines ?? []).map((l) => <div key={l}>{l}</div>)}
+      {!ev && <div>每隔 12 个月触发一次年度大事件，难度逐年递增。提前 3 个月预警。</div>}
+    </div>
+  )
+
+  if (majorEvent) {
+    const remaining = majorEvent.remainingMonths ?? 0
+    const tier = majorEvent.tier ?? 1
+    return (
+      <div
+        className={`preview-card hud-item boss-preview boss-preview-active boss-tier-${tier}`}
+        onPointerEnter={(e) => tooltipCtx.showTooltip(buildTooltip(majorEvent, '年度大事件 · 进行中'), e)}
+        onPointerMove={tooltipCtx.updateTooltip}
+        onPointerLeave={tooltipCtx.hideTooltip}
+      >
+        <span className="boss-preview-label">
+          <Skull size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+          年度大事件 · 进行中
+        </span>
+        <strong>{majorEvent.name}</strong>
+        <em>剩余 {remaining} 个月 · T{tier} {tierLabels[tier] ?? ''}</em>
+      </div>
+    )
+  }
+
+  if (upcomingMajorEvent && countdown > 0 && countdown <= 3) {
+    const tier = upcomingMajorEvent.tier ?? 1
+    return (
+      <div
+        className={`preview-card hud-item boss-preview boss-preview-warn boss-tier-${tier}`}
+        onPointerEnter={(e) => tooltipCtx.showTooltip(buildTooltip(upcomingMajorEvent, '大事件预警'), e)}
+        onPointerMove={tooltipCtx.updateTooltip}
+        onPointerLeave={tooltipCtx.hideTooltip}
+      >
+        <span className="boss-preview-label">
+          <AlertTriangle size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+          大事件预警
+        </span>
+        <strong>{upcomingMajorEvent.name}</strong>
+        <em>{countdown} 个月后触发 · T{tier} {tierLabels[tier] ?? ''}</em>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="preview-card hud-item boss-preview boss-preview-idle"
+      onPointerEnter={(e) => tooltipCtx.showTooltip(buildTooltip(null, '年度大事件'), e)}
+      onPointerMove={tooltipCtx.updateTooltip}
+      onPointerLeave={tooltipCtx.hideTooltip}
+    >
+      <span className="boss-preview-label">
+        <AlertTriangle size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+        年度大事件
+      </span>
+      <strong>{countdown ?? 12} 个月</strong>
+      <em>距下次触发 · 难度逐年递增</em>
+    </div>
+  )
+}
+
 
 function PanelHeading({ icon: Icon, title, sub, tone = '', textId }) {
   return (
@@ -2475,10 +2531,10 @@ function getHandCardStyle(index, count, selectedIndex = -1) {
   const ratio = offset / maxOffset
   const lift = Math.round((1 - Math.abs(ratio)) * 16)
   const depth = Math.round((index + 1) * 3 + (1 - Math.abs(ratio)) * 8)
-  const rotate = ratio * 6
-  const yaw = -4 + ratio * 0.8
-  const spread = Math.round(offset * 18)
-  const enterSway = Math.round(ratio * -150)
+  const rotate = ratio * 3.5
+  const yaw = -4 + ratio * 0.5
+  const spread = Math.round(offset * 12)
+  const enterSway = Math.round(ratio * -90)
   const stackBias = index
 
   let selectShift = 0
@@ -3244,15 +3300,16 @@ function ResultOverlay({ game, onRestart, onEnterIntermission }) {
 
   const isGameWon = result.gameWon
   const nextStage = result.nextStage
+  const isPromotion = !!result.stagePromotion
 
   return (
     <div className="modal-backdrop retro-backdrop">
       <section className={`result-panel ${isGameWon ? 'passed' : 'promoted'}`}>
-        <span>{isGameWon ? '终极胜利' : '阶段达成'}</span>
-        <h1>{isGameWon ? '行业第一' : `${game.stage.name} → ${nextStage?.name}`}</h1>
+        <span>{isGameWon ? '终极胜利' : (isPromotion ? '阶段达成' : '季度董事会')}</span>
+        <h1>{isGameWon ? '行业第一' : (isPromotion ? `${game.stage.name} → ${nextStage?.name}` : `${game.stage.name} 季度会`)}</h1>
         <div className="result-stats">
           <Metric label="当前估值" value={`¥${game.valuation}`} />
-          {!isGameWon && nextStage && <Metric label="下阶段门槛" value={`¥${nextStage.threshold}`} />}
+          {!isGameWon && nextStage && <Metric label={isPromotion ? '下阶段门槛' : '当前阶段门槛'} value={`¥${nextStage.threshold}`} />}
           <Metric label="经营月数" value={`${game.elapsedMonths} 月`} />
         </div>
 
@@ -3442,8 +3499,7 @@ function BoardMeetingHub({
   const im = game.intermissionState
   if (!im) return null
 
-  const currentStageIndex = STAGES.findIndex(s => s.id === game.stage.id)
-  const nextStage = STAGES[currentStageIndex + 1]
+  const nextStage = STAGES.find((stage) => stage.id === im.nextStageId) ?? game.stage
   const isEventPhase = im.phase === 'event'
 
   function handleMouseMove(event) {
@@ -3484,15 +3540,15 @@ function BoardMeetingHub({
           <div className="bm-panel-title">
             <span>BOARD MEETING</span>
             <strong>董事会会议</strong>
-            <em>{game.stage.name} ▸ {nextStage ? nextStage.name : '最高阶段'}</em>
+            <em>{im.isPromotion ? `${game.stage.name} ▸ ${nextStage.name}` : `${game.stage.name} · 季度会`}</em>
           </div>
           <button
             className="bm-next-button"
             disabled={isEventPhase}
             onClick={() => setConfirmExit(true)}
-            title={isEventPhase ? '请先完成董事访谈' : '进入下一阶段'}
+            title={isEventPhase ? '请先完成董事访谈' : (im.isPromotion ? '进入下一阶段' : '结束董事会')}
           >
-            进入下一阶段 ▸
+            {im.isPromotion ? '进入下一阶段 ▸' : '结束董事会 ▸'}
           </button>
         </header>
 
@@ -3515,7 +3571,7 @@ function BoardMeetingHub({
                   shopRoll={im.shopRoll}
                   purchased={im.purchased}
                   budget={game.cash}
-                  nextLevelId={nextStage ? nextStage.id : 9}
+                  nextLevelId={nextStage.id}
                   onBuy={onShopBuy}
                   onPack={onPack}
                   onRoll={onShopRoll}
@@ -3558,7 +3614,7 @@ function BoardMeetingHub({
                   icon={<ShopStationIcon />}
                   title="投资部"
                   tag="SHOP"
-                  description="epic / 传奇单卡 · 6 类卡包"
+                  description="2 个三选一卡包 · 概率史诗+单卡"
                   onClick={() => setActiveStation('shop')}
                 />
                 <StationCard
@@ -3592,13 +3648,14 @@ function BoardMeetingHub({
       </section>
 
       {confirmExit && (
-        <ConfirmExitModal
-          budget={game.cash}
-          activeBMs={game.activeBusinessModels.length}
-          nextStageName={nextStage ? nextStage.name : '终极阶段'}
-          onConfirm={() => { setConfirmExit(false); onExit() }}
-          onCancel={() => setConfirmExit(false)}
-        />
+          <ConfirmExitModal
+            budget={game.cash}
+            activeBMs={game.activeBusinessModels.length}
+            nextStageName={im.isPromotion ? nextStage.name : game.stage.name}
+            isPromotion={im.isPromotion}
+            onConfirm={() => { setConfirmExit(false); onExit() }}
+            onCancel={() => setConfirmExit(false)}
+          />
       )}
     </div>
   )
@@ -4070,16 +4127,16 @@ function LogDrawer({ logTrail, onClose }) {
   )
 }
 
-function ConfirmExitModal({ budget, activeBMs, nextStageName, onConfirm, onCancel }) {
+function ConfirmExitModal({ budget, activeBMs, nextStageName, isPromotion, onConfirm, onCancel }) {
   return (
     <div className="bm-confirm-overlay" onMouseDown={onCancel}>
       <section className="bm-confirm-modal" onMouseDown={(e) => e.stopPropagation()}>
-        <strong>进入下一阶段？</strong>
-        <p>当前 ¥ 现金 <em>{budget}</em> 将全部带入下一阶段。</p>
-        <p>已激活商业模式 <em>{activeBMs}</em> 个，进入 {nextStageName} 阶段。</p>
+        <strong>{isPromotion ? '进入下一阶段？' : '结束季度董事会？'}</strong>
+        <p>当前 ¥ 现金 <em>{budget}</em> 将继续带入经营。</p>
+        <p>已激活商业模式 <em>{activeBMs}</em> 个，{isPromotion ? `进入 ${nextStageName} 阶段。` : `继续经营 ${nextStageName}。`}</p>
         <div className="bm-confirm-actions">
           <button className="bm-cancel-btn" onClick={onCancel}>取消</button>
-          <button className="bm-confirm-btn primary" onClick={onConfirm}>确认进入</button>
+          <button className="bm-confirm-btn primary" onClick={onConfirm}>{isPromotion ? '确认进入' : '确认结束'}</button>
         </div>
       </section>
     </div>

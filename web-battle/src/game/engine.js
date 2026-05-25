@@ -112,16 +112,20 @@ export function createInitialState({ profession = 'scientist', rng = Math.random
 
   const starterDeckIds = [...expandDeck(STARTER_DECK), commonCardId, managerCardId]
   const drawPile = shuffle(starterDeckIds.map((id) => createCardInstance(id, 'deck', rng)), rng)
-  const event = pickEvent(rng)
-  const apAvailable = Math.max(1, GAME_CONFIG.baseAp + (event.apDelta ?? 0))
   const stage = STAGES[0]
+  const event = pickEventForStage(stage.id, rng, 0)
+  const apAvailable = Math.max(1, GAME_CONFIG.baseAp + (event.apDelta ?? 0))
 
   const initialState = {
     stage,
     year,
     month,
     elapsedMonths: 0,
-    cash: 30 + (event.cashDelta ?? 0),
+    stageStartedElapsedMonths: 0,
+    majorEvent: null,
+    upcomingMajorEvent: null,
+    majorEventCountdown: 12,
+    cash: 60 + Math.max(0, event.cashDelta ?? 0),
     valuation: 0,
     highestValuation: 0,
     profitHistory: [],
@@ -241,18 +245,185 @@ export function computeMonthlyBurn(state) {
   return burnSum
 }
 
+export function computeMonthlyScalePressure(state) {
+  const month = (state.elapsedMonths ?? 0) + 1
+  const cardCount = getAllCards(state).length
+  const stageId = state.stage?.id ?? 1
+  const cappedMonths = (start, end = Infinity) => Math.max(0, Math.min(month, end) - start)
+  const ventureClock =
+    cappedMonths(3, 6) * 3 +
+    cappedMonths(6, 12) * 6 +
+    cappedMonths(12, 24) * 9 +
+    cappedMonths(24) * 9
+  const portfolioDrag = Math.max(0, cardCount - 27) * 5
+  const stageDrag = Math.max(0, stageId - 3) * 8
+  return Math.round(ventureClock + portfolioDrag + stageDrag)
+}
+
+// 30 个商战大事件：商业竞争 / 市场变化 / 黑天鹅，按难度分 5 级（每级 6 个）
+// 每 12 个月触发一次，按当前游戏年（elapsedMonths / 12）从弱到强抽取
+export const MAJOR_EVENTS = [
+  // ===== Tier 1 (第 1 年): 轻度冲击 =====
+  { id: 'rival-price-war', tier: 1, name: '友商比价战', description: '同赛道友商发起小规模价格战，渠道开始观望。',
+    effectLines: ['持续 3 个月', '收入 -8%', '维持费 +10%'], incomeMultiplier: 0.92, maintenanceMultiplier: 1.10 },
+  { id: 'talent-poaching', tier: 1, name: '团队挖角潮', description: '竞争对手开出高薪挖人，HR 疲于奔命。',
+    effectLines: ['持续 3 个月', '维持费 +15%'], incomeMultiplier: 1.0, maintenanceMultiplier: 1.15 },
+  { id: 'expo-counter', tier: 1, name: '展会狙击', description: '友商在行业大展上推出对标产品抢风头。',
+    effectLines: ['持续 3 个月', '收入 -10%'], incomeMultiplier: 0.90, maintenanceMultiplier: 1.0 },
+  { id: 'pr-negative', tier: 1, name: '媒体负面报道', description: '一篇 10w+ 软文引发舆论小风波。',
+    effectLines: ['持续 3 个月', '收入 -10%', '维持费 +5%'], incomeMultiplier: 0.90, maintenanceMultiplier: 1.05 },
+  { id: 'kol-defect', tier: 1, name: 'KOL 倒戈', description: '头部博主转投竞品阵营，带货数据滑坡。',
+    effectLines: ['持续 3 个月', '收入 -12%'], incomeMultiplier: 0.88, maintenanceMultiplier: 1.0 },
+  { id: 'channel-rebate', tier: 1, name: '渠道返点战', description: '渠道商集体抬价，分销成本水涨船高。',
+    effectLines: ['持续 3 个月', '维持费 +18%'], incomeMultiplier: 1.0, maintenanceMultiplier: 1.18 },
+
+  // ===== Tier 2 (第 2 年): 中度压力 =====
+  { id: 'leader-price-cut', tier: 2, name: '头部友商降价', description: '行业龙头宣布全线降价 20%，市场被搅动。',
+    effectLines: ['持续 3 个月', '收入 -18%', '维持费 +10%'], incomeMultiplier: 0.82, maintenanceMultiplier: 1.10 },
+  { id: 'knockoff-flood', tier: 2, name: '山寨产品涌现', description: '低价仿品快速铺货，正品溢价被稀释。',
+    effectLines: ['持续 3 个月', '收入 -20%'], incomeMultiplier: 0.80, maintenanceMultiplier: 1.0 },
+  { id: 'key-staff-poached', tier: 2, name: '核心员工被挖', description: '团队中流砥柱被高薪挖走，交付节奏被打乱。',
+    effectLines: ['持续 3 个月', '收入 -15%', '维持费 +15%'], incomeMultiplier: 0.85, maintenanceMultiplier: 1.15 },
+  { id: 'investor-exit', tier: 2, name: '老股东退出', description: '老股东清仓套现，董事会信心动摇。',
+    effectLines: ['持续 3 个月', '维持费 +25%'], incomeMultiplier: 1.0, maintenanceMultiplier: 1.25 },
+  { id: 'major-client-loss', tier: 2, name: '大客户流失', description: '年度第一大客户转投竞品。',
+    effectLines: ['持续 3 个月', '收入 -22%'], incomeMultiplier: 0.78, maintenanceMultiplier: 1.0 },
+  { id: 'platform-rule-shift', tier: 2, name: '平台规则突变', description: '主要渠道平台调整流量分发规则。',
+    effectLines: ['持续 3 个月', '收入 -15%', '维持费 +12%'], incomeMultiplier: 0.85, maintenanceMultiplier: 1.12 },
+
+  // ===== Tier 3 (第 3 年): 高度压力 =====
+  { id: 'giant-entry', tier: 3, name: '巨头入场', description: '互联网巨头宣布进入本赛道，资本与流量碾压。',
+    effectLines: ['持续 3 个月', '收入 -25%', '维持费 +20%'], incomeMultiplier: 0.75, maintenanceMultiplier: 1.20 },
+  { id: 'regulator-warning', tier: 3, name: '监管约谈', description: '主管部门约谈高管，要求整改业务模式。',
+    effectLines: ['持续 3 个月', '维持费 +35%', 'AP -1'], incomeMultiplier: 1.0, maintenanceMultiplier: 1.35, apDelta: -1 },
+  { id: 'supply-chain-break', tier: 3, name: '供应链断裂', description: '关键供应商断供，交付延期口碑下滑。',
+    effectLines: ['持续 3 个月', '收入 -28%', '维持费 +15%'], incomeMultiplier: 0.72, maintenanceMultiplier: 1.15 },
+  { id: 'class-action', tier: 3, name: '集体诉讼', description: '用户对产品质量发起集体诉讼。',
+    effectLines: ['持续 3 个月', '收入 -22%', '维持费 +25%'], incomeMultiplier: 0.78, maintenanceMultiplier: 1.25 },
+  { id: 'data-breach', tier: 3, name: '数据泄露门', description: '用户数据泄露登上热搜，品牌受损。',
+    effectLines: ['持续 3 个月', '收入 -30%', '维持费 +15%'], incomeMultiplier: 0.70, maintenanceMultiplier: 1.15 },
+  { id: 'antitrust-probe', tier: 3, name: '行业反垄断', description: '主管部门启动行业反垄断调查。',
+    effectLines: ['持续 3 个月', '收入 -20%', '维持费 +30%', 'AP -1'], incomeMultiplier: 0.80, maintenanceMultiplier: 1.30, apDelta: -1 },
+
+  // ===== Tier 4 (第 4 年): 重度危机 =====
+  { id: 'giant-dim-reduction', tier: 4, name: '跨界巨兽降维', description: '跨界巨头免费策略发起降维打击。',
+    effectLines: ['持续 3 个月', '收入 -35%', '维持费 +20%'], incomeMultiplier: 0.65, maintenanceMultiplier: 1.20 },
+  { id: 'capital-winter', tier: 4, name: '资本寒冬', description: '一级市场冻结，投资人捂紧钱包。',
+    effectLines: ['持续 3 个月', '收入 -30%', '维持费 +35%', 'AP -1'], incomeMultiplier: 0.70, maintenanceMultiplier: 1.35, apDelta: -1 },
+  { id: 'founder-health', tier: 4, name: '创始人健康危机', description: '创始人病休，公司陷入决策真空。',
+    effectLines: ['持续 3 个月', '收入 -32%', '维持费 +25%'], incomeMultiplier: 0.68, maintenanceMultiplier: 1.25 },
+  { id: 'systemic-risk', tier: 4, name: '行业系统性风险', description: '主要客户连锁暴雷，应收账款冻结。',
+    effectLines: ['持续 3 个月', '收入 -38%', '维持费 +20%'], incomeMultiplier: 0.62, maintenanceMultiplier: 1.20 },
+  { id: 'black-swan-pandemic', tier: 4, name: '黑天鹅疫情', description: '突发公共卫生事件冲击线下运营。',
+    effectLines: ['持续 3 个月', '收入 -40%', '维持费 +15%', 'AP -1'], incomeMultiplier: 0.60, maintenanceMultiplier: 1.15, apDelta: -1 },
+  { id: 'geopolitical', tier: 4, name: '地缘冲突', description: '地缘事件冲击海外业务与供应链。',
+    effectLines: ['持续 3 个月', '收入 -35%', '维持费 +30%'], incomeMultiplier: 0.65, maintenanceMultiplier: 1.30 },
+
+  // ===== Tier 5 (第 5 年及以后): 毁灭级 =====
+  { id: 'industry-crash', tier: 5, name: '行业整体崩盘', description: '行业泡沫破裂，估值集体腰斩。',
+    effectLines: ['持续 3 个月', '收入 -45%', '维持费 +40%', 'AP -2'], incomeMultiplier: 0.55, maintenanceMultiplier: 1.40, apDelta: -2 },
+  { id: 'regulator-crackdown', tier: 5, name: '监管全面收紧', description: '行业新政落地，大量业务被迫下线。',
+    effectLines: ['持续 3 个月', '收入 -50%', '维持费 +30%', 'AP -1'], incomeMultiplier: 0.50, maintenanceMultiplier: 1.30, apDelta: -1 },
+  { id: 'tech-disruption', tier: 5, name: '颠覆性技术革命', description: '新技术宣告旧范式过时，护城河蒸发。',
+    effectLines: ['持续 3 个月', '收入 -48%', '维持费 +35%'], incomeMultiplier: 0.52, maintenanceMultiplier: 1.35 },
+  { id: 'market-ban', tier: 5, name: '主要市场禁入', description: '核心市场政策禁入，收入断崖。',
+    effectLines: ['持续 3 个月', '收入 -55%', '维持费 +25%'], incomeMultiplier: 0.45, maintenanceMultiplier: 1.25 },
+  { id: 'patent-litigation', tier: 5, name: '关键专利诉讼', description: '核心专利被起诉，禁售令悬顶。',
+    effectLines: ['持续 3 个月', '收入 -42%', '维持费 +50%', 'AP -2'], incomeMultiplier: 0.58, maintenanceMultiplier: 1.50, apDelta: -2 },
+  { id: 'gray-rhino', tier: 5, name: '灰犀牛事件', description: '众所周知却被忽视的风险终于爆发。',
+    effectLines: ['持续 3 个月', '收入 -50%', '维持费 +45%', 'AP -2'], incomeMultiplier: 0.50, maintenanceMultiplier: 1.45, apDelta: -2 },
+]
+
+export function getMajorEventTier(elapsedMonthsAtTrigger) {
+  // 第 12 月触发 → 第 1 年 → tier 1；第 24 月 → tier 2；最高 tier 5
+  return Math.max(1, Math.min(5, Math.ceil(elapsedMonthsAtTrigger / 12)))
+}
+
+function pickMajorEvent(rng, tier = 1) {
+  const pool = MAJOR_EVENTS.filter((e) => e.tier === tier)
+  const base = pool.length ? randomItem(pool, rng) : randomItem(MAJOR_EVENTS, rng)
+  return { ...base, remainingMonths: 3 }
+}
+
 /**
- * 估值公式 (v4 方案 B)
- *   V = cash × 1
- *     + (cardAssetSum + bmAssetSum) × 2
- *     + 最近 3 月平均正利润 × 4
+ * 计算下个月的 majorEvent / upcomingMajorEvent / monthsUntilMajor
+ * - 触发月（elapsedMonths % 12 === 0）: 启用预先抽好的预告 boss（若有），否则即时抽
+ * - 否则若 majorEvent 仍在持续: remainingMonths - 1
+ * - 否则距下次触发 ≤ 3 个月: 提前抽好 upcomingMajorEvent，让 UI 显示预告与倒计时
+ */
+function computeNextMajorEvent(state, elapsedMonths, rng) {
+  const shouldStartMajorEvent = elapsedMonths > 0 && elapsedMonths % 12 === 0
+  let upcoming = state.upcomingMajorEvent ?? null
+  let major
+  if (shouldStartMajorEvent) {
+    const tier = getMajorEventTier(elapsedMonths)
+    const base = upcoming ?? pickMajorEvent(rng, tier)
+    major = { ...base, remainingMonths: 3 }
+    upcoming = null
+  } else if (state.majorEvent?.remainingMonths > 1) {
+    major = { ...state.majorEvent, remainingMonths: state.majorEvent.remainingMonths - 1 }
+  } else {
+    major = null
+  }
+  const monthsUntilMajor = major ? 0 : getMonthsUntilMajorEvent(elapsedMonths)
+  if (!major && monthsUntilMajor > 0 && monthsUntilMajor <= 3 && !upcoming) {
+    upcoming = pickMajorEvent(rng, getMajorEventTier(elapsedMonths + monthsUntilMajor))
+  }
+  return { nextMajorEvent: major, nextUpcomingMajorEvent: upcoming, monthsUntilMajor }
+}
+
+function pickPromotionRewardCard(stageId, rng) {
+  const poolByStage = [
+    { maxStage: 3, rarities: ['rare'] },
+    { maxStage: 6, rarities: ['rare', 'elite'] },
+    { maxStage: 8, rarities: ['elite', 'epic'] },
+    { maxStage: 99, rarities: ['epic', 'legendary'] },
+  ]
+  const spec = poolByStage.find((item) => stageId <= item.maxStage) ?? poolByStage[0]
+  const pool = CARD_TEMPLATES.filter((card) => (
+    card.type === 'emp'
+    && spec.rarities.includes(card.rarity)
+    && card.tier !== '创始人'
+    && card.inRecruitPool !== false
+    && card.unlockLevel <= stageId
+  ))
+  if (!pool.length) return null
+  return randomItem(pool, rng).id
+}
+
+function getMonthsUntilMajorEvent(elapsedMonths = 0) {
+  const offset = elapsedMonths % 12
+  return offset === 0 ? 12 : 12 - offset
+}
+
+function getCombinedEvent(state) {
+  const major = state.majorEvent?.remainingMonths > 0 ? state.majorEvent : null
+  if (!major) return state.event
+  return {
+    ...state.event,
+    name: `${state.event.name} + ${major.name}`,
+    incomeMultiplier: (state.event.incomeMultiplier ?? 1) * (major.incomeMultiplier ?? 1),
+    maintenanceMultiplier: (state.event.maintenanceMultiplier ?? 1) * (major.maintenanceMultiplier ?? 1),
+    apDelta: (state.event.apDelta ?? 0) + (major.apDelta ?? 0),
+    drawBonus: (state.event.drawBonus ?? 0) + (major.drawBonus ?? 0),
+    handDelta: (state.event.handDelta ?? 0) + (major.handDelta ?? 0),
+    handLimitDelta: (state.event.handLimitDelta ?? 0) + (major.handLimitDelta ?? 0),
+    deptBoost: { ...(state.event.deptBoost ?? {}), ...(major.deptBoost ?? {}) },
+  }
+}
+
+/**
+ * 估值公式 (v4 roguelike balance)
+ *   V = cash × 0.35
+ *     + (cardAssetSum + bmAssetSum) × 1.4
+ *     + 最近 3 月平均正利润 × 5
  *
  * - 现金权重大: 玩家有动力守现金
  * - 资产权重 2 倍: 让卡牌构筑在中后期仍有意义
  * - 最近 3 月平均利润 ×4: 保留增长奖励，但避免单月爆发直接打穿多个阶段
  */
 export function computeValuation(state) {
-  const cashValue = Math.max(0, state.cash)
+  const cashValue = Math.max(0, state.cash) * 0.35
 
   // Card asset value
   const allCards = getAllCards(state)
@@ -272,13 +443,13 @@ export function computeValuation(state) {
     }
   }
 
-  const assetValue = (cardAssetSum + bmAssetSum) * 2
+  const assetValue = (cardAssetSum + bmAssetSum) * 1.4
   const profitSamples = (state.profitHistory?.length ? state.profitHistory.slice(-3) : [state.lastMonthProfit ?? 0])
     .map((profit) => Math.max(0, profit ?? 0))
   const avgProfit = profitSamples.length
     ? profitSamples.reduce((sum, profit) => sum + profit, 0) / profitSamples.length
     : 0
-  const profitValue = avgProfit * 4
+  const profitValue = avgProfit * 5
 
   return Math.round(cashValue + assetValue + profitValue)
 }
@@ -619,43 +790,46 @@ export function autoDeployActiveLine(state) {
 
   const bmStats = computeBusinessModelStats(state)
   
-  let bestSlots = [...activeLine.slots]
-  let bestOutput = -1
+  const beamWidth = 64
+  const cardHeuristic = (card) => {
+    const effectWeight = (card.effects?.length ?? 0) * 12 + (card.affixEffects?.length ?? 0) * 8
+    const ap = Math.max(1, card.ap ?? 1)
+    return ((card.baseOutput ?? 0) + effectWeight) / ap
+  }
+  const candidates = [...C].sort((a, b) => cardHeuristic(b) - cardHeuristic(a)).slice(0, 10)
 
-  function permute(slotIndex, currentSlots, usedUids) {
-    if (slotIndex === 5) {
-      const simulatedHand = C.filter(c => !usedUids.has(c.uid))
-      const tempState = { ...state, hand: simulatedHand }
-      const limit = getEffectiveApLimit(tempState, currentSlots)
-      const ap = getLineAp(currentSlots, bmStats)
-      if (ap <= limit) {
-        const out = computeLineOutput(currentSlots, { bmStats, event: state.event, hand: simulatedHand }).total
-        if (out > bestOutput) {
-          bestOutput = out
-          bestSlots = [...currentSlots]
-        }
+  let beam = [{ slots: [null, null, null, null, null], used: new Set(), score: 0 }]
+  for (let slotIndex = 0; slotIndex < GAME_CONFIG.lineSlots; slotIndex++) {
+    const expanded = []
+    for (const entry of beam) {
+      expanded.push({
+        slots: entry.slots.map((slot, index) => index === slotIndex ? null : slot),
+        used: new Set(entry.used),
+        score: entry.score,
+      })
+      for (const card of candidates) {
+        if (entry.used.has(card.uid)) continue
+        const slots = entry.slots.map((slot, index) => index === slotIndex ? card : slot)
+        const simulatedHand = C.filter(c => !entry.used.has(c.uid) && c.uid !== card.uid)
+        const tempState = { ...state, hand: simulatedHand }
+        const limit = getEffectiveApLimit(tempState, slots)
+        const ap = getLineAp(slots, bmStats)
+        if (ap > limit) continue
+        const preview = computeLineOutput(slots, { bmStats, event: state.event, hand: simulatedHand }).total
+        expanded.push({
+          slots,
+          used: new Set([...entry.used, card.uid]),
+          score: preview,
+        })
       }
-      return
     }
-
-    // Option 1: Place null (empty)
-    currentSlots[slotIndex] = null
-    permute(slotIndex + 1, currentSlots, usedUids)
-
-    // Option 2: Place one of the unused cards
-    for (let i = 0; i < C.length; i++) {
-      const card = C[i]
-      if (!usedUids.has(card.uid)) {
-        usedUids.add(card.uid)
-        currentSlots[slotIndex] = card
-        permute(slotIndex + 1, currentSlots, usedUids)
-        usedUids.delete(card.uid)
-      }
-    }
-    currentSlots[slotIndex] = null
+    beam = expanded
+      .sort((a, b) => b.score - a.score)
+      .slice(0, beamWidth)
   }
 
-  permute(0, [null, null, null, null, null], new Set())
+  const best = beam[0] ?? { slots: activeLine.slots }
+  const bestSlots = best.slots
 
   // Next hand consists of cards in C that were NOT chosen for the slots
   const nextHand = C.filter(card => !bestSlots.some(s => s && s.uid === card.uid))
@@ -710,17 +884,18 @@ export function resolveMonth(state, rng = Math.random) {
     return line
   })
 
+  const monthEvent = getCombinedEvent(state)
   const bmStats = computeBusinessModelStats(state)
   const activeProducingLines = workingLines.filter((line) => line.status === 'working' && line.slots.some(Boolean))
   const lineReports = activeProducingLines.map((line) => ({
     lineId: line.id,
-    ...computeLineOutput(line.slots, { event: state.event, bmStats, hand: state.hand }),
+    ...computeLineOutput(line.slots, { event: monthEvent, bmStats, hand: state.hand }),
   }))
 
   const rawIncome = lineReports.reduce((sum, report) => sum + report.total, 0)
 
   // Event income multiplier 钳到 [0.8, 1.4] 抑制极端波动
-  const eventIncomeMult = Math.max(0.8, Math.min(1.4, state.event.incomeMultiplier ?? 1))
+  const eventIncomeMult = Math.max(0.8, Math.min(1.4, monthEvent.incomeMultiplier ?? 1))
   const eventIncome = Math.round(rawIncome * eventIncomeMult)
 
   // Calculate Monthly Burn
@@ -734,7 +909,7 @@ export function resolveMonth(state, rng = Math.random) {
     monthlyBurn = 0
   } else {
     // Event maintenanceMultiplier 钳到 [0.7, 1.6]
-    const eventMaintMult = Math.max(0.7, Math.min(1.6, state.event.maintenanceMultiplier ?? 1))
+    const eventMaintMult = Math.max(0.7, Math.min(1.6, monthEvent.maintenanceMultiplier ?? 1))
     monthlyBurn = Math.round(monthlyBurn * eventMaintMult)
     monthlyBurn = Math.max(0, Math.round(monthlyBurn * (1 - bmStats.maintenanceDiscount)))
   }
@@ -757,7 +932,7 @@ export function resolveMonth(state, rng = Math.random) {
   // 现金转化率 (CCR): 正利润按比例入 cash；负利润全额扣减
   const ccr = getCashConversionRate(state.stage.id, bmStats.ccrBonus ?? 0)
   const cashGain = profit >= 0 ? Math.round(profit * ccr) : profit
-  const monthlyOpCost = getMonthlyOperationCost(state.stage.id)
+  const monthlyOpCost = getMonthlyOperationCost(state.stage.id) + computeMonthlyScalePressure(state)
   let finalCash = state.cash + cashGain - monthlyOpCost
 
   // Temp state for valuation (cash 已更新，lastMonthProfit 记录本月利润)
@@ -840,9 +1015,18 @@ export function resolveMonth(state, rng = Math.random) {
   // Stage promotion check
   const currentStageIndex = STAGES.findIndex(s => s.id === state.stage.id)
   const nextStage = STAGES[currentStageIndex + 1]
-  
-  const nextConsecutiveAboveThreshold = nextStage && nextV >= nextStage.threshold ? 1 : 0
-  const isStagePromoted = !!(nextStage && nextV >= nextStage.threshold)
+  const nextMonthNum = state.month + 1
+  let nextYear = state.year
+  let nextMonth = nextMonthNum
+  if (nextMonthNum > 12) {
+    nextMonth = 1
+    nextYear += 1
+  }
+  const elapsedMonths = (state.elapsedMonths ?? 0) + 1
+  const isQuarterlyBoard = elapsedMonths > 0 && elapsedMonths % 3 === 0
+
+  const nextConsecutiveAboveThreshold = nextStage && nextV >= nextStage.threshold ? (state.consecutiveAboveThreshold ?? 0) + 1 : 0
+  const isStagePromoted = !!(isQuarterlyBoard && nextStage && nextV >= nextStage.threshold)
 
   let result = null
   if (isStagePromoted) {
@@ -859,19 +1043,20 @@ export function resolveMonth(state, rng = Math.random) {
         stagePromotion: true,
         nextStage: nextStage,
         reason: '估值达标',
+        boardMeeting: true,
         bestMonth: Math.max(eventIncome, state.lastSettlement?.income ?? 0),
       }
     }
+  } else if (isQuarterlyBoard) {
+    result = {
+      passed: true,
+      boardMeeting: true,
+      quarterlyReview: true,
+      reason: '季度董事会',
+      nextStage: state.stage,
+      bestMonth: Math.max(eventIncome, state.lastSettlement?.income ?? 0),
+    }
   }
-
-  const nextMonthNum = state.month + 1
-  let nextYear = state.year
-  let nextMonth = nextMonthNum
-  if (nextMonthNum > 12) {
-    nextMonth = 1
-    nextYear += 1
-  }
-  const elapsedMonths = (state.elapsedMonths ?? 0) + 1
 
   if (result) {
     return accept({
@@ -895,7 +1080,7 @@ export function resolveMonth(state, rng = Math.random) {
       }),
       result,
       log: [
-        result.gameWon ? `行业第一！终极胜利达成！` : `达成阶段晋升: ${nextStage.name}`,
+        result.gameWon ? `行业第一！终极胜利达成！` : (result.stagePromotion ? `达成阶段晋升: ${nextStage.name}` : '季度董事会召开'),
         `第 ${state.month} 月利润 ¥${profit} (CCR ${Math.round(ccr * 100)}% → +¥${cashGain}), 运营 -¥${monthlyOpCost}`,
         ...state.log,
       ].slice(0, 7),
@@ -904,7 +1089,8 @@ export function resolveMonth(state, rng = Math.random) {
 
   // Standard month transition
   const isNewQuarter = (nextMonth - 1) % 3 === 0
-  const nextEvent = isNewQuarter ? pickEvent(rng) : state.event
+  const { nextMajorEvent, nextUpcomingMajorEvent, monthsUntilMajor } = computeNextMajorEvent(state, elapsedMonths, rng)
+  const nextEvent = isNewQuarter ? pickEventForStage(state.stage.id, rng, elapsedMonths) : state.event
   const nextDriftDirection = isNewQuarter ? pickRandomDriftDirection(rng) : (state.driftDirection || 'right-up')
   const apHandRich = bmStats.apIfHandRichEnabled && rescuedState.hand.length >= 6 ? 1 : 0
 
@@ -918,7 +1104,8 @@ export function resolveMonth(state, rng = Math.random) {
   const comboApBonus = lineReports.reduce((s, r) => s + (r.execMeetingApBonus ?? 0), 0)
 
   // v4 流派质变 O 流派下月 AP 加成 + combo 高管会议下月 AP +3
-  const nextApAvailable = Math.max(1, GAME_CONFIG.baseAp + apCarry + (nextEvent.apDelta ?? 0) + apHandRich + deptMassO + comboApBonus)
+  const nextEventContext = nextMajorEvent ? getCombinedEvent({ ...rescuedState, event: nextEvent, majorEvent: nextMajorEvent }) : nextEvent
+  const nextApAvailable = Math.max(1, GAME_CONFIG.baseAp + apCarry + (nextEventContext.apDelta ?? 0) + apHandRich + deptMassO + comboApBonus)
 
   const isFounderRInHand = rescuedState.hand.some(c => c.id === 'EMP_FOUNDER_R')
   const isFounderRInSlots = activeLine && activeLine.slots.some(c => c && c.id === 'EMP_FOUNDER_R')
@@ -934,11 +1121,11 @@ export function resolveMonth(state, rng = Math.random) {
     isScientistActive = true
   }
 
-  const baseHandLimit = GAME_CONFIG.handLimit + bmStats.handLimitBonus + (nextEvent.handLimitDelta ?? 0) + deptMassR.handLimitBonus
+  const baseHandLimit = GAME_CONFIG.handLimit + bmStats.handLimitBonus + (nextEventContext.handLimitDelta ?? 0) + deptMassR.handLimitBonus
   const effectiveHandLimit = isScientistActive ? 10 : baseHandLimit
 
-  const handAdjusted = applyEventHandDelta(rescuedState.hand, drawPool, nextEvent.handDelta ?? 0, rng)
-  const drawPerMonth = GAME_CONFIG.drawPerMonth + bmStats.drawBonus + (nextEvent.drawBonus ?? 0) + scientistDrawBonus + rDeptDrawBonus + deptMassR.drawBonus + deptMassR.instantDraw + comboDrawBonus
+  const handAdjusted = applyEventHandDelta(rescuedState.hand, drawPool, nextEventContext.handDelta ?? 0, rng)
+  const drawPerMonth = GAME_CONFIG.drawPerMonth + bmStats.drawBonus + (nextEventContext.drawBonus ?? 0) + scientistDrawBonus + rDeptDrawBonus + deptMassR.drawBonus + deptMassR.instantDraw + comboDrawBonus
   const drawCount = Math.min(drawPerMonth, Math.max(0, effectiveHandLimit - handAdjusted.hand.length))
   const drawn = drawCards(drawCount, handAdjusted.drawPile)
   const nextHand = sortHandDefault([...handAdjusted.hand, ...drawn.drawn.map((card) => ({ ...card, location: 'hand' }))])
@@ -982,19 +1169,19 @@ export function resolveMonth(state, rng = Math.random) {
     })
   }
 
-  // v4 PR4 高光时刻：单月利润 ≥ next stage threshold × 30%，每阶段最多触发 2 次
+  // v4 PR4 高光时刻：单月利润 ≥ next stage threshold × 45%，每阶段最多触发 1 次
   // 注: currentStageIndex / nextStage 在前面已声明过，复用同一个 nextStage
   const nextStageForHighlight = nextStage
   const highlightTrigger = nextStageForHighlight
-    && (state.highlightCount ?? 0) < 2
-    && profit >= nextStageForHighlight.threshold * 0.3
+    && (state.highlightCount ?? 0) < 1
+    && profit >= nextStageForHighlight.threshold * 0.45
   let nextHighlightPending = state.highlightPending ?? null
   let nextHighlightCount = state.highlightCount ?? 0
   let highlightLog = ''
   if (highlightTrigger && !nextHighlightPending) {
     nextHighlightPending = pickHighlightCandidates(state.stage.id, rng)
     nextHighlightCount += 1
-    highlightLog = `🎉 高光时刻 ${nextHighlightCount}/2：本月利润 ¥${profit} ≥ ${Math.ceil(nextStageForHighlight.threshold * 0.3)}，请从 3 张候选中挑选 1 张免费加入牌堆`
+    highlightLog = `🎉 高光时刻 ${nextHighlightCount}/1：本月利润 ¥${profit} ≥ ${Math.ceil(nextStageForHighlight.threshold * 0.45)}，请从 3 张候选中挑选 1 张免费加入牌堆`
   }
 
   const finalState = {
@@ -1005,6 +1192,9 @@ export function resolveMonth(state, rng = Math.random) {
     valuation: nextV,
     highestValuation: nextHighestValuation,
     event: nextEvent,
+    majorEvent: nextMajorEvent,
+    upcomingMajorEvent: nextUpcomingMajorEvent,
+    majorEventCountdown: monthsUntilMajor,
     driftDirection: nextDriftDirection,
     cash: finalCashWithEvent,
     apCarry,
@@ -1033,21 +1223,22 @@ export function resolveMonth(state, rng = Math.random) {
       `第 ${state.month} 月利润 ¥${profit} (CCR ${Math.round(ccr * 100)}% → +¥${cashGain}), 运营 -¥${monthlyOpCost}`,
       returned.length ? `${returned.length} 张卡冷却结束回到牌堆` : '无冷却回归',
       `第 ${nextMonth} 月事件: ${nextEvent.name}`,
+      nextMajorEvent ? `⚠️ 年度大事件开始: ${nextMajorEvent.name}（持续 3 个月）` : (nextUpcomingMajorEvent ? `⚠️ ${monthsUntilMajor} 个月后大事件: ${nextUpcomingMajorEvent.name}` : (monthsUntilMajor <= 6 ? `年度大事件倒计时: ${monthsUntilMajor} 个月` : '')),
       ...state.log,
-    ].slice(0, 7),
+    ].filter(Boolean).slice(0, 7),
   }
 
   return accept(finalState)
 }
 
 /**
- * v4 PR4: 从当前阶段可解锁的 elite/epic 员工卡池中随机抽 3 张候选
+ * v4 PR4: 从当前阶段可解锁的 rare/elite 员工卡池中随机抽 3 张候选
  */
 function pickHighlightCandidates(stageId, rng) {
-  // 高光奖励池：所有 elite/epic 员工卡（不限 unlockLevel，因为触发条件本身已严苛）
   const pool = CARD_TEMPLATES.filter(c =>
     c.type === 'emp' &&
-    (c.rarity === 'elite' || c.rarity === 'epic') &&
+    (c.rarity === 'rare' || c.rarity === 'elite') &&
+    c.unlockLevel <= Math.max(1, stageId + 1) &&
     c.tier !== '创始人' &&
     c.inRecruitPool !== false
   )
@@ -1089,15 +1280,16 @@ export function dismissHighlightCard(state) {
 
 export function computeBattlePreview(state) {
   const bmStats = computeBusinessModelStats(state)
+  const eventContext = getCombinedEvent(state)
   const reports = state.lines
     .filter((line) => line.status === 'working' || (line.id === state.activeLineId && line.slots.some(Boolean)))
     .map((line) => ({
       lineId: line.id,
       status: line.status,
-      ...computeLineOutput(line.slots, { event: state.event, bmStats, hand: state.hand }),
+      ...computeLineOutput(line.slots, { event: eventContext, bmStats, hand: state.hand }),
     }))
   const rawIncome = reports.reduce((sum, report) => sum + report.total, 0)
-  const eventIncomeMult = Math.max(0.8, Math.min(1.4, state.event.incomeMultiplier ?? 1))
+  const eventIncomeMult = Math.max(0.8, Math.min(1.4, eventContext.incomeMultiplier ?? 1))
   const eventIncome = Math.round(rawIncome * eventIncomeMult)
 
   // Calculate preview monthly burn (与 resolveMonth 一致的钳位)
@@ -1110,7 +1302,7 @@ export function computeBattlePreview(state) {
   if (maintenanceWaived) {
     monthlyBurn = 0
   } else {
-    const eventMaintMult = Math.max(0.7, Math.min(1.6, state.event.maintenanceMultiplier ?? 1))
+    const eventMaintMult = Math.max(0.7, Math.min(1.6, eventContext.maintenanceMultiplier ?? 1))
     monthlyBurn = Math.round(monthlyBurn * eventMaintMult)
     monthlyBurn = Math.max(0, Math.round(monthlyBurn * (1 - bmStats.maintenanceDiscount)))
   }
@@ -1118,7 +1310,7 @@ export function computeBattlePreview(state) {
   const profit = eventIncome - monthlyBurn
   const ccr = getCashConversionRate(state.stage.id, bmStats.ccrBonus ?? 0)
   const cashGain = profit >= 0 ? Math.round(profit * ccr) : profit
-  const monthlyOpCost = getMonthlyOperationCost(state.stage.id)
+  const monthlyOpCost = getMonthlyOperationCost(state.stage.id) + computeMonthlyScalePressure(state)
 
   return {
     reports,
@@ -1370,6 +1562,61 @@ function drawCards(count, drawPile) {
 function pickEvent(rng) {
   return randomItem(EVENTS, rng)
 }
+
+const GENTLE_RISK_IDS = new Set(['team-conflict', 'team-burnout', 'key-employee-quit', 'rd-winter', 'customer-churn', 'policy-tighten', 'receivable-delay', 'cloud-bill-spike', 'hiring-misfire', 'price-war'])
+const MID_RISK_IDS = new Set(['cash-crunch', 'cashflow-tight', 'black-swan'])
+const LATE_RISK_IDS = new Set(['media-crisis'])
+const SOFT_UPSIDE_IDS = new Set(['customer-consulting', 'hiring-season', 'industry-tailwind', 'media-spotlight', 'campus-season', 'remote-work', 'team-building', 'customer-referral', 'process-automation', 'product-review', 'channel-rebate'])
+const BIG_UPSIDE_IDS = new Set(['gov-subsidy', 'big-client', 'rd-bonanza', 'competitor-collapse', 'industry-award', 'vc-tailwind', 'internal-startup', 'investor-visit', 'overtime-season', 'year-end-bonus', 'industry-conference', 'kol-fire', 'angel-capital'])
+
+function getStageEventWeight(event, stageId, elapsedMonths = 0) {
+  const isRisk = event.tone === '风险'
+  const isUpside = event.tone === '增益' || event.tone === '机会'
+  let timeWeight = 1
+  if (isRisk) {
+    if (elapsedMonths < 4) timeWeight = 0.55
+    else if (elapsedMonths < 7) timeWeight = 0.9
+    else if (elapsedMonths < 13) timeWeight = 1.25
+    else if (elapsedMonths < 25) timeWeight = 1.15
+    else timeWeight = 0.68
+  } else if (isUpside) {
+    if (elapsedMonths < 4) timeWeight = 1.15
+    else if (elapsedMonths < 13) timeWeight = 0.95
+    else if (elapsedMonths < 25) timeWeight = 1
+    else timeWeight = 1.35
+  }
+
+  if (event.tone === '风险') {
+    if (GENTLE_RISK_IDS.has(event.id)) return (stageId <= 2 ? 0.55 : stageId <= 4 ? 1.15 : 1.35) * timeWeight
+    if (MID_RISK_IDS.has(event.id)) return (stageId <= 2 ? 0.12 : stageId <= 4 ? 0.75 : 1.25) * timeWeight
+    if (LATE_RISK_IDS.has(event.id)) return (stageId <= 3 ? 0.04 : stageId <= 5 ? 0.55 : 1.3) * timeWeight
+    return (stageId <= 2 ? 0.35 : 1) * timeWeight
+  }
+  if (event.tone === '增益') {
+    if (SOFT_UPSIDE_IDS.has(event.id)) return (stageId <= 2 ? 1.6 : stageId <= 5 ? 1.15 : 0.85) * timeWeight
+    if (BIG_UPSIDE_IDS.has(event.id)) return (stageId <= 2 ? 0.75 : stageId <= 5 ? 1.1 : 0.9) * timeWeight
+    return timeWeight
+  }
+  if (event.tone === '机会') {
+    if (stageId <= 2) return 1.25 * timeWeight
+    if (stageId <= 5) return 1.05 * timeWeight
+    return 0.85 * timeWeight
+  }
+  return 1
+}
+
+function pickEventForStage(stageId, rng, elapsedMonths = 0) {
+  const weighted = EVENTS
+    .map((event) => ({ event, weight: getStageEventWeight(event, stageId, elapsedMonths) }))
+    .filter((entry) => entry.weight > 0)
+  const total = weighted.reduce((sum, entry) => sum + entry.weight, 0)
+  let roll = rng() * total
+  for (const entry of weighted) {
+    roll -= entry.weight
+    if (roll <= 0) return entry.event
+  }
+  return weighted[weighted.length - 1]?.event ?? pickEvent(rng)
+}
 function applyEventHandDelta(hand, drawPile, delta, rng) {
   if (!delta) return { hand, drawPile }
   if (delta > 0) {
@@ -1614,13 +1861,10 @@ function reject(state, message) {
 // ============================================================================
 
 const SHOP_PROBS = {
-  legendary: 0.4,
-  packC: 0.8,
-  packD: 0.6,
-  packE: 0.4,
+  premiumCard: 0.38,
 }
 
-const LEGENDARY_PITY_THRESHOLD = 3 // 连续 3 关未刷出 → 第 4 关 60%
+const LEGENDARY_PITY_THRESHOLD = 5 // 连续 5 关未刷出 → 第 6 关保底概率提高
 
 /**
  * 汇总当前激活商业模式的统计 buff
@@ -1674,22 +1918,33 @@ export function computeBusinessModelStats(state) {
  * 生成事件 + 商店刷出 + 商学院刷出
  */
 export function enterIntermission(state, rng = Math.random) {
-  if (!state.result?.stagePromotion) return reject(state, '未达晋升条件，无法进入董事会')
+  if (!state.result?.boardMeeting && !state.result?.stagePromotion) return reject(state, '当前没有董事会议程')
   if (state.intermissionState) return reject(state, '已在董事会会议中')
   
-  const nextStage = state.result.nextStage
-  if (!nextStage) return reject(state, '下阶段无效')
+  const isPromotion = !!state.result.stagePromotion
+  const nextStage = isPromotion ? state.result.nextStage : state.stage
+  if (!nextStage) return reject(state, '阶段无效')
 
   // v4: BM levelEndBudgetBonus 提升 entryGrant (BM_12/34/35/36 = 10-15%, BM_38 = 25%, BM_39 = 30%)
   const bmStats = computeBusinessModelStats(state)
-  const grantedBudget = Math.round(nextStage.entryGrant * (1 + (bmStats.levelEndBudgetBonus ?? 0)))
+  const grantedBudget = isPromotion
+    ? Math.round(nextStage.entryGrant * (1 + (bmStats.levelEndBudgetBonus ?? 0)))
+    : 0
+  const rewardCardId = isPromotion ? pickPromotionRewardCard(nextStage.id, rng) : null
   const event = randomItem(BOARD_EVENTS, rng)
   const shopRoll = rollShopRoll(nextStage.id, state.legendaryRollStreak, rng)
   const schoolRoll = rollSchoolRoll(nextStage.id, state.activeBusinessModels, rng)
+  const nextMods = rewardCardId
+    ? {
+        ...state.nextLevelModifiers,
+        pendingCards: [...(state.nextLevelModifiers.pendingCards ?? []), rewardCardId],
+      }
+    : state.nextLevelModifiers
 
   return accept({
     ...state,
     cash: state.cash + grantedBudget,
+    nextLevelModifiers: nextMods,
     intermissionState: {
       phase: 'event',
       event,
@@ -1707,10 +1962,16 @@ export function enterIntermission(state, rng = Math.random) {
       fireActionsCount: 0,
       cardActionLog: {},
       grantedBudget,
+      rewardCardId,
+      isPromotion,
       nextStageId: nextStage.id,
-      logTrail: [`晋升至 ${nextStage.name}，获得投资人注资 ¥${grantedBudget}`],
+      logTrail: [
+        isPromotion
+          ? `晋升至 ${nextStage.name}，获得投资人注资 ¥${grantedBudget}${rewardCardId ? '，并获得 1 张稀有以上员工卡' : ''}`
+          : '季度董事会召开，本次无融资升级',
+      ],
     },
-    log: [`💼 进入阶段晋升董事会会议: ${nextStage.name}`, ...state.log].slice(0, 7),
+    log: [`💼 进入董事会会议: ${isPromotion ? nextStage.name : `${state.stage.name} 季度会`}`, ...state.log].slice(0, 7),
   })
 }
 
@@ -2098,14 +2359,16 @@ export function exitIntermission(state, rng = Math.random) {
   const elapsedMonths = (state.elapsedMonths ?? 0) + 1
 
   const isNewQuarter = (nextMonth - 1) % 3 === 0
-  const nextEvent = isNewQuarter ? pickEvent(rng) : state.event
+  const { nextMajorEvent, nextUpcomingMajorEvent, monthsUntilMajor } = computeNextMajorEvent(state, elapsedMonths, rng)
+  const nextEvent = isNewQuarter ? pickEventForStage(nextStage.id, rng, elapsedMonths) : state.event
+  const nextEventContext = nextMajorEvent ? getCombinedEvent({ ...state, event: nextEvent, majorEvent: nextMajorEvent }) : nextEvent
   const nextDriftDirection = isNewQuarter ? pickRandomDriftDirection(rng) : (state.driftDirection || 'right-up')
   // Temporarily apply next active BMs to state to compute correct BM stats for draw count/AP
   const tempState = { ...state, activeBusinessModels: rechargedBMs }
   const bmStats = computeBusinessModelStats(tempState)
 
   const apHandRich = bmStats.apIfHandRichEnabled && state.hand.length >= 6 ? 1 : 0
-  const nextApAvailable = Math.max(1, GAME_CONFIG.baseAp + state.apCarry + (nextEvent.apDelta ?? 0) + apHandRich)
+  const nextApAvailable = Math.max(1, GAME_CONFIG.baseAp + state.apCarry + (nextEventContext.apDelta ?? 0) + apHandRich)
 
   const isFounderRInHand = state.hand.some(c => c.id === 'EMP_FOUNDER_R')
   const lastSettlement = state.lastSettlement
@@ -2122,11 +2385,11 @@ export function exitIntermission(state, rng = Math.random) {
     isScientistActive = true
   }
 
-  const baseHandLimit = GAME_CONFIG.handLimit + bmStats.handLimitBonus + (nextEvent.handLimitDelta ?? 0)
+  const baseHandLimit = GAME_CONFIG.handLimit + bmStats.handLimitBonus + (nextEventContext.handLimitDelta ?? 0)
   const effectiveHandLimit = isScientistActive ? 10 : baseHandLimit
 
-  const handAdjusted = applyEventHandDelta(state.hand, nextDrawPile, nextEvent.handDelta ?? 0, rng)
-  const drawPerMonth = GAME_CONFIG.drawPerMonth + bmStats.drawBonus + (nextEvent.drawBonus ?? 0) + scientistDrawBonus
+  const handAdjusted = applyEventHandDelta(state.hand, nextDrawPile, nextEventContext.handDelta ?? 0, rng)
+  const drawPerMonth = GAME_CONFIG.drawPerMonth + bmStats.drawBonus + (nextEventContext.drawBonus ?? 0) + scientistDrawBonus
   const drawCount = Math.min(drawPerMonth, Math.max(0, effectiveHandLimit - handAdjusted.hand.length))
   const drawn = drawCards(drawCount, handAdjusted.drawPile)
   const nextHand = sortHandDefault([...handAdjusted.hand, ...drawn.drawn.map((card) => ({ ...card, location: 'hand' }))])
@@ -2141,10 +2404,14 @@ export function exitIntermission(state, rng = Math.random) {
   return accept({
     ...state,
     stage: nextStage,
+    stageStartedElapsedMonths: im.isPromotion ? elapsedMonths : (state.stageStartedElapsedMonths ?? 0),
     year: nextYear,
     month: nextMonth,
     elapsedMonths,
     event: nextEvent,
+    majorEvent: nextMajorEvent,
+    upcomingMajorEvent: nextUpcomingMajorEvent,
+    majorEventCountdown: monthsUntilMajor,
     driftDirection: nextDriftDirection,
     apAvailable: nextApAvailable,
     hand: nextHand,
@@ -2159,10 +2426,11 @@ export function exitIntermission(state, rng = Math.random) {
     activeLineId: nextActiveLineId,
     lines: nextLines,
     log: [
-      `🚀 进入阶段: ${nextStage.name} (${nextStage.theme})`,
+      im.isPromotion ? `🚀 进入阶段: ${nextStage.name} (${nextStage.theme})` : `💼 董事会结束: 继续经营 ${nextStage.name}`,
       `第 ${nextMonth} 月开始: ${nextEvent.name}`,
+      nextMajorEvent ? `⚠️ 年度大事件开始: ${nextMajorEvent.name}（持续 3 个月）` : (nextUpcomingMajorEvent ? `⚠️ ${monthsUntilMajor} 个月后大事件: ${nextUpcomingMajorEvent.name}` : (monthsUntilMajor <= 6 ? `年度大事件倒计时: ${monthsUntilMajor} 个月` : '')),
       ...state.log,
-    ].slice(0, 7),
+    ].filter(Boolean).slice(0, 7),
   })
 }
 
@@ -2195,43 +2463,52 @@ function removeCardAcrossPiles(state, uid) {
 // ----- 商店 / 商学院刷新 -----
 
 function rollShopRoll(nextLevelId, legendaryStreak, rng) {
-  const epicTemplates = CARD_TEMPLATES.filter((c) => c.rarity === 'epic' && c.type === 'emp')
-  const epicCard = epicTemplates.length ? createCardInstance(randomItem(epicTemplates, rng).id, 'shop', rng) : null
-  const epicCost = nextLevelId + 8
-
-  const legendaryProb = legendaryStreak >= LEGENDARY_PITY_THRESHOLD ? 0.6 : SHOP_PROBS.legendary
-  const legendaryRoll = rng() < legendaryProb
-  let legendaryCard = null
-  if (legendaryRoll) {
-    const legPool = CARD_TEMPLATES.filter((c) => c.rarity === 'legendary')
-    if (legPool.length) legendaryCard = createCardInstance(randomItem(legPool, rng).id, 'shop', rng)
+  const premiumProb = legendaryStreak >= LEGENDARY_PITY_THRESHOLD
+    ? 0.7
+    : Math.min(0.68, SHOP_PROBS.premiumCard + nextLevelId * 0.035)
+  let epicCard = null
+  let epicCost = 0
+  if (rng() < premiumProb) {
+    const legendaryRoll = rng() < (nextLevelId >= 6 ? 0.18 : 0.06)
+    const pool = legendaryRoll
+      ? CARD_TEMPLATES.filter((c) => c.rarity === 'legendary' && c.type === 'emp' && c.inRecruitPool === false && c.id.startsWith('LEG_'))
+      : CARD_TEMPLATES.filter((c) => c.rarity === 'epic' && c.type === 'emp' && c.inRecruitPool !== false && c.unlockLevel <= nextLevelId)
+    if (pool.length) {
+      epicCard = createCardInstance(randomItem(pool, rng).id, 'shop', rng)
+      epicCost = epicCard.rarity === 'legendary'
+        ? nextLevelId * 10 + 42
+        : nextLevelId * 6 + 20
+    }
   }
-  const legendaryCost = nextLevelId * 4 + 15
+  const legendaryCard = null
+  const legendaryCost = 0
 
-  // 卡包槽位 C/D/E
   const packs = []
-  
-  // 1. 强制将神秘礼包排在第一位 (确保神秘礼包必出且作为 packs[0])
-  const mysteryDef = PACK_DEFINITIONS.find((p) => p.id === 'PACK_MYSTERY')
-  if (mysteryDef) {
-    packs.push({
-      packDef: mysteryDef,
-      cost: mysteryDef.cost,
-      contents: rollPackContents(mysteryDef, nextLevelId, rng)
-    })
-  }
-
-  // 2. 随机滚动另外两个卡包 (对应 slot D/E 概率，排除神秘礼包)
-  const usedTypes = new Set(['PACK_MYSTERY'])
-  const slotProbs = [SHOP_PROBS.packD, SHOP_PROBS.packE]
-  slotProbs.forEach((prob) => {
-    if (rng() >= prob) return
+  const usedTypes = new Set()
+  while (packs.length < 2) {
     const candidatePacks = PACK_DEFINITIONS.filter((p) => !usedTypes.has(p.id))
-    if (!candidatePacks.length) return
-    const pack = randomItem(candidatePacks, rng)
+    if (!candidatePacks.length) break
+    const weighted = candidatePacks.map((pack) => ({
+      pack,
+      weight: pack.id === 'PACK_MYSTERY'
+        ? (nextLevelId >= 5 ? 0.8 : 0.25)
+        : pack.id === 'PACK_ELITE'
+          ? (nextLevelId >= 3 ? 1.15 : 0.65)
+          : 1,
+    }))
+    const total = weighted.reduce((sum, entry) => sum + entry.weight, 0)
+    let roll = rng() * total
+    let pack = weighted[weighted.length - 1].pack
+    for (const entry of weighted) {
+      roll -= entry.weight
+      if (roll <= 0) {
+        pack = entry.pack
+        break
+      }
+    }
     usedTypes.add(pack.id)
     packs.push({ packDef: pack, cost: pack.cost, contents: rollPackContents(pack, nextLevelId, rng) })
-  })
+  }
 
   return { epicCard, epicCost, legendaryCard, legendaryCost, packs }
 }
@@ -2252,21 +2529,23 @@ function rollPackContents(pack, nextLevelId, rng) {
 function pickPackItem(poolType, nextLevelId, rng, existing) {
   const usedIds = new Set(existing.map((it) => it.id || it.bmId))
   const filterUnique = (pool) => pool.filter((c) => !usedIds.has(c.id))
+  const recruitable = (c) => c.inRecruitPool !== false && c.tier !== '创始人'
 
   if (poolType === 'employee_common') {
-    const pool = filterUnique(CARD_TEMPLATES.filter((c) => c.type === 'emp' && c.rarity === 'common' && c.unlockLevel <= nextLevelId))
+    const pool = filterUnique(CARD_TEMPLATES.filter((c) => c.type === 'emp' && c.rarity === 'common' && c.unlockLevel <= nextLevelId && recruitable(c)))
     return pool.length ? randomItem(pool, rng) : CARD_TEMPLATES[0]
   }
   if (poolType === 'employee_elite') {
-    const pool = filterUnique(CARD_TEMPLATES.filter((c) => c.type === 'emp' && c.rarity === 'elite' && c.unlockLevel <= nextLevelId))
-    return pool.length ? randomItem(pool, rng) : randomItem(CARD_TEMPLATES.filter((c) => c.type === 'emp' && c.rarity === 'epic'), rng)
+    const pool = filterUnique(CARD_TEMPLATES.filter((c) => c.type === 'emp' && c.rarity === 'elite' && c.unlockLevel <= nextLevelId && recruitable(c)))
+    const fallback = CARD_TEMPLATES.filter((c) => c.type === 'emp' && c.rarity === 'rare' && c.unlockLevel <= nextLevelId && recruitable(c))
+    return pool.length ? randomItem(pool, rng) : randomItem(fallback, rng)
   }
   if (poolType === 'service') {
-    const pool = filterUnique(CARD_TEMPLATES.filter((c) => c.type === 'srv' && c.unlockLevel <= nextLevelId))
+    const pool = filterUnique(CARD_TEMPLATES.filter((c) => c.type === 'srv' && c.unlockLevel <= nextLevelId && c.inRecruitPool !== false))
     return pool.length ? randomItem(pool, rng) : CARD_TEMPLATES[0]
   }
   if (poolType === 'function') {
-    const pool = filterUnique(CARD_TEMPLATES.filter((c) => c.type === 'fun' && c.unlockLevel <= nextLevelId))
+    const pool = filterUnique(CARD_TEMPLATES.filter((c) => c.type === 'fun' && c.unlockLevel <= nextLevelId && c.inRecruitPool !== false))
     return pool.length ? randomItem(pool, rng) : CARD_TEMPLATES[0]
   }
   if (poolType === 'business_model') {
@@ -2275,12 +2554,13 @@ function pickPackItem(poolType, nextLevelId, rng, existing) {
     return { isBusinessModel: true, bmId: bm.id, bmName: bm.name, bmDescription: bm.description, bmRarity: bm.rarity }
   }
   if (poolType === 'mystery') {
-    // 10% 传奇 / 30% epic / 60% rare
+    // 2% 传奇 / 18% epic / 35% elite / 45% rare
     const r = rng()
     let pool
-    if (r < 0.1) pool = CARD_TEMPLATES.filter((c) => c.rarity === 'legendary')
-    else if (r < 0.4) pool = CARD_TEMPLATES.filter((c) => c.rarity === 'epic' && c.unlockLevel <= nextLevelId)
-    else pool = CARD_TEMPLATES.filter((c) => c.rarity === 'rare' && c.unlockLevel <= nextLevelId)
+    if (r < 0.02) pool = CARD_TEMPLATES.filter((c) => c.rarity === 'legendary' && c.id.startsWith('LEG_'))
+    else if (r < 0.2) pool = CARD_TEMPLATES.filter((c) => c.rarity === 'epic' && c.unlockLevel <= nextLevelId && recruitable(c))
+    else if (r < 0.55) pool = CARD_TEMPLATES.filter((c) => c.rarity === 'elite' && c.unlockLevel <= nextLevelId && recruitable(c))
+    else pool = CARD_TEMPLATES.filter((c) => c.rarity === 'rare' && c.unlockLevel <= nextLevelId && recruitable(c))
     pool = filterUnique(pool)
     return pool.length ? randomItem(pool, rng) : CARD_TEMPLATES[0]
   }

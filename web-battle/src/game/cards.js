@@ -38,24 +38,24 @@ export const LEVELS = [
 ]
 
 export const STAGES = [
-  { id: 1, key: 'angel',   name: '天使轮', threshold: 0,     entryGrant: 30,  theme: '起步' },
-  { id: 2, key: 'seed',    name: '种子轮', threshold: 400,   entryGrant: 50,  theme: '产品验证' },
-  { id: 3, key: 'seriesA', name: 'A 轮',   threshold: 700,   entryGrant: 100, theme: '规模化' },
-  { id: 4, key: 'seriesB', name: 'B 轮',   threshold: 1500,  entryGrant: 200, theme: '增长' },
-  { id: 5, key: 'seriesC', name: 'C 轮',   threshold: 3000,  entryGrant: 400, theme: '扩张' },
-  { id: 6, key: 'seriesD', name: 'D 轮',   threshold: 6000,  entryGrant: 700, theme: '深耕' },
-  { id: 7, key: 'ipo',     name: 'IPO',     threshold: 12000, entryGrant: 1200, theme: '上市' },
-  { id: 8, key: 'giant',   name: '千亿',    threshold: 22000, entryGrant: 2000, theme: '巨头' },
-  { id: 9, key: 'first',   name: '行业第一', threshold: 40000, entryGrant: 3000, theme: '终极' },
+  { id: 1, key: 'angel',   name: '天使轮', threshold: 0,     entryGrant: 18,  theme: '起步' },
+  { id: 2, key: 'seed',    name: '种子轮', threshold: 900,   entryGrant: 40,   theme: '产品验证' },
+  { id: 3, key: 'seriesA', name: 'A 轮',   threshold: 1800,  entryGrant: 90,   theme: '规模化' },
+  { id: 4, key: 'seriesB', name: 'B 轮',   threshold: 3400,  entryGrant: 180,  theme: '增长' },
+  { id: 5, key: 'seriesC', name: 'C 轮',   threshold: 6800,  entryGrant: 320,  theme: '扩张' },
+  { id: 6, key: 'seriesD', name: 'D 轮',   threshold: 11200, entryGrant: 520,  theme: '深耕' },
+  { id: 7, key: 'ipo',     name: 'IPO',     threshold: 18000, entryGrant: 800,  theme: '上市' },
+  { id: 8, key: 'giant',   name: '千亿',    threshold: 30000, entryGrant: 1200, theme: '巨头' },
+  { id: 9, key: 'first',   name: '行业第一', threshold: 48000, entryGrant: 1800, theme: '终极' },
 ]
 
 // 现金转化率（CCR · Cash Conversion Rate）
 // 月利润 × CCR → 实际入账现金；其余作为"未变现的账面价值"（叙事用，不影响机制）
 // 仅作用于正利润；负利润 100% 从 cash 扣减
 export const CASH_CONVERSION_RATES = {
-  1: 0.70, 2: 0.70, 3: 0.70,
-  4: 0.60, 5: 0.60, 6: 0.60,
-  7: 0.50, 8: 0.50, 9: 0.50,
+  1: 0.60, 2: 0.58, 3: 0.55,
+  4: 0.52, 5: 0.49, 6: 0.45,
+  7: 0.40, 8: 0.36, 9: 0.32,
 }
 
 export function getCashConversionRate(stageId, bmCcrBonus = 0) {
@@ -65,7 +65,8 @@ export function getCashConversionRate(stageId, bmCcrBonus = 0) {
 
 // 月度固定运营成本（每月末从 cash 扣减）
 export function getMonthlyOperationCost(stageId) {
-  return Math.max(20, stageId * 10)
+  const stage = Math.max(1, stageId ?? 1)
+  return Math.round(18 + stage * stage * 3 + stage * 3)
 }
 
 // ============================================================================
@@ -214,11 +215,20 @@ export function rollRandomFunctions(rarity, rng = Math.random) {
 }
 
 export const RARITY_TABLE = {
-  common:    { baseBurn: 3,  extraBurn: 1,  assetValue: 5,   bmMonthlyCost: 5,  bmAssetValue: 8   },
-  rare:      { baseBurn: 5,  extraBurn: 3,  assetValue: 15,  bmMonthlyCost: 9,  bmAssetValue: 25  },
-  elite:     { baseBurn: 8,  extraBurn: 5,  assetValue: 30,  bmMonthlyCost: 14, bmAssetValue: 50  },
-  epic:      { baseBurn: 12, extraBurn: 8,  assetValue: 50,  bmMonthlyCost: 22, bmAssetValue: 80  },
-  legendary: { baseBurn: 20, extraBurn: 12, assetValue: 150, bmMonthlyCost: 35, bmAssetValue: 240 },
+  common:    { baseBurn: 4,  extraBurn: 2,  assetValue: 5,   bmMonthlyCost: 7,  bmAssetValue: 8   },
+  rare:      { baseBurn: 8,  extraBurn: 5,  assetValue: 15,  bmMonthlyCost: 13, bmAssetValue: 25  },
+  elite:     { baseBurn: 15, extraBurn: 10, assetValue: 30,  bmMonthlyCost: 22, bmAssetValue: 50  },
+  epic:      { baseBurn: 26, extraBurn: 18, assetValue: 50,  bmMonthlyCost: 36, bmAssetValue: 80  },
+  legendary: { baseBurn: 44, extraBurn: 30, assetValue: 150, bmMonthlyCost: 62, bmAssetValue: 240 },
+}
+
+export const TIER_BURN_BONUS = {
+  专员: 0,
+  经理: 1,
+  总监: 3,
+  VP: 7,
+  CXO: 12,
+  创始人: 8,
 }
 
 export const EVENTS = [
@@ -377,7 +387,7 @@ export const EVENTS = [
     tone: '风险',
     description: '宏观因素突然恶化，但低谷期招到了便宜的人才。',
     effectLines: ['本月收入 -40%', '下月开局 AP +3 (危机后整顿)'],
-    cashDelta: 0, recruitExtra: 0,
+    cashDelta: -20, recruitExtra: 0,
     apDelta: 3,
     incomeMultiplier: 0.6, maintenanceMultiplier: 1,
   },
@@ -387,7 +397,7 @@ export const EVENTS = [
     tone: '风险',
     description: '核心高管被挖去竞品。',
     effectLines: ['本月手牌 -2'],
-    cashDelta: 0, recruitExtra: 0,
+    cashDelta: -25, recruitExtra: 0,
     incomeMultiplier: 1, maintenanceMultiplier: 1,
     handDelta: -2,
   },
@@ -397,7 +407,7 @@ export const EVENTS = [
     tone: '风险',
     description: '负面新闻在社交平台发酵。',
     effectLines: ['本月维持费 ×3'],
-    cashDelta: 0, recruitExtra: 0,
+    cashDelta: -30, recruitExtra: 0,
     incomeMultiplier: 0.9, maintenanceMultiplier: 3,
   },
   {
@@ -405,8 +415,8 @@ export const EVENTS = [
     name: '现金流紧张',
     tone: '风险',
     description: '应收账款迟迟未到，但出货量却创新高。',
-    effectLines: ['立即 -¥20', '本月收入 +20%'],
-    cashDelta: -20, recruitExtra: 0,
+    effectLines: ['立即 -¥45', '本月收入 +20%'],
+    cashDelta: -45, recruitExtra: 0,
     incomeMultiplier: 1.2, maintenanceMultiplier: 1,
   },
   {
@@ -415,7 +425,7 @@ export const EVENTS = [
     tone: '风险',
     description: '连续加班导致效率断崖。',
     effectLines: ['本月 AP 上限 -3'],
-    cashDelta: 0, recruitExtra: 0,
+    cashDelta: -20, recruitExtra: 0,
     apDelta: -3,
     incomeMultiplier: 1, maintenanceMultiplier: 1,
   },
@@ -425,7 +435,7 @@ export const EVENTS = [
     tone: '风险',
     description: '资本市场对研发型公司估值打折。',
     effectLines: ['本月研发部 -50%'],
-    cashDelta: 0, recruitExtra: 0,
+    cashDelta: -20, recruitExtra: 0,
     incomeMultiplier: 0.85, maintenanceMultiplier: 1,
     deptBoost: { R: 0.5 },
   },
@@ -435,7 +445,7 @@ export const EVENTS = [
     tone: '风险',
     description: '一波客户被竞品挖走。',
     effectLines: ['本月销售部 -40%'],
-    cashDelta: 0, recruitExtra: 0,
+    cashDelta: -25, recruitExtra: 0,
     incomeMultiplier: 0.9, maintenanceMultiplier: 1,
     deptBoost: { S: 0.6 },
   },
@@ -445,7 +455,7 @@ export const EVENTS = [
     tone: '风险',
     description: '行业监管文件下来了。',
     effectLines: ['本月手牌上限 -2', '维持费 +50%'],
-    cashDelta: 0, recruitExtra: 0,
+    cashDelta: -20, recruitExtra: 0,
     handLimitDelta: -2,
     incomeMultiplier: 1, maintenanceMultiplier: 1.5,
   },
@@ -529,6 +539,83 @@ export const EVENTS = [
     cashDelta: 0, recruitExtra: -1,
     handLimitDelta: 2,
     incomeMultiplier: 1, maintenanceMultiplier: 0.8,
+  },
+  {
+    id: 'customer-referral',
+    name: '老客户转介绍',
+    tone: '增益',
+    description: '满意客户主动介绍了新订单。',
+    effectLines: ['本月收入 +10%', '招聘市场 +1'],
+    cashDelta: 0, recruitExtra: 1,
+    incomeMultiplier: 1.1, maintenanceMultiplier: 1,
+  },
+  {
+    id: 'process-automation',
+    name: '流程自动化',
+    tone: '增益',
+    description: '内部工具上线，重复劳动少了很多。',
+    effectLines: ['本月维持费 -20%', '本月 AP +1'],
+    cashDelta: 0, recruitExtra: 0,
+    apDelta: 1,
+    incomeMultiplier: 1, maintenanceMultiplier: 0.8,
+  },
+  {
+    id: 'product-review',
+    name: '产品评审会',
+    tone: '机会',
+    description: '团队暂时停下来复盘路线，短期慢一点，长期更稳。',
+    effectLines: ['本月收入 -10%', '本月抽牌 +2'],
+    cashDelta: 0, recruitExtra: 0,
+    drawDelta: 2,
+    incomeMultiplier: 0.9, maintenanceMultiplier: 1,
+  },
+  {
+    id: 'channel-rebate',
+    name: '渠道返利',
+    tone: '机会',
+    description: '渠道伙伴返了一笔账，但要求下月继续投入。',
+    effectLines: ['立即 +¥18', '本月维持费 +10%'],
+    cashDelta: 18, recruitExtra: 0,
+    incomeMultiplier: 1, maintenanceMultiplier: 1.1,
+  },
+  {
+    id: 'receivable-delay',
+    name: '回款延迟',
+    tone: '风险',
+    description: '客户验收慢了半拍，账面业务还在，但现金到账变慢。',
+    effectLines: ['立即 -¥18', '本月收入 +5%'],
+    cashDelta: -18, recruitExtra: 0,
+    incomeMultiplier: 1.05, maintenanceMultiplier: 1,
+  },
+  {
+    id: 'cloud-bill-spike',
+    name: '云服务账单飙升',
+    tone: '风险',
+    description: '用户增长带来了服务器账单，工程团队必须优化。',
+    effectLines: ['立即 -¥22', '本月研发部 +20%'],
+    cashDelta: -22, recruitExtra: 0,
+    incomeMultiplier: 1, maintenanceMultiplier: 1.15,
+    deptBoost: { R: 1.2 },
+  },
+  {
+    id: 'hiring-misfire',
+    name: '招聘误判',
+    tone: '风险',
+    description: '一个关键岗位试用期不合适，团队节奏被打乱。',
+    effectLines: ['本月手牌 -1', '立即 -¥16'],
+    cashDelta: -16, recruitExtra: 0,
+    handDelta: -1,
+    incomeMultiplier: 1, maintenanceMultiplier: 1,
+  },
+  {
+    id: 'price-war',
+    name: '竞品价格战',
+    tone: '风险',
+    description: '竞品突然降价抢客户，销售团队要用更高成本守住阵地。',
+    effectLines: ['本月销售部 -20%', '维持费 +20%'],
+    cashDelta: 0, recruitExtra: 0,
+    incomeMultiplier: 0.95, maintenanceMultiplier: 1.2,
+    deptBoost: { S: 0.8 },
   },
 ]
 
@@ -1902,7 +1989,8 @@ for (const card of CARD_TEMPLATES) {
     card.drawWeight = DEFAULT_DRAW_WEIGHTS[card.rarity] ?? 10
   }
   const rarityInfo = RARITY_TABLE[card.rarity] || RARITY_TABLE.common
-  card.baseBurn = card.baseBurn ?? rarityInfo.baseBurn
+  const tierBurn = card.type === 'emp' ? (TIER_BURN_BONUS[card.tier] ?? 0) : 0
+  card.baseBurn = card.baseBurn ?? (rarityInfo.baseBurn + tierBurn)
   card.extraBurn = card.extraBurn ?? rarityInfo.extraBurn
   card.assetValue = card.assetValue ?? rarityInfo.assetValue
 }
@@ -2421,7 +2509,7 @@ export const PACK_DEFINITIONS = [
     id: 'PACK_HEADHUNTER',
     name: '猎头礼包',
     icon: '👤',
-    cost: 4,
+    cost: 9,
     pickN: 1,
     fromN: 3,
     poolType: 'employee_common',
@@ -2431,7 +2519,7 @@ export const PACK_DEFINITIONS = [
     id: 'PACK_ELITE',
     name: '精英礼包',
     icon: '⭐',
-    cost: 8,
+    cost: 24,
     pickN: 1,
     fromN: 3,
     poolType: 'employee_elite',
@@ -2441,7 +2529,7 @@ export const PACK_DEFINITIONS = [
     id: 'PACK_SERVICE',
     name: '服务礼包',
     icon: '🛠️',
-    cost: 5,
+    cost: 12,
     pickN: 1,
     fromN: 3,
     poolType: 'service',
@@ -2451,7 +2539,7 @@ export const PACK_DEFINITIONS = [
     id: 'PACK_FUNCTION',
     name: '功能礼包',
     icon: '📦',
-    cost: 5,
+    cost: 12,
     pickN: 1,
     fromN: 3,
     poolType: 'function',
@@ -2461,7 +2549,7 @@ export const PACK_DEFINITIONS = [
     id: 'PACK_INSIGHT',
     name: '商业洞察',
     icon: '💡',
-    cost: 7,
+    cost: 18,
     pickN: 1,
     fromN: 3,
     poolType: 'business_model',
@@ -2471,11 +2559,11 @@ export const PACK_DEFINITIONS = [
     id: 'PACK_MYSTERY',
     name: '神秘礼包',
     icon: '🎁',
-    cost: 10,
+    cost: 28,
     pickN: 1,
     fromN: 3,
     poolType: 'mystery',
-    description: '跨稀有度，10% 出传奇',
+    description: '跨稀有度，小概率出传奇',
   },
 ]
 
@@ -2560,11 +2648,8 @@ export const BOARD_EVENTS = [
 ]
 
 export const STARTER_HAND = [
-  ['EMP_R_01', 2],
-  ['EMP_S_01', 2],
-  ['EMP_O_01', 1],
-  ['EMP_R_02', 1],
-  ['FUN_01', 1],
+  ['EMP_R_01', 1],
+  ['EMP_S_01', 1],
 ]
 
 export const STARTER_DECK = [
