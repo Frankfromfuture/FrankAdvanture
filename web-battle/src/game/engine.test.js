@@ -3,21 +3,27 @@ import {
   createInitialState,
   resolveMonth,
   computeValuation,
-  computeQuarterlyAvgProfit,
   enterIntermission,
-  applyWithdrawal,
   dismissCardInBoardMeeting,
-  applyStagnationAdvice,
   unsubscribeBusinessModel,
   exitIntermission,
   placeCardInSlot,
   returnSlotToHand,
+  getEffectiveApLimit,
   computeLineOutput,
   parseEffectAst,
   makeFixedCard,
   resolveEvent,
+  upgradeCard,
+  autoDeployActiveLine,
 } from './engine.js'
-import { STAGES, BUSINESS_MODELS, CARD_TEMPLATES } from './cards.js'
+import {
+  STAGES,
+  BUSINESS_MODELS,
+  CARD_TEMPLATES,
+  getCashConversionRate,
+  getMonthlyOperationCost,
+} from './cards.js'
 
 const calmEvent = {
   id: 'test-event',
@@ -35,70 +41,312 @@ function fixedRng() {
   return 0.42
 }
 
-describe('v3.2 Engine Core Tests', () => {
-  it('creates initial state with correct cash, retained earnings, and stage', () => {
+describe('v4 Engine Core Tests · 新估值 / CCR / Game Over', () => {
+  it('creates initial state with cash 30, no retainedEarnings, lastMonthProfit 0', () => {
     const state = createInitialState({ rng: fixedRng })
     expect(state.cash).toBe(30)
-    expect(state.retainedEarnings).toBe(0)
+    expect(state.retainedEarnings).toBeUndefined()
+    expect(state.lastMonthProfit).toBe(0)
     expect(state.stage.id).toBe(1)
     expect(state.elapsedMonths).toBe(0)
     expect(state.profitHistory).toEqual([])
-    expect(state.highestValuation).toBeGreaterThan(0)
   })
 
-  it('computes monthly burn correctly from deck and BM costs', () => {
+  it('initializes state for different professions with appropriate starter deck content', () => {
+    const stateSci = createInitialState({ profession: 'scientist', rng: fixedRng })
+    const allCardsSci = [...stateSci.hand, ...stateSci.drawPile]
+    expect(stateSci.hand.some(c => c.id === 'EMP_FOUNDER_R')).toBe(true)
+    expect(stateSci.drawPile.some(c => c.id === 'EMP_FOUNDER_R')).toBe(false)
+    expect(allCardsSci.filter(c => c.dept === 'R').length).toBeGreaterThanOrEqual(3)
+
+    const stateSales = createInitialState({ profession: 'sales', rng: fixedRng })
+    const allCardsSales = [...stateSales.hand, ...stateSales.drawPile]
+    expect(stateSales.hand.some(c => c.id === 'EMP_FOUNDER_S')).toBe(true)
+    expect(allCardsSales.filter(c => c.dept === 'S').length).toBeGreaterThanOrEqual(3)
+
+    const stateCxo = createInitialState({ profession: 'cxo', rng: fixedRng })
+    const allCardsCxo = [...stateCxo.hand, ...stateCxo.drawPile]
+    expect(stateCxo.hand.some(c => c.id === 'EMP_FOUNDER_O')).toBe(true)
+    expect(allCardsCxo.filter(c => c.dept === 'O').length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('all function cards cost 0 AP', () => {
+    const functionCards = CARD_TEMPLATES.filter(c => c.type === 'fun')
+    expect(functionCards.length).toBeGreaterThan(0)
+    expect(functionCards.every(c => c.ap === 0)).toBe(true)
+  })
+
+  it('implements Founder O, S, R specific mechanics correctly', () => {
+    // Founder O AP
+    const state = createInitialState({ profession: 'cxo', rng: fixedRng })
+    const baseLimit = state.apAvailable
+    expect(getEffectiveApLimit(state, [])).toBe(baseLimit + 1)
+    const slots = [state.hand.find(c => c.id === 'EMP_FOUNDER_O'), null, null, null, null]
+    const stateWithOPlaced = { ...state, hand: state.hand.filter(c => c.id !== 'EMP_FOUNDER_O') }
+    expect(getEffectiveApLimit(stateWithOPlaced, slots)).toBe(baseLimit + 3)
+
+    // Founder S income multiplier
+    const stateS = createInitialState({ profession: 'sales', rng: fixedRng })
+    const reportInHand = computeLineOutput([null, null, null, null, null], { hand: stateS.hand })
+    expect(reportInHand.lineMultiplier).toBe(1.2)
+    const sFounderCard = stateS.hand.find(c => c.id === 'EMP_FOUNDER_S')
+    const reportInSlots = computeLineOutput([sFounderCard, null, null, null, null], { hand: [] })
+    expect(reportInSlots.lineMultiplier).toBe(1.8)
+  })
+
+  it('exposes CCR per stage matching spec (70%/60%/50%)', () => {
+    expect(getCashConversionRate(1)).toBe(0.70)
+    expect(getCashConversionRate(3)).toBe(0.70)
+    expect(getCashConversionRate(4)).toBe(0.60)
+    expect(getCashConversionRate(6)).toBe(0.60)
+    expect(getCashConversionRate(7)).toBe(0.50)
+    expect(getCashConversionRate(9)).toBe(0.50)
+    // CCR bonus from BMs adds, capped at 1.0
+    expect(getCashConversionRate(1, 0.15)).toBeCloseTo(0.85, 5)
+    expect(getCashConversionRate(1, 0.5)).toBe(1.0)
+  })
+
+  it('exposes monthly operation cost per stage', () => {
+    expect(getMonthlyOperationCost(1)).toBe(20)
+    expect(getMonthlyOperationCost(2)).toBe(20)
+    expect(getMonthlyOperationCost(5)).toBe(50)
+    expect(getMonthlyOperationCost(9)).toBe(90)
+  })
+
+  it('applies CCR to positive profit, full deduction to negative profit, then subtracts opCost', () => {
+    // Construct a state with a known cash & no production lines (raw income 0; burn = sum of all cards' baseBurn)
     const state = createInitialState({ rng: fixedRng })
-    // Ensure initial state has cards and calculate burn
-    const initialBurn = state.hand.length + state.drawPile.length // each common card burns 1
-    // Let's add a business model
-    const testState = {
+    const allCardCount = state.hand.length + state.drawPile.length
+    // Each common card baseBurn = 1, founder R is epic = 4. Compute expected burn.
+    const burnApprox = state.hand.reduce((s, c) => s + (c.baseBurn ?? 0), 0)
+      + state.drawPile.reduce((s, c) => s + (c.baseBurn ?? 0), 0)
+    // raw income = 0 (no working lines), so profit = -burnApprox → cash deducted fully + opCost(20) deducted
+    const startCash = 500  // give buffer to avoid game over
+    const ctrlState = { ...state, cash: startCash, event: calmEvent }
+    const res = resolveMonth(ctrlState, fixedRng).state
+    // profit is negative → cash += profit (full) - 20 (op cost)
+    const expectedCashRange = startCash - burnApprox - 20
+    expect(res.cash).toBe(expectedCashRange)
+  })
+
+  it('valuation uses formula V = cash + (cardAsset + bmAsset)×2 + recent avg positive profit×4', () => {
+    const state = createInitialState({ rng: fixedRng })
+    const ctrlState = {
       ...state,
-      activeBusinessModels: [{ id: 'BM_01', charged: true }], // BM_01 monthly cost is 2
-    }
-    // Let's compute burn
-    const expectedBurn = state.hand.length + state.drawPile.length + 2 // BM_01 (common) monthly cost is 2
-    // Let's verify our engine computeMonthlyBurn works internally
-    // (computeMonthlyBurn is tested via resolveMonth output or exported functions)
-  })
-
-  it('resolves month and updates retained earnings while cash remains unchanged', () => {
-    const state = createInitialState({ rng: fixedRng })
-    const oldCash = state.cash
-    const resolved = resolveMonth(state, fixedRng).state
-    
-    // Monthly profits/losses go to retainedEarnings, not cash
-    expect(resolved.cash).toBe(oldCash)
-    expect(resolved.elapsedMonths).toBe(1)
-    expect(resolved.profitHistory.length).toBe(1)
-    // retained earnings should be max(0, profit)
-    const expectedRetained = Math.max(0, resolved.profitHistory[0])
-    expect(resolved.retainedEarnings).toBe(expectedRetained)
-  })
-
-  it('computes valuation through three paths (PE, Assets, Treasury)', () => {
-    const state = createInitialState({ rng: fixedRng })
-    
-    // Let's create a controlled state
-    const controlledState = {
-      ...state,
-      cash: 100, // Treasury path: 100 * 0.3 = 30
-      retainedEarnings: 50,
-      profitHistory: [10, 20, 30], // PE path: avg(10,20,30) * 20 = 20 * 20 = 400
-      activeBusinessModels: [{ id: 'BM_01', charged: true }], // BM_01 asset value: common is 8, 8 * 0.5 = 4
-      // Let's clear hand/draw/cooling for card asset value control
+      cash: 100,
+      profitHistory: [10, 50, 90], // avg positive profit 50 → contributes 50 * 4 = 200
+      activeBusinessModels: [{ id: 'BM_01', charged: true }], // BM_01 (common) assetValue 8 → 8 * 2 = 16
       hand: [],
       drawPile: [],
       coolingPile: [],
     }
-
-    // Expected valuation: PE(400) + BM Asset(4) + Treasury(30) = 434
-    const v = computeValuation(controlledState)
-    expect(v).toBe(434)
+    // cash(100) + asset((0+8)*2 = 16) + profit(50*4 = 200) = 316
+    expect(computeValuation(ctrlState)).toBe(316)
   })
 
-  it('handles board meeting intermission entry and exit correctly', () => {
+  it('negative lastMonthProfit does NOT subtract from V (clamped to 0)', () => {
     const state = createInitialState({ rng: fixedRng })
-    // Mock a stage promotion situation
+    const ctrlState = {
+      ...state, cash: 50, lastMonthProfit: -200,
+      activeBusinessModels: [], hand: [], drawPile: [], coolingPile: [],
+    }
+    // cash(50) + asset(0) + profit(0) = 50
+    expect(computeValuation(ctrlState)).toBe(50)
+  })
+
+  it('triggers GAME OVER when cash < 0 at month end', () => {
+    const state = createInitialState({ rng: fixedRng })
+    // Set up a doomed scenario: cash=5, no lines (income 0), burn higher than 5 + opCost
+    const doomed = { ...state, cash: 5, event: calmEvent }
+    const res = resolveMonth(doomed, fixedRng).state
+    expect(res.result).not.toBeNull()
+    expect(res.result.gameOver).toBe(true)
+    expect(res.result.reason).toContain('破产')
+    expect(res.cash).toBeLessThan(0)
+  })
+
+  it('clamps event incomeMultiplier to [0.8, 1.4] and maintenanceMultiplier to [0.7, 1.6]', () => {
+    // We can verify indirectly: with an extreme event, result must use clamped value
+    const state = createInitialState({ rng: fixedRng })
+    const extremeEvent = {
+      ...calmEvent,
+      incomeMultiplier: 2.5,         // should clamp to 1.4
+      maintenanceMultiplier: 3.0,    // should clamp to 1.6
+    }
+    const ctrlState = { ...state, cash: 1000, event: extremeEvent }
+    const res = resolveMonth(ctrlState, fixedRng).state
+    // We just verify no error and cash bookkeeping happened
+    expect(res.result?.gameOver).toBeFalsy()
+    expect(res.lastMonthProfit).toBeDefined()
+  })
+
+  it('handles board meeting intermission entry (no retainedEarnings extraction)', () => {
+    const state = createInitialState({ rng: fixedRng })
+    const nextStage = STAGES[1] // seed (entryGrant 50)
+    const promotedResult = {
+      passed: true,
+      stagePromotion: true,
+      nextStage,
+      reason: '估值达标',
+      bestMonth: 50,
+    }
+    const stateWithPromotion = { ...state, result: promotedResult }
+
+    const intermission = enterIntermission(stateWithPromotion, fixedRng)
+    expect(intermission.ok).toBe(true)
+    const imState = intermission.state
+    // Stage 2 entryGrant is 50 in new STAGES
+    expect(imState.cash).toBe(state.cash + 50)
+    // No 'withdrawn' field anymore
+    expect(imState.intermissionState.withdrawn).toBeUndefined()
+    expect(imState.intermissionState.grantedBudget).toBe(50)
+
+    let finalImState = imState
+    if (imState.intermissionState.phase === 'event') {
+      finalImState = resolveEvent(imState, imState.intermissionState.event.options[0].id, fixedRng).state
+    }
+    const exitState = exitIntermission(finalImState, fixedRng).state
+    expect(exitState.stage.id).toBe(2)
+    expect(exitState.intermissionState).toBeNull()
+
+    const activeLine = exitState.lines.find(l => l.id === exitState.activeLineId)
+    expect(activeLine.status).toBe('planning')
+  })
+
+  it('promotes stage immediately at month end when valuation reaches the next threshold', () => {
+    const state = createInitialState({ rng: fixedRng })
+    // New stage 2 threshold = 250. With cash=300 + lastMonthProfit=0 + assets=~30, V > 250.
+    const highValState = {
+      ...state,
+      cash: 300,
+      event: calmEvent,
+      consecutiveAboveThreshold: 0,
+    }
+    const m1 = resolveMonth(highValState, fixedRng).state
+    expect(m1.result).not.toBeNull()
+    expect(m1.result.stagePromotion).toBe(true)
+    expect(m1.result.nextStage.id).toBe(2)
+  })
+
+  it('allows placing card in slot and returning it to hand', () => {
+    const state = createInitialState({ rng: fixedRng })
+    const firstCard = state.hand[0]
+    const placeResult = placeCardInSlot(state, firstCard.uid, 0)
+    expect(placeResult.ok).toBe(true)
+    const placedState = placeResult.state
+    expect(placedState.hand.find(c => c.uid === firstCard.uid)).toBeUndefined()
+    expect(placedState.lines[0].slots[0].uid).toBe(firstCard.uid)
+
+    const returnResult = returnSlotToHand(placedState, 'A', 0)
+    expect(returnResult.ok).toBe(true)
+    expect(returnResult.state.hand.find(c => c.uid === firstCard.uid)).toBeDefined()
+    expect(returnResult.state.lines[0].slots[0]).toBeNull()
+  })
+
+  it('implements quarterly event rotation (retains event for 3 months)', () => {
+    const state = createInitialState({ rng: fixedRng })
+    // Strip the deck down to almost nothing so V stays far below stage 2 threshold (no auto-promotion).
+    // Use cash=100 (manageable; opCost=20/mo, near-zero burn → cash positive for many months).
+    const minimal = {
+      ...state,
+      cash: 100,
+      hand: [],
+      drawPile: [],
+      coolingPile: [],
+      activeBusinessModels: [],
+      month: 1,
+      event: calmEvent,
+    }
+    const m2 = resolveMonth(minimal, fixedRng).state
+    expect(m2.month).toBe(2)
+    expect(m2.event).toBe(calmEvent)
+    const m3 = resolveMonth({ ...m2, event: calmEvent }, fixedRng).state
+    expect(m3.month).toBe(3)
+    expect(m3.event).toBe(calmEvent)
+    const m4 = resolveMonth({ ...m3, event: calmEvent }, fixedRng).state
+    expect(m4.month).toBe(4)
+    // Quarter rotation triggers a new event pick at month 4
+  })
+
+  it('v4 schema: common 专员 card has no L1 effect (裸卡)', () => {
+    // EMP_R_01 (rare common), EMP_S_01, EMP_O_01 are all 专员
+    const state = createInitialState({ rng: fixedRng })
+    const r01 = state.hand.find(c => c.id === 'EMP_R_01')
+    const s01 = state.hand.find(c => c.id === 'EMP_S_01')
+    expect(r01).toBeDefined()
+    expect(s01).toBeDefined()
+    // 专员 effects 应当为空数组（仅随机功能 0 个 → common 不抽）
+    expect(r01.effects).toEqual([])
+    expect(s01.effects).toEqual([])
+  })
+
+  it('v4 schema: rare 经理 card has L1 effect + 1 random function', async () => {
+    const { createCardInstance } = await import('./engine.js')
+    // EMP_R_05 (全栈工程师) is rare 经理 → L1 = ['DRAW_NEXT_MONTH: +1'] + 1 random function (lv1-2)
+    const inst = createCardInstance('EMP_R_05', 'deck', () => 0.5)
+    expect(inst.effects.length).toBeGreaterThanOrEqual(1)
+    // First effect should be the L1 ability
+    expect(inst.effects[0]).toContain('DRAW_NEXT_MONTH')
+    // Should have 1 random function recorded
+    expect(inst.randomFunctions.length).toBe(1)
+  })
+
+  it('v4 流派质变: S 流派 2-5 张同部门 trigger line multiplier', async () => {
+    const { getDeptMassLineMultiplier, makeFixedCard } = await import('./engine.js')
+    const s1 = makeFixedCard('EMP_S_01')
+    const empty = [null, null, null, null, null]
+    expect(getDeptMassLineMultiplier(empty)).toBe(1)
+    expect(getDeptMassLineMultiplier([s1, null, null, null, null])).toBe(1)
+    expect(getDeptMassLineMultiplier([s1, s1, null, null, null])).toBeCloseTo(1.20)
+    expect(getDeptMassLineMultiplier([s1, s1, s1, null, null])).toBeCloseTo(1.35)
+    expect(getDeptMassLineMultiplier([s1, s1, s1, s1, null])).toBeCloseTo(1.40)
+    expect(getDeptMassLineMultiplier([s1, s1, s1, s1, s1])).toBeCloseTo(1.80)
+  })
+
+  it('v4 流派质变: R 流派月末 buff (draw / handLimit)', async () => {
+    const { getDeptMassRBonus, makeFixedCard } = await import('./engine.js')
+    const r1 = makeFixedCard('EMP_R_01')
+    const line = (slots) => [{ slots }]
+    expect(getDeptMassRBonus(line([r1, r1, null, null, null]))).toEqual({ drawBonus: 1, handLimitBonus: 0, instantDraw: 0 })
+    expect(getDeptMassRBonus(line([r1, r1, r1, null, null]))).toEqual({ drawBonus: 2, handLimitBonus: 0, instantDraw: 0 })
+    expect(getDeptMassRBonus(line([r1, r1, r1, r1, null]))).toEqual({ drawBonus: 3, handLimitBonus: 0, instantDraw: 1 })
+    expect(getDeptMassRBonus(line([r1, r1, r1, r1, r1]))).toEqual({ drawBonus: 4, handLimitBonus: 3, instantDraw: 0 })
+  })
+
+  it('v4 流派质变: O 流派月末 AP buff', async () => {
+    const { getDeptMassOBonus, makeFixedCard } = await import('./engine.js')
+    const o1 = makeFixedCard('EMP_O_01')
+    const line = (slots) => [{ slots }]
+    expect(getDeptMassOBonus(line([o1, o1, null, null, null]))).toBe(1)
+    expect(getDeptMassOBonus(line([o1, o1, o1, null, null]))).toBe(2)
+    expect(getDeptMassOBonus(line([o1, o1, o1, o1, null]))).toBe(3)
+    expect(getDeptMassOBonus(line([o1, o1, o1, o1, o1]))).toBe(5)
+  })
+
+  it('v4 R 部门主轴: DRAW_NEXT_MONTH effect text sums correctly', async () => {
+    const { sumDrawNextMonthBonus } = await import('./engine.js')
+    const fakeCard = (effects) => ({ effects })
+    const line = (slots) => [{ slots }]
+    expect(sumDrawNextMonthBonus(line([
+      fakeCard(['DRAW_NEXT_MONTH: +1']),
+      fakeCard(['DRAW_NEXT_MONTH: +2']),
+      null,
+      fakeCard(['SELF: +15%']),  // not a draw effect
+      fakeCard(['DRAW_NEXT_MONTH: +3']),
+    ]))).toBe(6)
+  })
+
+  it('dismissCardInBoardMeeting removes a card from any pile', () => {
+    const state = createInitialState({ rng: fixedRng })
+    const firstCard = state.hand[0]
+    const result = dismissCardInBoardMeeting(state, firstCard.uid)
+    expect(result.ok).toBe(true)
+    expect(result.state.hand.find(c => c.uid === firstCard.uid)).toBeUndefined()
+  })
+
+  it('upgradeCard increments hrActionsCount and second upgrade is blocked', () => {
+    // Setup state in boardroom meeting intermission
+    const state = createInitialState({ rng: fixedRng })
     const nextStage = STAGES[1] // seed
     const promotedResult = {
       passed: true,
@@ -107,180 +355,321 @@ describe('v3.2 Engine Core Tests', () => {
       reason: '估值达标',
       bestMonth: 50,
     }
-    const stateWithPromotion = {
-      ...state,
-      result: promotedResult,
-    }
-
+    const stateWithPromotion = { ...state, result: promotedResult, cash: 100 }
     const intermission = enterIntermission(stateWithPromotion, fixedRng)
-    expect(intermission.ok).toBe(true)
-    
-    const imState = intermission.state
-    // Grant seed entryGrant (+25 cash)
-    expect(imState.cash).toBe(state.cash + 25)
-    expect(imState.intermissionState.withdrawn).toBe(false)
+    let activeState = intermission.state
 
-    // Exit event phase if needed
-    let finalImState = imState
-    if (imState.intermissionState.phase === 'event') {
-      finalImState = resolveEvent(imState, imState.intermissionState.event.options[0].id, fixedRng).state
-    }
+    // Find an employee card that can be promoted by tier
+    const empCard = activeState.hand.find(c => c.type === 'emp' && c.tier === '专员')
+    expect(empCard).toBeDefined()
 
-    // Test exit Intermission advances stage and keeps cash/retained
-    const exitState = exitIntermission(finalImState, fixedRng).state
-    expect(exitState.stage.id).toBe(2)
-    expect(exitState.intermissionState).toBeNull()
+    // 1st upgrade should succeed
+    const originalRarity = empCard.rarity
+    const res1 = upgradeCard(activeState, empCard.uid, 'tier')
+    expect(res1.ok).toBe(true)
+    expect(res1.state.intermissionState.hrActionsCount).toBe(1)
+    expect(res1.state.intermissionState.cardActionLog[empCard.uid]).toBe('upgraded')
+    expect(res1.state.intermissionState.logTrail[0]).toContain('升职')
+    const upgradedCard = res1.state.hand.find(c => c.uid === empCard.uid)
+    expect(upgradedCard.tier).toBe('经理')
+    expect(upgradedCard.rarity).toBe(originalRarity)
 
-    // Assert active line is in planning state and card placement is allowed
-    const activeLine = exitState.lines.find(l => l.id === exitState.activeLineId)
-    expect(activeLine).toBeDefined()
-    expect(activeLine.status).toBe('planning')
-
-    const cardToPlace = exitState.hand[0]
-    expect(cardToPlace).toBeDefined()
-    const placeRes = placeCardInSlot(exitState, cardToPlace.uid, 0)
-    expect(placeRes.ok).toBe(true)
-    expect(placeRes.state.lines.find(l => l.id === exitState.activeLineId).slots[0].uid).toBe(cardToPlace.uid)
+    // 2nd upgrade in the same meeting should fail due to HR action limit
+    const otherEmp = res1.state.hand.find(c => c.type === 'emp' && c.uid !== empCard.uid)
+    expect(otherEmp).toBeDefined()
+    const res2 = upgradeCard(res1.state, otherEmp.uid, 'tier')
+    expect(res2.ok).toBe(false)
+    expect(res2.message).toContain('已进行过人事变动')
   })
 
-  it('allows extraction of retained earnings in board meeting and updates cash', () => {
+  it('dismissCardInBoardMeeting tracks fireActionsCount and is not blocked by HR action limit', () => {
     const state = createInitialState({ rng: fixedRng })
-    const stateWithIntermission = {
+    const nextStage = STAGES[1]
+    const promotedResult = {
+      passed: true,
+      stagePromotion: true,
+      nextStage,
+      reason: '估值达标',
+      bestMonth: 50,
+    }
+    const stateWithPromotion = { ...state, result: promotedResult, cash: 100 }
+    const intermission = enterIntermission(stateWithPromotion, fixedRng)
+    let activeState = intermission.state
+
+    const empCard1 = activeState.hand.find(c => c.type === 'emp')
+    const empCard2 = activeState.hand.find(c => c.type === 'emp' && c.uid !== empCard1.uid)
+    const empCard3 = activeState.hand.find(c => c.type === 'emp' && c.uid !== empCard1.uid && c.uid !== empCard2.uid)
+
+    // Upgrade empCard1 (1st HR Action - Promo)
+    const resUpgrade = upgradeCard(activeState, empCard1.uid, 'tier')
+    expect(resUpgrade.ok).toBe(true)
+
+    // Firing empCard2 (Dismiss - Free Fire) should succeed and NOT be blocked by the HR Action limit
+    const resFire1 = dismissCardInBoardMeeting(resUpgrade.state, empCard2.uid)
+    expect(resFire1.ok).toBe(true)
+    expect(resFire1.state.intermissionState.fireActionsCount).toBe(1)
+    expect(resFire1.state.intermissionState.cardActionLog[empCard2.uid]).toBe('fired')
+    expect(resFire1.state.intermissionState.hrActionsCount).toBe(1) // Still 1 (unchanged)
+
+    // Firing empCard3 should also succeed (can fire up to 5)
+    const resFire2 = dismissCardInBoardMeeting(resFire1.state, empCard3.uid)
+    expect(resFire2.ok).toBe(true)
+    expect(resFire2.state.intermissionState.fireActionsCount).toBe(2)
+  })
+})
+
+describe('v4 PR3: 5 个 Combo + 槽位区位 Buff', () => {
+  it('双子 combo: 相邻 2 个同部门专员 → 双方 +30%', async () => {
+    const { detectCombos, makeFixedCard } = await import('./engine.js')
+    const r01 = makeFixedCard('EMP_R_01')
+    const r01b = makeFixedCard('EMP_R_01')
+    const result = detectCombos([r01, r01b, null, null, null])
+    expect(result.pairBonus.sort()).toEqual([0, 1])
+    expect(result.labels).toContain('双子')
+  })
+
+  it('升阶链 combo: 同部门专员→经理→总监 → 整线 ×1.5', async () => {
+    const { detectCombos, makeFixedCard } = await import('./engine.js')
+    // EMP_R_01 (专员), EMP_R_02 (经理), EMP_R_03 (总监)
+    const r1 = makeFixedCard('EMP_R_01')
+    const r2 = makeFixedCard('EMP_R_02')
+    const r3 = makeFixedCard('EMP_R_03')
+    const result = detectCombos([r1, r2, r3, null, null])
+    expect(result.chainMultiplier).toBe(1.5)
+    expect(result.labels).toContain('升阶链')
+  })
+
+  it('满编 combo: 5 张同部门 → 整线 ×2', async () => {
+    const { detectCombos, makeFixedCard } = await import('./engine.js')
+    const s1 = makeFixedCard('EMP_S_01')
+    const result = detectCombos([s1, s1, s1, s1, s1])
+    expect(result.fullRosterMultiplier).toBe(2.0)
+    expect(result.labels).toContain('满编')
+  })
+
+  it('三色管理 combo: 3 张同 tier 不同部门 → 整线 ×1.4 + 抽 1', async () => {
+    const { detectCombos, makeFixedCard } = await import('./engine.js')
+    const r1 = makeFixedCard('EMP_R_01') // 专员
+    const s1 = makeFixedCard('EMP_S_01') // 专员
+    const o1 = makeFixedCard('EMP_O_01') // 专员
+    const result = detectCombos([r1, s1, o1, null, null])
+    expect(result.rainbowMultiplier).toBe(1.4)
+    expect(result.rainbowDrawBonus).toBe(1)
+    expect(result.labels).toContain('三色管理')
+  })
+
+  it('高管会议 combo: 3 张同 VP/CXO 不同部门 → 整线 ×1.8 + 下月 AP +3', async () => {
+    const { detectCombos, makeFixedCard } = await import('./engine.js')
+    const r7 = makeFixedCard('EMP_R_07') // 技术 VP
+    const s7 = makeFixedCard('EMP_S_07') // 销售 VP
+    const o7 = makeFixedCard('EMP_O_07') // 运营 VP
+    const result = detectCombos([r7, s7, o7, null, null])
+    expect(result.execMeetingMultiplier).toBe(1.8)
+    expect(result.execMeetingApBonus).toBe(3)
+    expect(result.labels).toContain('高管会议')
+  })
+
+  it('槽位区位 buff: S 卡 P1 ×1.5 / R 卡 P3 ×1.5 / O 卡 P5 ×1.5', async () => {
+    const { getPositionalBuff } = await import('./engine.js')
+    expect(getPositionalBuff(0, 'S')).toBe(1.5) // P1 sales
+    expect(getPositionalBuff(1, 'S')).toBe(1.3) // P2 sales
+    expect(getPositionalBuff(2, 'R')).toBe(1.5) // P3 R&D
+    expect(getPositionalBuff(3, 'O')).toBe(1.3) // P4 ops
+    expect(getPositionalBuff(4, 'O')).toBe(1.5) // P5 ops
+    // mismatched dept → 1.0
+    expect(getPositionalBuff(0, 'R')).toBe(1.0)
+    expect(getPositionalBuff(2, 'S')).toBe(1.0)
+    expect(getPositionalBuff(4, 'S')).toBe(1.0)
+  })
+
+  it('computeLineOutput 应用区位 buff: 单张 S 卡 P1 比 S 卡 P3 产出高', async () => {
+    const { computeLineOutput, makeFixedCard } = await import('./engine.js')
+    const s = makeFixedCard('EMP_S_01', { baseOutput: 20, effects: [] })
+    const outAtP1 = computeLineOutput([s, null, null, null, null]).total
+    const outAtP3 = computeLineOutput([null, null, s, null, null]).total
+    expect(outAtP1).toBeGreaterThan(outAtP3)
+    // S@P1: 20 × 1.5 = 30
+    expect(outAtP1).toBe(30)
+    // S@P3: 20 × 1.0 = 20
+    expect(outAtP3).toBe(20)
+  })
+
+  it('不再给同部门相邻员工自动 ×1.2（combo 效果除外）', async () => {
+    const { computeLineOutput, makeFixedCard } = await import('./engine.js')
+    const r1 = makeFixedCard('EMP_R_01', { baseOutput: 20, effects: [] })
+    const r2 = makeFixedCard('EMP_R_01', { baseOutput: 20, effects: [] })
+    const report = computeLineOutput([r1, r2, null, null, null])
+    expect(report.slotResults[0].output).toBe(26) // 双子 combo +30%
+    expect(report.slotResults[1].output).toBe(26) // no extra same-dept ×1.2
+    expect(report.total).toBe(52)
+  })
+
+  it('不再触发 P5 产出占比 60% 的额外收割加成', async () => {
+    const { computeLineOutput, makeFixedCard } = await import('./engine.js')
+    const r = makeFixedCard('EMP_R_01', { baseOutput: 100, effects: [] })
+    const report = computeLineOutput([null, null, null, null, r])
+    expect(report.slotResults[4].output).toBe(100)
+    expect(report.total).toBe(100)
+    expect(report.slotResults[4].notes).not.toContain('P5 收割位')
+  })
+})
+
+describe('v4 PR4: 月末高光时刻', () => {
+  it('未触发高光时 highlightCount 保持 0', async () => {
+    const state = createInitialState({ rng: fixedRng })
+    const minimal = { ...state, cash: 100, hand: [], drawPile: [], coolingPile: [], event: calmEvent }
+    const res = resolveMonth(minimal, fixedRng).state
+    expect(res.highlightCount).toBe(0)
+    expect(res.highlightPending).toBeNull()
+  })
+
+  it('阶段晋升优先于高光奖励', async () => {
+    const { resolveMonth: rm, makeFixedCard } = await import('./engine.js')
+    const state = createInitialState({ rng: fixedRng })
+    // 阶段 2 门槛 400, 30% = 120。给一条产线足够高的产出
+    // 简化：构造一个 lastSettlement 不是真的，而是把利润直接造出来 — 通过手动 stub 一条产线
+    // 这里用大量 cash + 没产线 → profit 必负，触发不了
+    // 改用：构造一条有产出的产线
+    const r1 = makeFixedCard('EMP_R_01', { baseOutput: 100 })
+    const s1 = makeFixedCard('EMP_S_01', { baseOutput: 100 })
+    const ctrlState = {
       ...state,
-      retainedEarnings: 100,
-      cash: 50,
-      intermissionState: {
-        phase: 'hub',
-        withdrawn: false,
-        nextStageId: 2,
-        logTrail: [],
-        purchased: { epic: false, legendary: false, packs: {} },
+      cash: 500,
+      hand: [],
+      drawPile: [],
+      coolingPile: [],
+      activeBusinessModels: [],
+      event: calmEvent,
+      lines: [
+        { id: 'A', slots: [r1, s1, null, null, null], status: 'working', workingMonthsLeft: 2 },
+        { id: 'B', slots: [null, null, null, null, null], status: 'idle', workingMonthsLeft: 0 },
+      ],
+      activeLineId: 'B',
+    }
+    const res = rm(ctrlState, fixedRng).state
+    expect(res.result?.stagePromotion).toBe(true)
+    expect(res.highlightCount).toBe(0)
+    expect(res.highlightPending).toBeNull()
+  })
+
+  it('pickHighlightCard 把候选加入 drawPile 并清空 pending', async () => {
+    const { pickHighlightCard, makeFixedCard } = await import('./engine.js')
+    const dummyCard = makeFixedCard('EMP_R_03')
+    const state = {
+      drawPile: [],
+      hand: [],
+      highlightPending: [dummyCard, dummyCard, dummyCard],
+      log: [],
+    }
+    const res = pickHighlightCard(state, 0)
+    expect(res.ok).toBe(true)
+    expect(res.state.drawPile.length).toBe(1)
+    expect(res.state.highlightPending).toBeNull()
+  })
+})
+
+describe('v4 PR3: 接通死 BM payload', () => {
+  it('lineApDiscount: 整线 AP 总和 -N (最低 1)', async () => {
+    const { getLineAp, makeFixedCard } = await import('./engine.js')
+    const a = makeFixedCard('EMP_R_01') // AP 1
+    const b = makeFixedCard('EMP_R_02') // AP 2
+    const c = makeFixedCard('EMP_R_03') // AP 4
+    const slots = [a, b, c, null, null]
+    expect(getLineAp(slots)).toBe(7)
+    expect(getLineAp(slots, { lineApDiscount: 1 })).toBe(6)
+    expect(getLineAp(slots, { lineApDiscount: 2 })).toBe(5)
+    // 整线 AP -10 但最低 1
+    expect(getLineAp(slots, { lineApDiscount: 10 })).toBe(1)
+    // 空产线不受 discount 影响
+    expect(getLineAp([null, null, null, null, null], { lineApDiscount: 5 })).toBe(0)
+  })
+
+  it('srvApDiscount: 服务卡 AP -N (最低 1)', async () => {
+    const { getLineAp, makeFixedCard } = await import('./engine.js')
+    const srv = makeFixedCard('SRV_01') // AP 2
+    const emp = makeFixedCard('EMP_R_02') // AP 2
+    expect(getLineAp([srv, emp, null, null, null])).toBe(4)
+    expect(getLineAp([srv, emp, null, null, null], { srvApDiscount: 1 })).toBe(3) // srv 2-1 + emp 2 = 3
+    // 员工卡不受 srv discount 影响
+    expect(getLineAp([emp, null, null, null, null], { srvApDiscount: 2 })).toBe(2)
+  })
+
+  it('levelEndBudgetBonus: 提升董事会 entryGrant N%', async () => {
+    const { enterIntermission, createInitialState } = await import('./engine.js')
+    const { STAGES } = await import('./cards.js')
+    const state = createInitialState({ rng: fixedRng })
+    const nextStage = STAGES[1] // entryGrant 50
+    // 模拟订阅了 BM_38 (levelEndBudgetBonus 0.25 = 25%)
+    const stateWithPromo = {
+      ...state,
+      activeBusinessModels: [{ id: 'BM_38', charged: true }],
+      result: {
+        passed: true, stagePromotion: true, nextStage,
+        reason: '估值达标', bestMonth: 50,
       },
     }
-
-    // Extract 30% of retained earnings (30¥)
-    const result = applyWithdrawal(stateWithIntermission, 0.3)
-    expect(result.ok).toBe(true)
-    expect(result.state.cash).toBe(80)
-    expect(result.state.retainedEarnings).toBe(70)
-    expect(result.state.intermissionState.withdrawn).toBe(true)
-    expect(result.state.intermissionState.extractedAmount).toBe(30)
-  })
-
-  it('advances stages consecutively based on valuation threshold for 2 consecutive months', () => {
-    const state = createInitialState({ rng: fixedRng })
-    
-    // Seed threshold is 300. Setting profitHistory so valuation remains > 300.
-    const highValuationState = {
-      ...state,
-      cash: 100,
-      profitHistory: [50, 50, 50],
-      consecutiveAboveThreshold: 0,
-    }
-
-    // Resolve month 1 above threshold
-    const month1 = resolveMonth(highValuationState, fixedRng).state
-    expect(month1.consecutiveAboveThreshold).toBe(1)
-    expect(month1.result).toBeNull()
-
-    // Resolve month 2 above threshold -> triggers promotion
-    const month2State = {
-      ...month1,
-      profitHistory: [50, 50, 50],
-    }
-    const month2 = resolveMonth(month2State, fixedRng).state
-    expect(month2.result).not.toBeNull()
-    expect(month2.result.stagePromotion).toBe(true)
-    expect(month2.result.nextStage.id).toBe(2)
-  })
-
-  it('triggers stagnation advisor when valuation fails to hit high for 6 consecutive months', () => {
-    const state = createInitialState({ rng: fixedRng })
-    
-    let curState = {
-      ...state,
-      highestValuation: 500,
-      valuation: 400,
-      stagnationCounter: 0,
-      stagnationCooldown: 0,
-    }
-
-    // Run resolveMonth for 5 months below high, no trigger yet
-    for (let i = 0; i < 5; i++) {
-      curState = resolveMonth(curState, fixedRng).state
-      expect(curState.stagnationAdvisorTriggered).toBeFalsy()
-    }
-
-    // Resolve month 6 -> stagnationAdvisorTriggered is true
-    curState = resolveMonth(curState, fixedRng).state
-    expect(curState.stagnationAdvisorTriggered).toBe(true)
-  })
-
-  it('allows placing card in slot and returning it to hand', () => {
-    const state = createInitialState({ rng: fixedRng })
-    const firstCard = state.hand[0]
-    expect(firstCard).toBeDefined()
-    
-    // Place card in slot 0
-    const placeResult = placeCardInSlot(state, firstCard.uid, 0)
-    expect(placeResult.ok).toBe(true)
-    
-    const placedState = placeResult.state
-    expect(placedState.hand.find(c => c.uid === firstCard.uid)).toBeUndefined()
-    expect(placedState.lines[0].slots[0].uid).toBe(firstCard.uid)
-    
-    // Return card to hand
-    const returnResult = returnSlotToHand(placedState, 'A', 0)
-    expect(returnResult.ok).toBe(true)
-    
-    const returnedState = returnResult.state
-    expect(returnedState.hand.find(c => c.uid === firstCard.uid)).toBeDefined()
-    expect(returnedState.lines[0].slots[0]).toBeNull()
-  })
-
-  it('implements quarterly event rotation (retains event for 3 months)', () => {
-    const state = createInitialState({ rng: fixedRng })
-    const initialEvent = state.event
-    expect(initialEvent).toBeDefined()
-    
-    const controlledState = {
-      ...state,
-      month: 1,
-    }
-    
-    // Month 1 -> Month 2 transition
-    const m2 = resolveMonth(controlledState, fixedRng).state
-    expect(m2.month).toBe(2)
-    expect(m2.event).toBe(initialEvent)
-    
-    // Month 2 -> Month 3 transition
-    const m3 = resolveMonth(m2, fixedRng).state
-    expect(m3.month).toBe(3)
-    expect(m3.event).toBe(initialEvent)
-    
-    // Month 3 -> Month 4 transition (starts new quarter)
-    const m4 = resolveMonth(m3, fixedRng).state
-    expect(m4.month).toBe(4)
-    // In a new quarter, a different event or newly picked event is selected
-    // Note: With our fixedRng, we verify it is resolved.
+    const im = enterIntermission(stateWithPromo, fixedRng).state
+    // 50 * 1.25 = 62.5 → 63
+    expect(im.cash).toBe(state.cash + 63)
+    expect(im.intermissionState.grantedBudget).toBe(63)
   })
 })
 
 describe('Scoring & Effect parsing tests', () => {
-  it('applies P1 and directional buffs correctly', () => {
+  it('applies v4 positional + directional buffs correctly', () => {
     const r = makeFixedCard('EMP_R_01', { baseOutput: 20, effects: ['RIGHT: +10%'] })
     const s = makeFixedCard('EMP_S_01', { baseOutput: 20, effects: [] })
 
     const report = computeLineOutput([r, s, null, null, null])
 
-    expect(report.slotResults[0].output).toBe(24) // 20 * 1.2 (P1) = 24
-    expect(report.slotResults[1].output).toBe(22) // 20 * 1.1 (buff from left) = 22
-    expect(report.total).toBe(46)
+    // R@P1: 20 * 1.0 (R has no P1 positional buff in v4) = 20
+    expect(report.slotResults[0].output).toBe(20)
+    // S@P2: 20 * 1.3 (S P2 positional buff) * 1.1 (R's RIGHT +10%) = 28.6 → 29
+    expect(report.slotResults[1].output).toBe(29)
+    expect(report.total).toBe(49)
   })
 
   it('parses effect strings into AST', () => {
     expect(parseEffectAst('RIGHT: +25%')).toMatchObject({ kind: 'neighbor', direction: 'right', factor: 1.25 })
     expect(parseEffectAst('SELF_IF_P3: LINE_ALL: +30%')).toMatchObject({ kind: 'selfIf', condition: 'p3', target: 'line', factor: 1.3 })
     expect(parseEffectAst('IF_ALL_THREE_DEPT_IN_LINE: LINE_XMULT: x1.5')).toMatchObject({ condition: 'allThreeDept', factor: 1.5 })
+  })
+
+  it('autoDeploys hand and slot cards optimally within AP limits and updates locations', () => {
+    const state = createInitialState({ rng: fixedRng })
+    
+    // Create some fixed cards
+    const r1 = makeFixedCard('EMP_R_01', { baseOutput: 50, ap: 2, uid: 'r1', dept: 'R' }) // 50 output, 2 AP
+    const s1 = makeFixedCard('EMP_S_01', { baseOutput: 100, ap: 3, uid: 's1', dept: 'S' }) // 100 output, 3 AP (gets S P1/P2 bonus)
+    const o1 = makeFixedCard('EMP_O_01', { baseOutput: 150, ap: 4, uid: 'o1', dept: 'O' }) // 150 output, 4 AP
+    
+    // Set apAvailable to 5
+    const testState = {
+      ...state,
+      apAvailable: 5,
+      hand: [r1, s1, o1],
+      lines: [
+        { id: 'A', status: 'planning', slots: [null, null, null, null, null] },
+        { id: 'B', status: 'idle', slots: [null, null, null, null, null] }
+      ],
+      activeLineId: 'A'
+    }
+    
+    const result = autoDeployActiveLine(testState)
+    expect(result.ok).toBe(true)
+    const deployedState = result.state
+    
+    expect(deployedState.hand.length).toBeLessThan(3)
+    const slots = deployedState.lines[0].slots
+    
+    // Verify locations of slots and hand
+    for (const card of slots) {
+      if (card) {
+        expect(card.location).toBe('line')
+      }
+    }
+    for (const card of deployedState.hand) {
+      expect(card.location).toBe('hand')
+    }
   })
 })

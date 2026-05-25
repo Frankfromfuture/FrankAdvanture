@@ -6,6 +6,15 @@ export const RARITY_LABELS = {
   legendary: '传奇',
 }
 
+export const POSITION_LABELS = {
+  common: '专员',
+  rare: '经理',
+  elite: '总监',
+  epic: 'VP',
+  legendary: 'CXO',
+}
+
+
 export const RARITY_VARIANCE = {
   common: 0.1,
   rare: 0.15,
@@ -29,23 +38,187 @@ export const LEVELS = [
 ]
 
 export const STAGES = [
-  { id: 1, key: 'angel',   name: '天使轮', threshold: 0,     entryGrant: 30, theme: '起步' },
-  { id: 2, key: 'seed',    name: '种子轮', threshold: 300,   entryGrant: 25, theme: '产品验证' },
-  { id: 3, key: 'seriesA', name: 'A 轮',   threshold: 1000,  entryGrant: 50, theme: '规模化' },
-  { id: 4, key: 'seriesB', name: 'B 轮',   threshold: 2500,  entryGrant: 100, theme: '增长' },
-  { id: 5, key: 'seriesC', name: 'C 轮',   threshold: 5000,  entryGrant: 200, theme: '扩张' },
-  { id: 6, key: 'seriesD', name: 'D 轮',   threshold: 10000, entryGrant: 400, theme: '深耕' },
-  { id: 7, key: 'ipo',     name: 'IPO',     threshold: 20000, entryGrant: 700, theme: '上市' },
-  { id: 8, key: 'giant',   name: '千亿',    threshold: 40000, entryGrant: 1200, theme: '巨头' },
-  { id: 9, key: 'first',   name: '行业第一', threshold: 80000, entryGrant: 2000, theme: '终极' },
+  { id: 1, key: 'angel',   name: '天使轮', threshold: 0,     entryGrant: 30,  theme: '起步' },
+  { id: 2, key: 'seed',    name: '种子轮', threshold: 400,   entryGrant: 50,  theme: '产品验证' },
+  { id: 3, key: 'seriesA', name: 'A 轮',   threshold: 700,   entryGrant: 100, theme: '规模化' },
+  { id: 4, key: 'seriesB', name: 'B 轮',   threshold: 1500,  entryGrant: 200, theme: '增长' },
+  { id: 5, key: 'seriesC', name: 'C 轮',   threshold: 3000,  entryGrant: 400, theme: '扩张' },
+  { id: 6, key: 'seriesD', name: 'D 轮',   threshold: 6000,  entryGrant: 700, theme: '深耕' },
+  { id: 7, key: 'ipo',     name: 'IPO',     threshold: 12000, entryGrant: 1200, theme: '上市' },
+  { id: 8, key: 'giant',   name: '千亿',    threshold: 22000, entryGrant: 2000, theme: '巨头' },
+  { id: 9, key: 'first',   name: '行业第一', threshold: 40000, entryGrant: 3000, theme: '终极' },
 ]
 
+// 现金转化率（CCR · Cash Conversion Rate）
+// 月利润 × CCR → 实际入账现金；其余作为"未变现的账面价值"（叙事用，不影响机制）
+// 仅作用于正利润；负利润 100% 从 cash 扣减
+export const CASH_CONVERSION_RATES = {
+  1: 0.70, 2: 0.70, 3: 0.70,
+  4: 0.60, 5: 0.60, 6: 0.60,
+  7: 0.50, 8: 0.50, 9: 0.50,
+}
+
+export function getCashConversionRate(stageId, bmCcrBonus = 0) {
+  const base = CASH_CONVERSION_RATES[stageId] ?? 0.7
+  return Math.min(1.0, base + bmCcrBonus)
+}
+
+// 月度固定运营成本（每月末从 cash 扣减）
+export function getMonthlyOperationCost(stageId) {
+  return Math.max(20, stageId * 10)
+}
+
+// ============================================================================
+// v4 卡牌新 schema：固定 L1 部门主轴 + 按稀有度随机功能池
+// ============================================================================
+
+/**
+ * 部门 L1 主轴效果矩阵（按 tier × dept 索引）
+ *  - R 部门: 抓牌（速度）—— 使用 DRAW_NEXT_MONTH 效果，由 engine.js 在 resolveMonth 应用
+ *  - S 部门: 倍数（暴击）—— 使用现有 SELF/RIGHT/LINE_ALL 效果，由 computeLineOutput 应用
+ *  - O 部门: AP（厚度）—— 使用现有 MONTH_AP 效果，由 getEffectiveApLimit 应用
+ *  - 专员 (specialist) 层不带主轴，作为"流派砖块"靠堆数量赚 combo / 流派质变收益
+ *  - 创始人 / 传奇 / 功能 / 服务卡走自己的 template.effects，不走此表
+ */
+export const DEPT_L1_EFFECTS = {
+  R: {
+    专员: [],
+    经理: ['DRAW_NEXT_MONTH: +1'],
+    总监: ['DRAW_NEXT_MONTH: +2'],
+    VP:   ['DRAW_NEXT_MONTH: +2'],
+    CXO:  ['DRAW_NEXT_MONTH: +3'],
+  },
+  S: {
+    专员: [],
+    经理: ['SELF: +15%'],
+    总监: ['RIGHT: +20%'],
+    VP:   ['LINE_ALL: +15%'],
+    CXO:  ['LINE_ALL: +20%'],
+  },
+  O: {
+    专员: [],
+    经理: ['MONTH_AP: +1'],
+    总监: ['MONTH_AP: +1'],
+    VP:   ['MONTH_AP: +2'],
+    CXO:  ['MONTH_AP: +2'],
+  },
+}
+
+/**
+ * 随机功能池：按 lv 分级
+ *  - lv1 微小：5-15% 单点 buff，资源类小补
+ *  - lv2 小：15-25% 单/双向 buff
+ *  - lv3 中：25-35% 单/双向 / 同部门相邻
+ *  - lv4 大：整线 / 部门线 buff
+ * 已移除所有"永久 X"类（NO_COOLDOWN / WHILE_ACTIVE / EACH_MONTH 等）以保平衡
+ */
+export const RANDOM_FUNCTION_POOL = {
+  lv1: [
+    { id: 'F1_01', name: '完美主义', effects: ['SELF_IF_P3: +15%'] },
+    { id: 'F1_02', name: '启动者',   effects: ['SELF_IF_P1: +15%'] },
+    { id: 'F1_03', name: '收割者',   effects: ['SELF_IF_P5: +15%'] },
+    { id: 'F1_04', name: '团魂',     effects: ['SAME_DEPT_ADJ: +5%'] },
+    { id: 'F1_05', name: '学霸',     effects: ['SELF_IF_ADJ_FUN: +10%'] },
+    { id: 'F1_06', name: '加班狂',   effects: ['SELF: +15%'] },
+    { id: 'F1_07', name: '资金奶牛', effects: ['MONTH_BONUS: +¥3'] },
+    { id: 'F1_08', name: '桥梁',     effects: ['DIFF_DEPT_ADJ_EXTRA: +8%'] },
+    { id: 'F1_09', name: '微调',     effects: ['SELF: +10%'] },
+    { id: 'F1_10', name: '调和',     effects: ['BOTH: +5%'] },
+  ],
+  lv2: [
+    { id: 'F2_01', name: '左援',     effects: ['LEFT: +15%'] },
+    { id: 'F2_02', name: '右援',     effects: ['RIGHT: +15%'] },
+    { id: 'F2_03', name: '双向调和', effects: ['BOTH: +10%'] },
+    { id: 'F2_04', name: '完美主义+', effects: ['SELF_IF_P3: +30%'] },
+    { id: 'F2_05', name: '收割者+', effects: ['SELF_IF_P5: +30%'] },
+    { id: 'F2_06', name: '工具人',   effects: ['SELF_IF_ADJ_FUN: +20%'] },
+    { id: 'F2_07', name: '小金库',   effects: ['MONTH_BONUS: +¥8'] },
+    { id: 'F2_08', name: '加班狂+', effects: ['SELF: +25%'] },
+  ],
+  lv3: [
+    { id: 'F3_01', name: '部门核心', effects: ['SAME_DEPT_ADJ: +25%'] },
+    { id: 'F3_02', name: '产线增益', effects: ['LINE_ALL: +12%'] },
+    { id: 'F3_03', name: '强力左援', effects: ['LEFT: +30%'] },
+    { id: 'F3_04', name: '强力右援', effects: ['RIGHT: +30%'] },
+    { id: 'F3_05', name: '化学反应', effects: ['SAME_DEPT_ADJ: +35%'] },
+    { id: 'F3_06', name: '大佬光环', effects: ['LINE_ALL: +15%'] },
+  ],
+  lv4: [
+    { id: 'F4_01', name: '研发线领袖', effects: ['LINE_ALL_R: +25%'] },
+    { id: 'F4_02', name: '销售线领袖', effects: ['LINE_ALL_S: +25%'] },
+    { id: 'F4_03', name: '运营线领袖', effects: ['LINE_ALL_O: +25%'] },
+    { id: 'F4_04', name: '现金奶牛',   effects: ['MONTH_BONUS: +¥20'] },
+    { id: 'F4_05', name: '一颗螺丝钉', effects: ['LINE_ALL: +25%'] },
+  ],
+}
+
+/**
+ * 稀有度 → (随机功能数量, 可抽功能 lv 范围) 映射
+ *  注意：与 plan §4.5 一致
+ */
+export const RARITY_RANDOM_SPEC = {
+  common:    { fnCount: 0, lvRange: [],         secondFnChance: 0    },
+  rare:      { fnCount: 1, lvRange: ['lv1', 'lv2'], secondFnChance: 0 },
+  elite:     { fnCount: 1, lvRange: ['lv1', 'lv2', 'lv3'], secondFnChance: 0.3 },
+  epic:      { fnCount: 2, lvRange: ['lv2', 'lv3'], secondFnChance: 0 },
+  legendary: { fnCount: 2, lvRange: ['lv2', 'lv3', 'lv4'], secondFnChance: 0.5 },
+}
+
+/**
+ * 判断某员工卡是否走 v4 标准 schema（固定 L1 + 随机功能池）
+ * 不走 schema 的：创始人 / 传奇 / 非员工卡，保留 template.effects 原样
+ */
+export function usesStandardEmpSchema(template) {
+  if (template.type !== 'emp') return false
+  if (template.tier === '创始人') return false
+  if (template.rarity === 'legendary') return false
+  if (!DEPT_L1_EFFECTS[template.dept]) return false
+  return true
+}
+
+/**
+ * 根据 dept + tier 取 L1 主轴效果数组
+ */
+export function getDeptL1Effects(dept, tier) {
+  return DEPT_L1_EFFECTS[dept]?.[tier] ?? []
+}
+
+/**
+ * 在功能池中按指定 lv 范围随机抽 1 个，排除已抽过的
+ */
+export function pickRandomFunction(lvRange, excludeIds = new Set(), rng = Math.random) {
+  if (!lvRange?.length) return null
+  const lv = lvRange[Math.floor(rng() * lvRange.length)]
+  const pool = (RANDOM_FUNCTION_POOL[lv] ?? []).filter(f => !excludeIds.has(f.id))
+  if (!pool.length) return null
+  return pool[Math.floor(rng() * pool.length)]
+}
+
+/**
+ * 按稀有度生成员工卡的随机功能列表
+ */
+export function rollRandomFunctions(rarity, rng = Math.random) {
+  const spec = RARITY_RANDOM_SPEC[rarity] ?? RARITY_RANDOM_SPEC.common
+  const results = []
+  const used = new Set()
+  for (let i = 0; i < spec.fnCount; i++) {
+    const fn = pickRandomFunction(spec.lvRange, used, rng)
+    if (fn) { results.push(fn); used.add(fn.id) }
+  }
+  // secondFnChance: 抽完基础后还有一定概率多抽 1 个
+  if (spec.secondFnChance > 0 && rng() < spec.secondFnChance) {
+    const extra = pickRandomFunction(spec.lvRange, used, rng)
+    if (extra) results.push(extra)
+  }
+  return results
+}
+
 export const RARITY_TABLE = {
-  common:    { baseBurn: 1, extraBurn: 0, assetValue: 5,   bmMonthlyCost: 2, bmAssetValue: 8   },
-  rare:      { baseBurn: 2, extraBurn: 1, assetValue: 15,  bmMonthlyCost: 4, bmAssetValue: 25  },
-  elite:     { baseBurn: 3, extraBurn: 1, assetValue: 30,  bmMonthlyCost: 6, bmAssetValue: 50  },
-  epic:      { baseBurn: 4, extraBurn: 2, assetValue: 50,  bmMonthlyCost: 8, bmAssetValue: 80  },
-  legendary: { baseBurn: 7, extraBurn: 4, assetValue: 150, bmMonthlyCost: 14, bmAssetValue: 240 },
+  common:    { baseBurn: 3,  extraBurn: 1,  assetValue: 5,   bmMonthlyCost: 5,  bmAssetValue: 8   },
+  rare:      { baseBurn: 5,  extraBurn: 3,  assetValue: 15,  bmMonthlyCost: 9,  bmAssetValue: 25  },
+  elite:     { baseBurn: 8,  extraBurn: 5,  assetValue: 30,  bmMonthlyCost: 14, bmAssetValue: 50  },
+  epic:      { baseBurn: 12, extraBurn: 8,  assetValue: 50,  bmMonthlyCost: 22, bmAssetValue: 80  },
+  legendary: { baseBurn: 20, extraBurn: 12, assetValue: 150, bmMonthlyCost: 35, bmAssetValue: 240 },
 }
 
 export const EVENTS = [
@@ -53,12 +226,12 @@ export const EVENTS = [
     id: 'angel-capital',
     name: '天使融资到账',
     tone: '增益',
-    description: '投资人提前打款，运营窗口更宽。',
-    effectLines: ['本月现金 +¥10', '本月招聘市场 +1'],
+    description: '投资人提前打款，但对短期成长有期望。',
+    effectLines: ['立即 +¥10', '本月维持费 +20% (投资人要求扩张)'],
     cashDelta: 10,
     recruitExtra: 1,
     incomeMultiplier: 1,
-    maintenanceMultiplier: 1,
+    maintenanceMultiplier: 1.2,
   },
   {
     id: 'customer-consulting',
@@ -154,10 +327,10 @@ export const EVENTS = [
     id: 'gov-subsidy',
     name: '政府补贴',
     tone: '增益',
-    description: '高新技术企业认证下来了。',
-    effectLines: ['立即 +¥30'],
+    description: '高新技术企业认证下来，但合规审查也跟来了。',
+    effectLines: ['立即 +¥30', '本月收入 -10%'],
     cashDelta: 30, recruitExtra: 0,
-    incomeMultiplier: 1, maintenanceMultiplier: 1,
+    incomeMultiplier: 0.9, maintenanceMultiplier: 1,
   },
   {
     id: 'competitor-collapse',
@@ -173,10 +346,10 @@ export const EVENTS = [
     id: 'big-client',
     name: '大客户签约',
     tone: '增益',
-    description: '世界 500 强 LOGO 入手。',
-    effectLines: ['立即 +¥50'],
+    description: '世界 500 强 LOGO 入手，但对接成本陡升。',
+    effectLines: ['立即 +¥50', '本月维持费 +30%'],
     cashDelta: 50, recruitExtra: 0,
-    incomeMultiplier: 1, maintenanceMultiplier: 1,
+    incomeMultiplier: 1, maintenanceMultiplier: 1.3,
   },
   {
     id: 'kol-fire',
@@ -202,9 +375,10 @@ export const EVENTS = [
     id: 'black-swan',
     name: '黑天鹅事件',
     tone: '风险',
-    description: '宏观因素突然恶化。',
-    effectLines: ['本月收入 -40%'],
+    description: '宏观因素突然恶化，但低谷期招到了便宜的人才。',
+    effectLines: ['本月收入 -40%', '下月开局 AP +3 (危机后整顿)'],
     cashDelta: 0, recruitExtra: 0,
+    apDelta: 3,
     incomeMultiplier: 0.6, maintenanceMultiplier: 1,
   },
   {
@@ -230,10 +404,10 @@ export const EVENTS = [
     id: 'cashflow-tight',
     name: '现金流紧张',
     tone: '风险',
-    description: '应收账款迟迟未到。',
-    effectLines: ['立即 -¥20'],
+    description: '应收账款迟迟未到，但出货量却创新高。',
+    effectLines: ['立即 -¥20', '本月收入 +20%'],
     cashDelta: -20, recruitExtra: 0,
-    incomeMultiplier: 1, maintenanceMultiplier: 1,
+    incomeMultiplier: 1.2, maintenanceMultiplier: 1,
   },
   {
     id: 'team-burnout',
@@ -281,19 +455,18 @@ export const EVENTS = [
     id: 'industry-conference',
     name: '行业大会',
     tone: '机会',
-    description: '行业人脉集中曝光的好时机。',
-    effectLines: ['招聘市场 +3'],
+    description: '行业人脉集中曝光，但需要预算赞助参展。',
+    effectLines: ['招聘市场 +3', '本月维持费 +25%'],
     cashDelta: 0, recruitExtra: 3,
-    incomeMultiplier: 1, maintenanceMultiplier: 1,
+    incomeMultiplier: 1, maintenanceMultiplier: 1.25,
   },
   {
     id: 'vc-tailwind',
     name: '投融资风口',
     tone: '机会',
     description: '风险资本疯狂涌入本赛道。',
-    effectLines: ['立即 +💰20'],
-    cashDelta: 0, recruitExtra: 0,
-    budgetDelta: 20,
+    effectLines: ['立即 +¥20'],
+    cashDelta: 20, recruitExtra: 0,
     incomeMultiplier: 1, maintenanceMultiplier: 1,
   },
   {
@@ -1659,6 +1832,54 @@ export const CARD_TEMPLATES = [
     inStarterDeck: false,
     inRecruitPool: false,
   },
+  {
+    id: 'EMP_FOUNDER_R',
+    name: '创始人 · 科学家',
+    type: 'emp',
+    dept: 'R',
+    tier: '创始人',
+    rarity: 'epic',
+    unlockLevel: 1,
+    ap: 3,
+    costSpec: '15 ±10%',
+    baseOutputSpec: '66 ±10%',
+    effects: ['FOUNDER_AI_RD'],
+    flavor: '“我们的目标是星辰大海与硬核科技！”——科学家出身的创始人，用代码与专利砸出行业未来。',
+    inStarterDeck: false,
+    inRecruitPool: false,
+  },
+  {
+    id: 'EMP_FOUNDER_S',
+    name: '创始人 · 销售冠军',
+    type: 'emp',
+    dept: 'S',
+    tier: '创始人',
+    rarity: 'epic',
+    unlockLevel: 1,
+    ap: 3,
+    costSpec: '15 ±10%',
+    baseOutputSpec: '66 ±10%',
+    effects: ['FOUNDER_SALES_HIGH'],
+    flavor: '“把这个 PPT 吹上天，今晚就签单！”——销冠出身的创始人，拥有把空气卖出高价的超级话术。',
+    inStarterDeck: false,
+    inRecruitPool: false,
+  },
+  {
+    id: 'EMP_FOUNDER_O',
+    name: '创始人 · 大厂 CXO',
+    type: 'emp',
+    dept: 'O',
+    tier: '创始人',
+    rarity: 'epic',
+    unlockLevel: 1,
+    ap: 3,
+    costSpec: '15 ±10%',
+    baseOutputSpec: '66 ±10%',
+    effects: ['FOUNDER_LEAN_MANAGEMENT'],
+    flavor: '“先对齐一下底层逻辑，打通闭环！”——大厂高管出身的创始人，用降本增效和组织架构横扫商海。',
+    inStarterDeck: false,
+    inRecruitPool: false,
+  },
 ]
 
 // ============================================================================
@@ -1674,6 +1895,9 @@ export const DEFAULT_DRAW_WEIGHTS = {
 
 // Mutate templates 一次性补齐 drawWeight 字段，以及 burn/asset 字段
 for (const card of CARD_TEMPLATES) {
+  if (card.type === 'fun') {
+    card.ap = 0
+  }
   if (card.drawWeight == null) {
     card.drawWeight = DEFAULT_DRAW_WEIGHTS[card.rarity] ?? 10
   }
@@ -1764,11 +1988,11 @@ export const BUSINESS_MODELS = [
     id: 'BM_03',
     name: '降本增效',
     hook: 'onMonthStart',
-    payload: { type: 'maintenanceDiscount', value: 0.2 },
+    payload: { type: 'ccrBonus', value: 0.05 },
     rarity: 'rare',
     unlockLevel: 4,
     cost: 13,
-    description: '维持费 -20%',
+    description: '现金转化率 CCR +5%',
     flavor: '降的是别人的本，增的是 KPI 的效。寒冬必备技能，越降越冷。',
   },
   {
@@ -1812,11 +2036,11 @@ export const BUSINESS_MODELS = [
     id: 'BM_18',
     name: '数据驱动',
     hook: 'onMonthStart',
-    payload: { type: 'maintenanceDiscount', value: 0.3 },
+    payload: { type: 'ccrBonus', value: 0.10 },
     rarity: 'rare',
     unlockLevel: 4,
     cost: 13,
-    description: '维持费 -30%',
+    description: '现金转化率 CCR +10%',
     flavor: '决策不靠拍脑袋。改了 17 版 dashboard、跑了 23 次 AB 测试之后，还是靠老板拍脑袋。',
   },
 
@@ -1847,11 +2071,11 @@ export const BUSINESS_MODELS = [
     id: 'BM_21',
     name: '砍价式管理',
     hook: 'onMonthStart',
-    payload: { type: 'maintenanceDiscount', value: 0.5 },
+    payload: { type: 'ccrBonus', value: 0.15 },
     rarity: 'elite',
     unlockLevel: 4,
     cost: 18,
-    description: '维持费 -50%',
+    description: '现金转化率 CCR +15%',
     flavor: '没有中层，全是基层。"扁平化管理" = "所有人都直接汇报给老板" = "老板永远在开会"。',
   },
 
@@ -1890,11 +2114,11 @@ export const BUSINESS_MODELS = [
     id: 'BM_06',
     name: '批量涌现',
     hook: 'onSettle',
-    payload: { type: 'sameDeptAdjBonus', value: 0.1 },
+    payload: { type: 'lineApDiscount', value: 1 },
     rarity: 'common',
     unlockLevel: 1,
     cost: 7,
-    description: '同部门相邻 +10%',
+    description: '产线 AP -1',
     flavor: '明茨伯格说战略不是规划出来的，是涌现出来的。所以这一年到底干了什么？复盘的时候再编。',
   },
   {
@@ -1961,22 +2185,22 @@ export const BUSINESS_MODELS = [
     id: 'BM_09',
     name: 'All-in 增长',
     hook: 'onSettle',
-    payload: { type: 'p5Bonus', value: 0.2 },
+    payload: { type: 'deptBonus', dept: 'S', value: 0.25 },
     rarity: 'rare',
     unlockLevel: 4,
     cost: 13,
-    description: 'P5 收割位 ×1.5 → ×1.7',
+    description: 'S 部门 +25%',
     flavor: 'ALL IN AI。ALL IN 元宇宙。ALL IN 大模型。ALL IN 出海。明年再 ALL IN 一个新方向。',
   },
   {
     id: 'BM_26',
     name: '飞轮效应',
     hook: 'onSettle',
-    payload: { type: 'sameDeptAdjBonus', value: 0.2 },
+    payload: { type: 'lineApDiscount', value: 2 },
     rarity: 'rare',
     unlockLevel: 4,
     cost: 13,
-    description: '同部门相邻 +20%',
+    description: '产线 AP -2',
     flavor: '某电商大佬说的飞轮，一开始转得慢，转起来谁都拦不住。可惜大部分公司还在推飞轮的第一圈。',
   },
   {
@@ -1996,11 +2220,11 @@ export const BUSINESS_MODELS = [
     id: 'BM_28',
     name: '颠覆式创新 2.0',
     hook: 'onSettle',
-    payload: { type: 'p5Bonus', value: 0.4 },
+    payload: { type: 'deptBonus', dept: 'R', value: 0.3 },
     rarity: 'elite',
     unlockLevel: 4,
     cost: 18,
-    description: 'P5 收割位 ×1.5 → ×1.9',
+    description: 'R 部门 +30%',
     flavor: '管理学教科书说要从低端市场开始颠覆。我们说要从老板感兴趣的市场开始。',
   },
   {
@@ -2008,13 +2232,13 @@ export const BUSINESS_MODELS = [
     "name": "现金牛牛矩阵",
     "hook": "onSettle",
     "payload": {
-      "type": "sameDeptAdjBonus",
-      "value": 0.3
+      "type": "ccrBonus",
+      "value": 0.1
     },
     "rarity": "elite",
     "unlockLevel": 4,
     "cost": 18,
-    "description": "同部门相邻 +30%",
+    "description": "现金转化率 +10%",
     "flavor": "没钱用BCG，用个他们的矩阵平替下～"
   },
   {
@@ -2256,14 +2480,16 @@ export const PACK_DEFINITIONS = [
 ]
 
 /**
- * 升职稀有度路径
+ * HR 升职路径：只提升 tier，不改变 rarity
  */
 export const UPGRADE_PATHS = {
-  common: { next: 'rare', cost: 10 },
-  rare: { next: 'elite', cost: 15 },
-  elite: { next: 'epic', cost: 20 },
-  epic: null,
-  legendary: null,
+  专员: { next: '经理', cost: 10 },
+  经理: { next: '总监', cost: 15 },
+  总监: { next: 'VP', cost: 20 },
+  VP: { next: 'CXO', cost: 30 },
+  CXO: null,
+  创始人: null,
+  顶级: null,
 }
 
 /**
@@ -2275,7 +2501,7 @@ export const AFFIX_POOL = [
   { id: 'AFF_BOTH_5', label: '↔ 双向 +5%', effects: ['BOTH: +5%'] },
   { id: 'AFF_SELF_8', label: '⚡ 自身 +8%', effects: ['SELF: +8%'] },
   { id: 'AFF_P5_20', label: '🎯 P5 +20%', effects: ['SELF_IF_P5: +20%'] },
-  { id: 'AFF_COST_DOWN', label: '💰 维持费 -1', effects: ['MAINT: -1'] },
+  { id: 'AFF_COST_DOWN', label: '¥ 维持费 -1', effects: ['MAINT: -1'] },
 ]
 
 /**
@@ -2287,9 +2513,9 @@ export const BOARD_EVENTS = [
     title: '核心员工被挖',
     flavor: '某竞品猎头以高出 50% 的薪资来挖你最强的研发主管。HR 把决策权交给了董事会：',
     options: [
-      { id: 'A', label: '留人 (−💰8)', cost: 8, effect: { type: 'noop' }, result: '✓ 留住了王牌研发，士气稳定' },
-      { id: 'B', label: '放走', effect: { type: 'removeBudgetBonus', value: 4 }, result: '失去一员大将，但收到 4 💰 补偿' },
-      { id: 'C', label: '反挖对方 (−💰12)', cost: 12, effect: { type: 'recruitLegendary', dept: 'R', count: 1 }, result: '🔥 反挖成功！下关获得 1 张 R 部门传奇候选' },
+      { id: 'A', label: '留人 (−¥8)', cost: 8, effect: { type: 'noop' }, result: '✓ 留住了王牌研发，士气稳定' },
+      { id: 'B', label: '放走', effect: { type: 'removeBudgetBonus', value: 4 }, result: '失去一员大将，但收到 4 ¥ 补偿' },
+      { id: 'C', label: '反挖对方 (−¥12)', cost: 12, effect: { type: 'recruitLegendary', dept: 'R', count: 1 }, result: '🔥 反挖成功！下关获得 1 张 R 部门传奇候选' },
     ],
   },
   {
@@ -2298,8 +2524,8 @@ export const BOARD_EVENTS = [
     flavor: '投资人在董事会上拍桌子要求下一季度立刻见效，扬言不达标就换 CEO：',
     options: [
       { id: 'A', label: '妥协 (下关目标 +10%)', effect: { type: 'increaseNextTarget', value: 0.1 }, result: '✓ 投资人满意离场' },
-      { id: 'B', label: '顶住 (−💰5)', cost: 5, effect: { type: 'noop' }, result: '强硬态度让你保住了战略自主权' },
-      { id: 'C', label: '反手画饼 (+💰3，下关首月手牌 -1)', effect: { type: 'budgetGainNextMonthPenalty', budget: 3 }, result: '✓ 用愿景换到 3 💰，但代价是下关首月手牌 -1' },
+      { id: 'B', label: '顶住 (−¥5)', cost: 5, effect: { type: 'noop' }, result: '强硬态度让你保住了战略自主权' },
+      { id: 'C', label: '反手画饼 (+¥3，下关首月手牌 -1)', effect: { type: 'budgetGainNextMonthPenalty', budget: 3 }, result: '✓ 用愿景换到 3 ¥，但代价是下关首月手牌 -1' },
     ],
   },
   {
@@ -2326,8 +2552,8 @@ export const BOARD_EVENTS = [
     title: '行业并购',
     flavor: '一家小型公司寻求被并购，吞下它能扩大商业模式上限：',
     options: [
-      { id: 'A', label: '吞并 (−💰15，永久 +1 商业模式槽位)', cost: 15, effect: { type: 'increaseBmSlot' }, result: '✓ 并购完成，商业模式上限 +1' },
-      { id: 'B', label: '拒绝 (+💰3)', effect: { type: 'budgetGain', value: 3 }, result: '保持精简，获得 3 💰 顾问费' },
+      { id: 'A', label: '吞并 (−¥15，永久 +1 商业模式槽位)', cost: 15, effect: { type: 'increaseBmSlot' }, result: '✓ 并购完成，商业模式上限 +1' },
+      { id: 'B', label: '拒绝 (+¥3)', effect: { type: 'budgetGain', value: 3 }, result: '保持精简，获得 3 ¥ 顾问费' },
       { id: 'C', label: '观望', effect: { type: 'noop' }, result: '✓ 没有动作' },
     ],
   },

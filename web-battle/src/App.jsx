@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import CompendiumScreen from './CompendiumScreen.jsx'
+import { CardView, summarizeEffect } from './CardView.jsx'
+import { useFloatingTooltip } from './hooks/useFloatingTooltip.jsx'
+import PhaserBattleFX from './PhaserBattleFX.jsx'
+import PhaserMenuFX from './PhaserMenuFX.jsx'
 import { PackBox3D } from './PackBox3D.jsx'
 import { ServiceFunSvg, hasServiceFunSvg } from './ServiceFunSvg.jsx'
 import { ExecutiveSvgPortrait } from './人物/ExecutiveSvgPortrait.jsx'
@@ -62,13 +66,14 @@ import {
   rollSchool,
   rollShop,
   upgradeCard,
-  applyWithdrawal,
   dismissCardInBoardMeeting,
-  applyStagnationAdvice,
+  pickHighlightCard,
+  dismissHighlightCard,
   unsubscribeBusinessModel,
   computeValuation,
-  computeQuarterlyAvgProfit,
   getAllCards,
+  sortHandDefault,
+  autoDeployActiveLine,
 } from './game/engine.js'
 
 const TUTORIAL_STEPS = [
@@ -81,7 +86,7 @@ const TUTORIAL_STEPS = [
   },
   {
     title: '把人塞进产线 (5 格生产位)',
-    body: 'P1 启动位 = 第一个干活的猛男，自动 +20%。P3 中枢位 = 中间的「救火队长」，左右邻都被她带飞。P5 收割位 = 谁贡献够多谁拿荣誉，吃 ×1.5。\n对，公司就是这么不公平。',
+    body: '5 个工位各有自己的部门偏好：P1/P2 更适合销售，P3 更适合研发，P4/P5 更适合运营。把人放在顺手的位置，产线才会真的转起来。',
     focus: 'line',
     targetSelector: '.line-board.active .slot-row',
     placement: 'top',
@@ -105,11 +110,24 @@ const TUTORIAL_STEPS = [
 // ============================================================
 // Layout Editor — context + localStorage helpers
 // ============================================================
+// v4: 槽位主题名（替换旧的 P1/P2/P3/P4/P5）
+const SLOT_LABELS = ['前线业务', '市场支持', '研发中心', '运营中台', '组织后台']
+
 const LAYOUT_STORAGE_KEY = 'frank-battle-layout-v1'
 const TEXT_STORAGE_KEY   = 'frank-battle-texts-v1'
+const DEFAULT_LAYOUT_OVERRIDES = {}
+function _resolveLayoutOverride(id, overrides) {
+  return overrides[id] ?? {}
+}
 function _loadLayout() {
-  try { return JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY) ?? 'null') ?? {} }
-  catch { return {} }
+  try {
+    const stored = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY) ?? 'null') ?? {}
+    return {
+      ...DEFAULT_LAYOUT_OVERRIDES,
+      ...stored,
+    }
+  }
+  catch { return DEFAULT_LAYOUT_OVERRIDES }
 }
 function _loadTexts() {
   try { return JSON.parse(localStorage.getItem(TEXT_STORAGE_KEY) ?? 'null') ?? {} }
@@ -149,9 +167,376 @@ const LayoutEditCtx = React.createContext({
   updateText: () => {},
 })
 
+function DriftingCheckerboardBackground({ direction, stageId = 1 }) {
+  const canvasRef = useRef(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+
+    const STAGE_PALETTES = {
+      1: { colorA: '#c9bfb1', colorB: '#ece7df' }, // 天使轮 - Morandi taupe & warm off-white
+      2: { colorA: '#a7c0a8', colorB: '#ece8e1' }, // 种子轮 - Soft emerald & sand warm
+      3: { colorA: '#a0b2c6', colorB: '#e8edf3' }, // A 轮 - Cool slate & soft ice blue
+      4: { colorA: '#b8a6d9', colorB: '#ebe6f3' }, // B 轮 - Growth purple & soft grey-purple
+      5: { colorA: '#94cbd3', colorB: '#e6f1f3' }, // C 轮 - Teal blue & arctic mint
+      6: { colorA: '#8a9597', colorB: '#e5e8e8' }, // D 轮 - Graphite & slate grey
+      7: { colorA: '#e0cca5', colorB: '#f5eedf' }, // IPO - Champagne & soft cream
+      8: { colorA: '#9ba3d7', colorB: '#e9eaf5' }, // 千亿 - Royal deep indigo & ice
+      9: { colorA: '#2d2f34', colorB: '#f5c63c' }, // 行业第一 - Obsidian void & gold grid lines
+    }
+
+    const palette = STAGE_PALETTES[stageId] || STAGE_PALETTES[1]
+    const COLOR_A = palette.colorA
+    const COLOR_B = palette.colorB
+    const SIZE = 48 // tile side length (px)
+    const SPEED = 7 // px/sec along each axis
+
+    let W = 0, H = 0, dpr = 1
+
+    function resize() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2)
+      W = window.innerWidth
+      H = window.innerHeight
+      canvas.width = Math.floor(W * dpr)
+      canvas.height = Math.floor(H * dpr)
+      canvas.style.width = W + 'px'
+      canvas.style.height = H + 'px'
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
+
+    resize()
+    window.addEventListener('resize', resize)
+
+    let animFrameId
+    const start = performance.now()
+
+    function draw(now) {
+      const t = (now - start) / 1000
+      const period = SIZE * 2
+
+      let vx = 0
+      let vy = 0
+
+      switch (direction) {
+        case 'left-up':
+          vx = -1
+          vy = -1
+          break
+        case 'left-down':
+          vx = -1
+          vy = 1
+          break
+        case 'right-up':
+          vx = 1
+          vy = -1
+          break
+        case 'right-down':
+          vx = 1
+          vy = 1
+          break
+        case 'left':
+          vx = -1
+          vy = 0
+          break
+        case 'right':
+          vx = 1
+          vy = 0
+          break
+        case 'up':
+          vx = 0
+          vy = -1
+          break
+        case 'down':
+          vx = 0
+          vy = 1
+          break
+        default:
+          vx = 1
+          vy = -1
+      }
+
+      let ox = (SPEED * vx * t) % period
+      let oy = (SPEED * vy * t) % period
+
+      if (ox < 0) ox += period
+      if (oy < 0) oy += period
+
+      ctx.fillStyle = COLOR_B
+      ctx.fillRect(0, 0, W, H)
+
+      const startCol = -2, startRow = -2
+      const cols = Math.ceil(W / SIZE) + 4
+      const rows = Math.ceil(H / SIZE) + 4
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x = (startCol + c) * SIZE + ox
+          const y = (startRow + r) * SIZE + oy
+
+          const dark = ((c + r) & 1) === 0
+          ctx.fillStyle = dark ? COLOR_A : COLOR_B
+          ctx.fillRect(x, y, SIZE, SIZE)
+        }
+      }
+
+      animFrameId = requestAnimationFrame(draw)
+    }
+
+    animFrameId = requestAnimationFrame(draw)
+
+    return () => {
+      window.removeEventListener('resize', resize)
+      cancelAnimationFrame(animFrameId)
+    }
+  }, [direction, stageId])
+
+  return createPortal(
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 0,
+        pointerEvents: 'none',
+      }}
+    />,
+    document.body
+  )
+}
+
+function ScientistIcon(props) {
+  return (
+    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      {/* Orbital atom lines */}
+      <ellipse cx="50" cy="45" rx="35" ry="12" stroke="var(--icon-color, #00f2fe)" strokeWidth="2.5" transform="rotate(30 50 45)" strokeDasharray="3 3" />
+      <ellipse cx="50" cy="45" rx="35" ry="12" stroke="var(--icon-color, #00f2fe)" strokeWidth="2.5" transform="rotate(-30 50 45)" strokeDasharray="3 3" />
+      {/* Electron dots */}
+      <circle cx="20" cy="27" r="4" fill="var(--icon-accent, #ffe000)" />
+      <circle cx="80" cy="27" r="4" fill="var(--icon-accent, #ffe000)" />
+      <circle cx="50" cy="80" r="4" fill="var(--icon-accent, #ffe000)" />
+      {/* Beaker */}
+      <path d="M42 20H58M45 20V35L30 65C28 69 31 74 36 74H64C69 74 72 69 70 65L55 35V20H45Z" stroke="var(--icon-color, #00f2fe)" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+      {/* Beaker liquid */}
+      <path d="M33.5 58H66.5L64 63H36L33.5 58Z" fill="var(--icon-color, #00f2fe)" opacity="0.3" />
+      <path d="M36 63H64C67 63 69 66 67.5 69C66.5 71 64.5 72 62.5 72H37.5C35.5 72 33.5 71 32.5 69C31 66 33 63 36 63Z" fill="var(--icon-color, #00f2fe)" opacity="0.6" />
+      <circle cx="45" cy="50" r="3" fill="var(--icon-color, #00f2fe)" />
+      <circle cx="55" cy="45" r="2.5" fill="var(--icon-color, #00f2fe)" />
+      <circle cx="48" cy="38" r="2" fill="var(--icon-color, #00f2fe)" />
+    </svg>
+  )
+}
+
+function SalesIcon(props) {
+  return (
+    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      {/* Growing chart */}
+      <path d="M15 80 L35 60 L55 68 L85 30" stroke="var(--icon-color, #ff3366)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M73 30 H85 V42" stroke="var(--icon-color, #ff3366)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M15 80H85" stroke="var(--icon-color, #ff3366)" opacity="0.3" strokeWidth="2.5" />
+      {/* Money Badge */}
+      <circle cx="50" cy="52" r="18" stroke="var(--icon-accent, #ffe000)" strokeWidth="4.5" fill="#1b1b22" />
+      <path d="M50 42 C45 42 42 45 42 48 C42 53 58 51 58 56 C58 59 55 62 50 62 C44 62 42 59 42 59 M50 38V42 M50 62V66" stroke="var(--icon-accent, #ffe000)" strokeWidth="3" strokeLinecap="round" />
+      {/* Sound waves */}
+      <path d="M72 40 C76 44 76 50 72 54" stroke="var(--icon-color, #ff3366)" strokeWidth="3" strokeLinecap="round" />
+      <path d="M78 34 C85 41 85 53 78 60" stroke="var(--icon-color, #ff3366)" strokeWidth="3" strokeLinecap="round" opacity="0.6" />
+      <path d="M28 54 C24 50 24 44 28 40" stroke="var(--icon-color, #ff3366)" strokeWidth="3" strokeLinecap="round" />
+      <path d="M22 60 C15 53 15 41 22 34" stroke="var(--icon-color, #ff3366)" strokeWidth="3" strokeLinecap="round" opacity="0.6" />
+    </svg>
+  )
+}
+
+function CxoIcon(props) {
+  return (
+    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+      {/* Organization structure / Building network */}
+      <path d="M20 80V50L35 38L50 50V80" stroke="var(--icon-color, #42d77d)" strokeWidth="3.5" strokeLinejoin="round" />
+      <path d="M50 80V35L65 23L80 35V80" stroke="var(--icon-color, #42d77d)" strokeWidth="3.5" strokeLinejoin="round" opacity="0.7" />
+      <path d="M10 80H90" stroke="var(--icon-color, #42d77d)" strokeWidth="4.5" strokeLinecap="round" />
+      {/* Organization tie */}
+      <path d="M50 42 L56 46 L53 62 L50 68 L47 62 L44 46 Z" fill="var(--icon-accent, #00f2fe)" stroke="var(--icon-accent, #00f2fe)" strokeWidth="1.5" />
+      <path d="M45 42H55L53 38H47L45 42Z" fill="var(--icon-accent, #00f2fe)" />
+      {/* Crown */}
+      <path d="M40 32 L43 23 L50 27 L57 23 L60 32 Z" fill="var(--icon-accent, #ffe000)" stroke="var(--icon-accent, #ffe000)" strokeWidth="1.5" />
+      <circle cx="50" cy="27" r="1.5" fill="#1b1b22" />
+      <circle cx="43" cy="23" r="1.5" fill="#1b1b22" />
+      <circle cx="57" cy="23" r="1.5" fill="#1b1b22" />
+    </svg>
+  )
+}
+
+function ProfessionSelectCard({ name, title, dept, desc, icon: Icon, onClick, className, id, isSelected }) {
+  const wrapRef = useRef(null)
+  const cardRef = useRef(null)
+
+  function handleMouseMove(e) {
+    const wrap = wrapRef.current
+    const card = cardRef.current
+    if (!wrap || !card) return
+    const rect = wrap.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const w = rect.width
+    const h = rect.height
+    
+    // Normalize coordinates from -0.5 to 0.5
+    const pctX = (x / w) - 0.5
+    const pctY = (y / h) - 0.5
+    
+    // Extreme 3D rotation angles for pop-out depth
+    const tiltY = pctX * 18
+    const tiltX = -pctY * 18
+    
+    card.style.setProperty('--prof-tilt-x', `${tiltX.toFixed(2)}deg`)
+    card.style.setProperty('--prof-tilt-y', `${tiltY.toFixed(2)}deg`)
+    
+    const glareX = (x / w) * 100
+    const glareY = (y / h) * 100
+    card.style.setProperty('--prof-glare-x', `${glareX.toFixed(2)}%`)
+    card.style.setProperty('--prof-glare-y', `${glareY.toFixed(2)}%`)
+  }
+
+  function handleMouseLeave() {
+    const card = cardRef.current
+    if (!card) return
+    card.style.setProperty('--prof-tilt-x', '0deg')
+    card.style.setProperty('--prof-tilt-y', '0deg')
+    card.style.setProperty('--prof-glare-x', '50%')
+    card.style.setProperty('--prof-glare-y', '50%')
+  }
+
+  return (
+    <button
+      ref={wrapRef}
+      className="profession-card-wrap"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      onClick={onClick}
+      aria-label={`选择职业背景: ${name}`}
+    >
+      <div
+        ref={cardRef}
+        id={id}
+        className={`profession-card ${className} ${isSelected ? 'selected-active' : ''}`}
+      >
+        <div className="prof-card-shine" />
+        <div className="prof-card-inner">
+          <div className="prof-card-dept-badge">{dept}</div>
+          <div className="prof-card-icon-container">
+            <Icon className="prof-card-svg-icon" />
+          </div>
+          <h2 className="prof-card-title">{name}</h2>
+          <span className="prof-card-subtitle">{title}</span>
+          <div className="prof-card-divider" />
+          <div className="prof-card-details">
+            {desc}
+          </div>
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function ProfessionSelectScreen({ onSelect, onBack }) {
+  const [selectedProf, setSelectedProf] = useState(null)
+
+  return (
+    <div className="profession-select-overlay">
+      <h1 className="profession-select-title">选择创始人出身背景</h1>
+      <p className="profession-select-subtitle">不同的行业经验，将塑造独一无二的起始发展道路与核心卡牌</p>
+      
+      <div className="profession-cards-container">
+        <ProfessionSelectCard
+          id="prof-select-scientist"
+          name="科学家"
+          title="Scientist"
+          dept="研发部 (R)"
+          className="prof-scientist"
+          icon={ScientistIcon}
+          isSelected={selectedProf === 'scientist'}
+          onClick={() => setSelectedProf('scientist')}
+          desc={
+            <>
+              <p>“硬核研发，厚积薄发”</p>
+              <ul>
+                <li>专属主角: <strong>创始人 · 科学家</strong> (EPIC)</li>
+                <li>随机职员: 专员牌 ×1 + 经理牌 ×1 (R)</li>
+                <li>核心技能: <strong>AI-Driven 研发</strong><br/>· 手里：每轮抓牌数 +1<br/>· 打出：本轮抓牌数 +3 (手牌上限 10)</li>
+              </ul>
+            </>
+          }
+        />
+        
+        <ProfessionSelectCard
+          id="prof-select-sales"
+          name="销售冠军"
+          title="Sales Champion"
+          dept="销售部 (S)"
+          className="prof-sales"
+          icon={SalesIcon}
+          isSelected={selectedProf === 'sales'}
+          onClick={() => setSelectedProf('sales')}
+          desc={
+            <>
+              <p>“业绩为王，舌战群雄”</p>
+              <ul>
+                <li>专属主角: <strong>创始人 · 销售冠军</strong> (EPIC)</li>
+                <li>随机职员: 专员牌 ×1 + 经理牌 ×1 (S)</li>
+                <li>核心技能: <strong>Sales High</strong><br/>· 手里：产出系数 ×1.2<br/>· 打出：本轮产出系数 ×1.8</li>
+              </ul>
+            </>
+          }
+        />
+        
+        <ProfessionSelectCard
+          id="prof-select-cxo"
+          name="大厂 CXO"
+          title="Big Tech CXO"
+          dept="运营部 (O)"
+          className="prof-cxo"
+          icon={CxoIcon}
+          isSelected={selectedProf === 'cxo'}
+          onClick={() => setSelectedProf('cxo')}
+          desc={
+            <>
+              <p>“对齐颗粒度，降本增效”</p>
+              <ul>
+                <li>专属主角: <strong>创始人 · 大厂 CXO</strong> (EPIC)</li>
+                <li>随机职员: 专员牌 ×1 + 经理牌 ×1 (O)</li>
+                <li>核心技能: <strong>精益管理</strong><br/>· 手里：最大 AP +1<br/>· 打出：本轮 AP +3</li>
+              </ul>
+            </>
+          }
+        />
+      </div>
+      
+      {selectedProf && (
+        <div className="prof-actions-area">
+          <button
+            className={`prof-confirm-button theme-${selectedProf}`}
+            onClick={() => onSelect(selectedProf)}
+            id="prof-confirm-btn"
+          >
+            是否选择该背景
+          </button>
+        </div>
+      )}
+      
+      <button className="prof-back-button" onClick={onBack} id="prof-back-btn">
+        返回主菜单
+      </button>
+    </div>
+  )
+}
+
+const FloatingTooltipCtx = React.createContext(null)
+
 function App() {
   const [screen, setScreen] = useState('menu')
   const [compendiumReturn, setCompendiumReturn] = useState('menu')
+  const [sortMode, setSortMode] = useState('ap') // 'ap' or 'dept'
+  const appTooltip = useFloatingTooltip({ delay: 150 })
   const [game, setGame] = useState(() => {
     const loaded = _loadGameState()
     if (loaded) {
@@ -216,8 +601,12 @@ function App() {
   const [drawer, setDrawer] = useState(null)
   const [enteringHandUids, setEnteringHandUids] = useState(() => new Set())
   const [settlementFx, setSettlementFx] = useState(null)
+  const [phaserFxEvent, setPhaserFxEvent] = useState(null)
   const [isSettling, setIsSettling] = useState(false)
+  const [isAnimating, setIsAnimating] = useState(false)
+  const [flyingCards, setFlyingCards] = useState([])
   const [draggingCardUid, setDraggingCardUid] = useState(null)
+  const isInteractionLocked = isSettling || isAnimating
   const [comboOpen, setComboOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [creditsOpen, setCreditsOpen] = useState(false)
@@ -237,7 +626,7 @@ function App() {
     setLayoutEditMode(false)
   }
   function resetLayout() {
-    setLayoutOverrides({})
+    setLayoutOverrides(DEFAULT_LAYOUT_OVERRIDES)
     setTextOverrides({})
     localStorage.removeItem(LAYOUT_STORAGE_KEY)
     localStorage.removeItem(TEXT_STORAGE_KEY)
@@ -257,11 +646,115 @@ function App() {
   const activeLineAp = getLineAp(activeLine?.slots ?? [])
   const apLimit = getEffectiveApLimit(game)
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+
+    const allCards = getAllCards(game)
+    const activeBMs = (game.activeBusinessModels ?? [])
+      .map((slot) => BUSINESS_MODELS.find((bm) => bm.id === slot.id))
+      .filter(Boolean)
+
+    const snapshot = {
+      capturedAt: new Date().toISOString(),
+      route: 'battle',
+      date: `${game.year}.${String(game.month).padStart(2, '0')}`,
+      elapsedMonths: game.elapsedMonths,
+      stage: {
+        id: game.stage.id,
+        name: game.stage.name,
+        theme: game.stage.theme,
+        threshold: game.stage.threshold,
+      },
+      valuation: game.valuation,
+      computedValuation: computeValuation(game),
+      cash: game.cash,
+      retainedEarnings: game.retainedEarnings,
+      lastMonthProfit: game.lastMonthProfit,
+      preview: {
+        income: preview.eventIncome,
+        rawIncome: preview.rawIncome,
+        burn: preview.maintenance,
+        netCash: preview.netCash,
+        profit: preview.profit,
+        cashGain: preview.cashGain,
+        cashDelta: preview.cashDelta,
+        ccr: preview.ccr,
+        monthlyOpCost: preview.monthlyOpCost,
+      },
+      ap: {
+        used: activeLineAp,
+        limit: apLimit,
+        available: game.apAvailable,
+        carry: game.apCarry,
+      },
+      assets: {
+        cardAsset: allCards.reduce((sum, card) => sum + getCardAssetValue(card), 0),
+        bmAsset: activeBMs.reduce((sum, bm) => sum + getBMAssetValue(bm), 0),
+      },
+      burnSources: {
+        cards: allCards.reduce((sum, card) => sum + getCardBurn(card), 0),
+        extraCards: allCards.reduce((sum, card) => sum + getCardExtraBurn(card), 0),
+        businessModels: activeBMs.reduce((sum, bm) => sum + getBMMonthlyCost(bm), 0),
+      },
+      lines: game.lines.map((line) => ({
+        id: line.id,
+        status: line.status,
+        ap: getLineAp(line.slots),
+        cards: line.slots.map((card) => card ? {
+          id: card.id,
+          name: card.name,
+          type: card.type,
+          dept: card.dept,
+          tier: card.tier,
+          rarity: card.rarity,
+          ap: card.ap,
+          burn: getCardBurn(card),
+          asset: getCardAssetValue(card),
+        } : null),
+      })),
+      hand: game.hand.map((card) => ({
+        id: card.id,
+        name: card.name,
+        type: card.type,
+        dept: card.dept,
+        tier: card.tier,
+        rarity: card.rarity,
+        ap: card.ap,
+        burn: getCardBurn(card),
+      })),
+      activeBusinessModels: activeBMs.map((bm) => ({
+        id: bm.id,
+        name: bm.name,
+        cost: getBMMonthlyCost(bm),
+        asset: getBMAssetValue(bm),
+      })),
+      lastSettlement: game.lastSettlement ?? null,
+      logHead: game.log?.slice(0, 5) ?? [],
+    }
+
+    fetch('http://127.0.0.1:5174/snapshot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(snapshot),
+      keepalive: true,
+    }).catch(() => {})
+  }, [game, preview, activeLineAp, apLimit])
+
   useEffect(() => () => {
     window.clearTimeout(hintTimerRef.current)
     window.clearTimeout(handEntryTimerRef.current)
     window.clearTimeout(settlementFxTimerRef.current)
   }, [])
+
+  useEffect(() => {
+    const inactive = flyingCards.some((fc) => !fc.active)
+    if (inactive) {
+      const id = requestAnimationFrame(() => {
+        setFlyingCards((prev) => prev.map((fc) => (fc.active ? fc : { ...fc, active: true })))
+      })
+      return () => cancelAnimationFrame(id)
+    }
+  }, [flyingCards])
 
   useEffect(() => {
     function handleGlobalButtonSound(event) {
@@ -304,13 +797,22 @@ function App() {
       const nextSettlementFx = buildSettlementFx(settlement)
       playSettlementAudio(nextSettlementFx)
       setSettlementFx(nextSettlementFx)
+      setPhaserFxEvent({ type: 'settlement', id: nextSettlementFx.id, settlementFx: nextSettlementFx })
       setIsSettling(true)
       window.clearTimeout(settlementFxTimerRef.current)
       settlementFxTimerRef.current = window.setTimeout(() => {
         setSettlementFx(null)
         setIsSettling(false)
         if (options.animateNewHand) animateNewHand(game, result.state)
-        setGame(result.state)
+        
+        let finalState = result.state
+        if (finalState.result && finalState.result.passed && !finalState.result.gameWon) {
+          const intermission = enterIntermission(finalState)
+          if (intermission.ok) {
+            finalState = intermission.state
+          }
+        }
+        setGame(finalState)
       }, nextSettlementFx.duration)
       return
     }
@@ -318,22 +820,270 @@ function App() {
     setGame(result.state)
   }
 
+  function getEstimatedHandCardRect(card, nextHand) {
+    const handFanEl = document.querySelector('.hand-fan')
+    if (!handFanEl) return null
+
+    const fanRect = handFanEl.getBoundingClientRect()
+    const count = nextHand.length
+    const targetIndex = nextHand.findIndex((c) => c.uid === card.uid)
+    if (targetIndex === -1) return null
+
+    const center = (count - 1) / 2
+    const offset = targetIndex - center
+    const spread = Math.round(offset * 18)
+
+    const anyHandCard = document.querySelector('.card-stage.hand')
+    let currentScale = 1.32 // fallback scale (1.2 * 1.1)
+    let targetTop = fanRect.top + 30 // fallback
+    if (anyHandCard) {
+      const handCards = Array.from(document.querySelectorAll('.card-stage.hand'))
+      const firstHandCardEl = handCards[0]
+      if (firstHandCardEl) {
+        const firstRect = firstHandCardEl.getBoundingClientRect()
+        const firstCardCount = game.hand.length
+        const firstCardCenter = (firstCardCount - 1) / 2
+        const firstCardOffset = 0 - firstCardCenter
+        const firstCardMaxOffset = Math.max(1, firstCardCenter)
+        const firstCardRatio = firstCardMaxOffset > 0 ? firstCardOffset / firstCardMaxOffset : 0
+        const firstCardLift = Math.round((1 - Math.abs(firstCardRatio)) * 16)
+
+        currentScale = firstRect.width / 134
+        const handFanScale = currentScale / 1.2
+
+        // The base top of the hand fan (lift = 0)
+        const baseTop = firstRect.top + (firstCardLift * handFanScale)
+
+        // Now calculate target lift
+        const maxOffset = Math.max(1, center)
+        const ratio = maxOffset > 0 ? offset / maxOffset : 0
+        const lift = Math.round((1 - Math.abs(ratio)) * 16)
+
+        targetTop = baseTop - (lift * handFanScale)
+      }
+    } else {
+      targetTop = fanRect.top + 30
+    }
+
+    const handFanScale = currentScale / 1.2
+    const fanCenterX = fanRect.left + fanRect.width / 2
+    const targetCenterX = fanCenterX + (spread * handFanScale)
+
+    const cardW = 134 * currentScale
+    const cardH = 200 * currentScale
+
+    return {
+      left: targetCenterX - cardW / 2,
+      top: targetTop,
+      width: cardW,
+      height: cardH,
+    }
+  }
+
+  function runFlyAnimation(cardUid, slotIndex, onComplete) {
+    const handCardEl = document.querySelector(`.card-stage.hand[data-card-uid="${cardUid}"]`)
+    const slotEl = document.querySelector(`.line-board.active .line-slot.pos-${slotIndex + 1}`)
+
+    if (handCardEl && slotEl) {
+      const handRect = handCardEl.getBoundingClientRect()
+      const slotRect = slotEl.getBoundingClientRect()
+
+      const handCard = game.hand.find((c) => c.uid === cardUid)
+      if (handCard) {
+        setIsAnimating(true)
+
+        const startCenterX = handRect.left + handRect.width / 2
+        const startCenterY = handRect.top + handRect.height / 2
+        const endCenterX = slotRect.left + slotRect.width / 2
+        const endCenterY = slotRect.top + slotRect.height / 2
+
+        const startScale = handRect.width / 134
+        // Hand card is scale 1.2 * fan scale 1.1 = 1.32. Slot card is scale 1.0.
+        // So the target scale at the slot should be exactly startScale / 1.32.
+        const endScale = startScale / 1.32
+
+        // Read fanned rotation from the inline style (fallback to 0deg)
+        const startRot = handCardEl.style.getPropertyValue('--fan-rotate') || '0deg'
+        const endRot = '0deg'
+
+        const newFly = {
+          uid: cardUid,
+          card: handCard,
+          startX: startCenterX - 67,
+          startY: startCenterY - 100,
+          endX: endCenterX - 67,
+          endY: endCenterY - 100,
+          startScale,
+          endScale,
+          startRot,
+          endRot,
+        }
+
+        setFlyingCards((prev) => [...prev, newFly])
+
+        setTimeout(() => {
+          onComplete()
+          setIsAnimating(false)
+          setFlyingCards((prev) => prev.filter((fc) => fc.uid !== cardUid))
+        }, 450)
+        return
+      }
+    }
+
+    onComplete()
+  }
+
+  function runReturnFlyAnimation(card, lineId, slotIndex, onComplete) {
+    const slotEl = document.querySelector(`.line-board.active .line-slot.pos-${slotIndex + 1}`)
+
+    if (slotEl) {
+      const slotRect = slotEl.getBoundingClientRect()
+      const nextHand = sortHandDefault([...game.hand, card])
+      const targetRect = getEstimatedHandCardRect(card, nextHand)
+
+      if (targetRect) {
+        setIsAnimating(true)
+
+        const startCenterX = slotRect.left + slotRect.width / 2
+        const startCenterY = slotRect.top + slotRect.height / 2
+        const endCenterX = targetRect.left + targetRect.width / 2
+        const endCenterY = targetRect.top + targetRect.height / 2
+
+        const endScale = targetRect.width / 134
+        // Slot card is scale 1.0, fanned hand card is scale 1.32.
+        // So the starting scale at the slot should be exactly endScale / 1.32.
+        const startScale = endScale / 1.32
+
+        const startRot = '0deg'
+
+        // Reconstruct target rotation based on fanned index
+        const count = nextHand.length
+        const targetIndex = nextHand.findIndex((c) => c.uid === card.uid)
+        const center = (count - 1) / 2
+        const offset = targetIndex - center
+        const ratio = count > 1 ? offset / Math.max(1, center) : 0
+        const rotate = ratio * 6
+        const endRot = `${rotate.toFixed(2)}deg`
+
+        const newFly = {
+          uid: card.uid,
+          card,
+          startX: startCenterX - 67,
+          startY: startCenterY - 100,
+          endX: endCenterX - 67,
+          endY: endCenterY - 100,
+          startScale,
+          endScale,
+          startRot,
+          endRot,
+        }
+
+        setFlyingCards((prev) => [...prev, newFly])
+
+        setTimeout(() => {
+          onComplete()
+          setIsAnimating(false)
+          setFlyingCards((prev) => prev.filter((fc) => fc.uid !== card.uid))
+        }, 450)
+        return
+      }
+    }
+
+    onComplete()
+  }
+
   function handleSlotClick(line, slotIndex) {
-    if (isSettling) return
+    if (isInteractionLocked) return
     if (line.status !== 'planning') return
     if (line.slots[slotIndex]) {
-      commit(returnSlotToHand(game, line.id, slotIndex), { sfx: 'card' })
+      const card = line.slots[slotIndex]
+      runReturnFlyAnimation(card, line.id, slotIndex, () => {
+        commit(returnSlotToHand(game, line.id, slotIndex), { sfx: 'card' })
+      })
       return
     }
     if (!selectedCard) {
       showHint('先选择一张手牌')
       return
     }
-    commit(placeCardInSlot(game, selectedCard.uid, slotIndex), { sfx: 'place' })
+    const cardUid = selectedCard.uid
+    runFlyAnimation(cardUid, slotIndex, () => {
+      commit(placeCardInSlot(game, cardUid, slotIndex), { sfx: 'place' })
+    })
+  }
+
+  function handleClearLine() {
+    if (isInteractionLocked) return
+    const line = getActiveLine(game)
+    if (!line || line.status !== 'planning') return
+
+    const cardsToReturn = line.slots.filter(Boolean)
+    if (cardsToReturn.length === 0) return
+
+    const nextHand = sortHandDefault([...game.hand, ...cardsToReturn])
+    const newFlies = []
+
+    cardsToReturn.forEach((card) => {
+      const slotIndex = line.slots.findIndex((c) => c && c.uid === card.uid)
+      if (slotIndex === -1) return
+
+      const slotEl = document.querySelector(`.line-board.active .line-slot.pos-${slotIndex + 1}`)
+      if (!slotEl) return
+
+      const slotRect = slotEl.getBoundingClientRect()
+      const targetRect = getEstimatedHandCardRect(card, nextHand)
+      if (!targetRect) return
+
+      const startCenterX = slotRect.left + slotRect.width / 2
+      const startCenterY = slotRect.top + slotRect.height / 2
+      const endCenterX = targetRect.left + targetRect.width / 2
+      const endCenterY = targetRect.top + targetRect.height / 2
+
+      const endScale = targetRect.width / 134
+      const startScale = endScale / 1.32
+
+      const startRot = '0deg'
+
+      // Reconstruct target rotation based on fanned index
+      const count = nextHand.length
+      const targetIndex = nextHand.findIndex((c) => c.uid === card.uid)
+      const center = (count - 1) / 2
+      const offset = targetIndex - center
+      const ratio = count > 1 ? offset / Math.max(1, center) : 0
+      const rotate = ratio * 6
+      const endRot = `${rotate.toFixed(2)}deg`
+
+      newFlies.push({
+        uid: card.uid,
+        card,
+        startX: startCenterX - 67,
+        startY: startCenterY - 100,
+        endX: endCenterX - 67,
+        endY: endCenterY - 100,
+        startScale,
+        endScale,
+        startRot,
+        endRot,
+      })
+    })
+
+    if (newFlies.length > 0) {
+      setIsAnimating(true)
+      setFlyingCards((prev) => [...prev, ...newFlies])
+
+      setTimeout(() => {
+        commit(clearPlanningLine(game), { sfx: 'card' })
+        setIsAnimating(false)
+        const flyUids = new Set(newFlies.map((f) => f.uid))
+        setFlyingCards((prev) => prev.filter((fc) => !flyUids.has(fc.uid)))
+      }, 450)
+    } else {
+      commit(clearPlanningLine(game))
+    }
   }
 
   function canPlaceCardInSlot(line, slotIndex, card) {
-    if (isSettling || !card) return false
+    if (isInteractionLocked || !card) return false
     if (line.id !== game.activeLineId || line.status !== 'planning') return false
     if (line.slots[slotIndex]) return false
     const projectedSlots = line.slots.map((slot, index) => (index === slotIndex ? card : slot))
@@ -341,13 +1091,15 @@ function App() {
   }
 
   function handleCardDrop(cardUid, slotIndex) {
-    if (isSettling || !cardUid) return
-    commit(placeCardInSlot(game, cardUid, slotIndex), { sfx: 'place' })
+    if (isInteractionLocked || !cardUid) return
+    runFlyAnimation(cardUid, slotIndex, () => {
+      commit(placeCardInSlot(game, cardUid, slotIndex), { sfx: 'place' })
+    })
     setDraggingCardUid(null)
   }
 
   function handleSettle() {
-    if (isSettling) return
+    if (isInteractionLocked) return
     commit(resolveMonth(game), { fx: true, animateNewHand: true })
   }
 
@@ -373,6 +1125,22 @@ function App() {
       })
       return { ...current, hand: sortedHand }
     })
+  }
+
+  function toggleHandSort() {
+    if (isInteractionLocked) return
+    if (sortMode === 'ap') {
+      sortHandByDept()
+      setSortMode('dept')
+    } else {
+      sortHandByAp()
+      setSortMode('ap')
+    }
+  }
+
+  function handleAutoDeploy() {
+    if (isInteractionLocked) return
+    commit(autoDeployActiveLine(game), { sfx: 'upgrade' })
   }
 
   function handleDismissReveal() {
@@ -402,7 +1170,25 @@ function App() {
 
   function startNewGame() {
     playUiSfx('transition')
-    restart()
+    setScreen('profession')
+  }
+
+  function handleSelectProfession(prof) {
+    playUiSfx('transition')
+    localStorage.removeItem(GAME_STATE_STORAGE_KEY)
+    setGame(createInitialState({ profession: prof }))
+    setHint('')
+    setDrawer(null)
+    setEnteringHandUids(new Set())
+    setSettlementFx(null)
+    setIsSettling(false)
+    setDraggingCardUid(null)
+    setComboOpen(false)
+    setSettingsOpen(false)
+    setCreditsOpen(false)
+    setTutorialStep(0)
+    setTutorialDone(false)
+    window.clearTimeout(settlementFxTimerRef.current)
     setScreen('battle')
   }
 
@@ -448,7 +1234,11 @@ function App() {
 
   function handleEnterIntermission() {
     setSettingsOpen(false)
-    commit(enterIntermission(game), { sfx: 'transition' })
+    if (game.intermissionState) {
+      setGame((current) => ({ ...current, result: null }))
+    } else {
+      commit(enterIntermission(game), { sfx: 'transition' })
+    }
   }
 
   function handleQuickEnterBoardMeeting() {
@@ -518,16 +1308,16 @@ function App() {
     commit(exitIntermission(game), { sfx: 'transition' })
   }
 
-  function handleWithdrawal(ratio) {
-    commit(applyWithdrawal(game, ratio), { sfx: 'buy' })
-  }
-
   function handleBmUnsubscribe(id) {
     commit(unsubscribeBusinessModel(game, id), { sfx: 'fire' })
   }
 
-  function handleStagnationAdvice(choice) {
-    commit(applyStagnationAdvice(game, choice), { sfx: 'choice' })
+  function handleHighlightPick(idx) {
+    commit(pickHighlightCard(game, idx), { sfx: 'buy' })
+  }
+
+  function handleHighlightDismiss() {
+    commit(dismissHighlightCard(game), { sfx: 'transition' })
   }
 
   function handleOpenCompendium() {
@@ -542,6 +1332,7 @@ function App() {
         <div className="main-menu-bg" aria-hidden="true" />
         <div className="main-menu-light" aria-hidden="true" />
         <img className="main-menu-logo" src="/assets/menu/FR.svg" alt="FRANK'S ADVANTURE" />
+        <PhaserMenuFX />
         <section className="main-menu-panel">
           <div className="main-menu-actions">
             <MenuTiltButton onClick={() => {
@@ -580,17 +1371,35 @@ function App() {
     return <CompendiumScreen onClose={() => setScreen(compendiumReturn)} />
   }
 
+  const STAGE_THEMES = {
+    1: { color: '#60a5fa', rgb: '96, 165, 250' },
+    2: { color: '#34d399', rgb: '52, 211, 153' },
+    3: { color: '#3b82f6', rgb: '59, 130, 246' },
+    4: { color: '#a78bfa', rgb: '167, 139, 250' },
+    5: { color: '#22d3ee', rgb: '34, 211, 238' },
+    6: { color: '#9ca3af', rgb: '156, 163, 175' },
+    7: { color: '#fbbf24', rgb: '251, 191, 36' },
+    8: { color: '#818cf8', rgb: '129, 140, 248' },
+    9: { color: '#f472b6', rgb: '244, 114, 182' },
+  }
+  const currentStageTheme = STAGE_THEMES[game.stage.id] || STAGE_THEMES[1]
+
   return (
+    <FloatingTooltipCtx.Provider value={appTooltip}>
     <LayoutEditCtx.Provider value={{ editMode: layoutEditMode, overrides: layoutOverrides, update: updateLayoutOv, textOverrides, updateText }}>
-    <main className="battle-shell">
-      <div className="battle-photo-bg" aria-hidden="true" />
-      <div className="battle-crt-overlay" aria-hidden="true" />
+    <main
+      className={`battle-shell stage-theme-${game.stage.id} ${layoutEditMode ? 'layout-editing' : ''}`}
+      style={{
+        '--stage-accent-color': currentStageTheme.color,
+        '--stage-accent-glow': `rgba(${currentStageTheme.rgb}, 0.16)`,
+        '--stage-accent-glow-sub': `rgba(${currentStageTheme.rgb}, 0.1)`,
+      }}
+    >
+      <DriftingCheckerboardBackground direction={game.driftDirection} stageId={game.stage.id} />
 
       <TopHud
         game={game}
         preview={preview}
-        activeLineAp={activeLineAp}
-        apLimit={apLimit}
         onCombo={() => setComboOpen(true)}
         onSettings={() => setSettingsOpen(true)}
       />
@@ -605,8 +1414,12 @@ function App() {
           </EditableBlock>
           <EditableBlock id="ceo-sort-actions" label="手牌排序">
             <div className="hand-sort-actions">
-              <button className="sort-btn" onClick={sortHandByAp}>按 AP 排序</button>
-              <button className="sort-btn" onClick={sortHandByDept}>按部门排序</button>
+              <button className="sort-btn" disabled={isInteractionLocked} onClick={toggleHandSort}>
+                {sortMode === 'ap' ? '按 AP 排序' : '按部门排序'}
+              </button>
+              <button className="sort-btn" disabled={isInteractionLocked} onClick={handleAutoDeploy}>
+                自动布置产线
+              </button>
             </div>
           </EditableBlock>
           <EditableBlock id="ceo-log" label="操作日志">
@@ -615,16 +1428,11 @@ function App() {
         </aside>
 
         <section className="arena-panel">
-          {settlementFx?.totalFx && (
-            <div className="settlement-center-fx" style={{ '--fx-delay': `${settlementFx.totalFx.delay}ms` }}>
-              <span>总产能</span>
-              <strong>+¥{settlementFx.totalFx.gain}</strong>
-            </div>
-          )}
           <div className="arena-floor">
             <div className="floor-grid" />
+            <PhaserBattleFX fxEvent={phaserFxEvent} />
 
-            <EditableBlock id="lineBoard-A" label="产线 A">
+            <EditableBlock id="lineBoard-A" label="产线 A" editable={false}>
               <LineBoard
                 line={game.lines[0]}
                 activeLineId={game.activeLineId}
@@ -632,15 +1440,16 @@ function App() {
                 fxReport={settlementFx?.reports.find((item) => item.lineId === 'A')}
                 onSlotClick={handleSlotClick}
                 onSettle={handleSettle}
-                onClear={() => commit(clearPlanningLine(game))}
+                onClear={handleClearLine}
                 selectedCard={selectedCard}
                 draggingCard={game.hand.find((card) => card.uid === draggingCardUid)}
                 canPlaceCard={canPlaceCardInSlot}
                 onCardDrop={handleCardDrop}
-                disabled={isSettling}
+                disabled={isInteractionLocked}
+                flyingCardUids={flyingCards.map((fc) => fc.uid)}
               />
             </EditableBlock>
-            <EditableBlock id="lineBoard-B" label="产线 B">
+            <EditableBlock id="lineBoard-B" label="产线 B" editable={false}>
               <LineBoard
                 line={game.lines[1]}
                 activeLineId={game.activeLineId}
@@ -648,12 +1457,13 @@ function App() {
                 fxReport={settlementFx?.reports.find((item) => item.lineId === 'B')}
                 onSlotClick={handleSlotClick}
                 onSettle={handleSettle}
-                onClear={() => commit(clearPlanningLine(game))}
+                onClear={handleClearLine}
                 selectedCard={selectedCard}
                 draggingCard={game.hand.find((card) => card.uid === draggingCardUid)}
                 canPlaceCard={canPlaceCardInSlot}
                 onCardDrop={handleCardDrop}
-                disabled={isSettling}
+                disabled={isInteractionLocked}
+                flyingCardUids={flyingCards.map((fc) => fc.uid)}
               />
             </EditableBlock>
           </div>
@@ -671,56 +1481,78 @@ function App() {
             </div>
           </EditableBlock>
           <EditableBlock id="event-preview" label="预估收益">
-            <div className="preview-card hud-item">
+            <div
+              className="preview-card hud-item"
+              onPointerEnter={(e) => appTooltip.showTooltip(
+                <div>
+                  <div className="tooltip-title">收支分解</div>
+                  <div>产线预估收入: ¥{preview.eventIncome}</div>
+                  <div>预估 Monthly Burn: ¥{preview.maintenance}</div>
+                  <div>本月利润: {preview.profit >= 0 ? `+¥${preview.profit}` : `-¥${Math.abs(preview.profit)}`}</div>
+                  <div className="tooltip-divider" />
+                  <div>现金转化率 CCR: {Math.round((preview.ccr ?? 0.7) * 100)}%</div>
+                  <div>入账现金: {preview.cashGain >= 0 ? `+¥${preview.cashGain}` : `-¥${Math.abs(preview.cashGain)}`}</div>
+                  <div>月度运营成本: -¥{preview.monthlyOpCost ?? 0}</div>
+                  <div className="tooltip-divider" />
+                  <div>预估现金变化: {preview.cashDelta >= 0 ? `+¥${preview.cashDelta}` : `-¥${Math.abs(preview.cashDelta)}`}</div>
+                </div>,
+                e
+              )}
+              onPointerMove={appTooltip.updateTooltip}
+              onPointerLeave={appTooltip.hideTooltip}
+            >
               <span><EditableText id="event-preview-label">本月预估</EditableText></span>
               <strong>¥{preview.eventIncome}</strong>
               <em>月 burn -¥{preview.maintenance} / 净利润 {preview.netCash >= 0 ? '+' : ''}{preview.netCash}</em>
-              <div className="hud-hover-tooltip preview-tooltip">
-                <div className="tooltip-title">收支分解</div>
-                <div>产线预估收入: ¥{preview.eventIncome}</div>
-                <div>预估 Monthly Burn: ¥{preview.maintenance}</div>
-                <div className="tooltip-divider" />
-                <div>预估净增留存利润: {preview.netCash >= 0 ? `+¥${preview.netCash}` : `-¥${Math.abs(preview.netCash)}`}</div>
-              </div>
             </div>
           </EditableBlock>
+          <div className="event-ap-slot">
+            <EditableBlock id="event-ap" label="行动力 AP">
+              <ActionPowerHud game={game} activeLineAp={activeLineAp} apLimit={apLimit} />
+            </EditableBlock>
+          </div>
         </aside>
       </section>
 
       <footer className="hand-dock">
-        <EditableBlock id="hand-fan" label="手牌区">
+        <EditableBlock id="hand-fan" label="手牌区" editable={false}>
           <div className="hand-fan">
-            {game.hand.map((card, index) => (
-              <CardView
-                key={card.uid}
-                card={card}
-                entering={enteringHandUids.has(card.uid)}
-                selected={game.selectedCardUid === card.uid}
-                dragging={draggingCardUid === card.uid}
-                mode="hand"
-                draggable={game.discardRequired === 0 && !isSettling}
-                onDragStart={(event) => {
-                  event.dataTransfer.effectAllowed = 'move'
-                  event.dataTransfer.setData('text/plain', card.uid)
-                  setDraggingCardUid(card.uid)
-                }}
-                onDragEnd={() => setDraggingCardUid(null)}
-                style={{
-                  ...getHandCardStyle(index, game.hand.length),
-                  '--enter-delay': `${Math.max(0, [...enteringHandUids].indexOf(card.uid)) * 70}ms`,
-                }}
-                onClick={() => {
-                  if (game.discardRequired > 0) {
-                    handleDiscard(card.uid)
-                    return
-                  }
-                  setGame((current) => ({
-                    ...current,
-                    selectedCardUid: current.selectedCardUid === card.uid ? null : card.uid,
-                  }))
-                }}
-              />
-            ))}
+            {(() => {
+              const selectedIndex = game.hand.findIndex((c) => c.uid === game.selectedCardUid)
+              return game.hand.map((card, index) => (
+                <CardView
+                  key={card.uid}
+                  card={card}
+                  entering={enteringHandUids.has(card.uid)}
+                  selected={game.selectedCardUid === card.uid}
+                  dragging={draggingCardUid === card.uid}
+                  mode="hand"
+                  draggable={game.discardRequired === 0 && !isInteractionLocked}
+                  onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData('text/plain', card.uid)
+                    setDraggingCardUid(card.uid)
+                  }}
+                  onDragEnd={() => setDraggingCardUid(null)}
+                  style={{
+                    ...getHandCardStyle(index, game.hand.length, selectedIndex),
+                    '--enter-delay': `${Math.max(0, [...enteringHandUids].indexOf(card.uid)) * 70}ms`,
+                    ...(flyingCards.some((fc) => fc.uid === card.uid) ? { opacity: 0, pointerEvents: 'none' } : {}),
+                  }}
+                  onClick={() => {
+                    if (isInteractionLocked) return
+                    if (game.discardRequired > 0) {
+                      handleDiscard(card.uid)
+                      return
+                    }
+                    setGame((current) => ({
+                      ...current,
+                      selectedCardUid: current.selectedCardUid === card.uid ? null : card.uid,
+                    }))
+                  }}
+                />
+              ))
+            })()}
           </div>
         </EditableBlock>
 
@@ -764,19 +1596,43 @@ function App() {
           onEditLayout={openLayoutEdit}
         />
       )}
-      {game.stagnationAdvisorTriggered && (
-        <StagnationAdvisor
-          onSelect={handleStagnationAdvice}
-          onClose={() => setGame(prev => ({ ...prev, stagnationAdvisorTriggered: false }))}
+      {Array.isArray(game.highlightPending) && game.highlightPending.length > 0 && (
+        <HighlightModal
+          candidates={game.highlightPending}
+          onPick={handleHighlightPick}
+          onDismiss={handleHighlightDismiss}
         />
       )}
-      {game.result && !game.intermissionState && (
+      {game.result && (
         <ResultOverlay
           game={game}
           onRestart={restart}
           onEnterIntermission={handleEnterIntermission}
         />
       )}
+      {flyingCards.map((fc) => {
+        const x = fc.active ? fc.endX : fc.startX
+        const y = fc.active ? fc.endY : fc.startY
+        const scale = fc.active ? fc.endScale : fc.startScale
+        const rot = fc.active ? (fc.endRot || '0deg') : (fc.startRot || '0deg')
+        const transition = fc.active
+          ? 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)'
+          : 'none'
+
+        return (
+          <div
+            key={fc.uid}
+            className="flying-card-overlay"
+            style={{
+              transform: `translate(${x}px, ${y}px) rotate(${rot}) scale(${scale})`,
+              transition,
+              transformOrigin: 'center center',
+            }}
+          >
+            <CardView card={fc.card} mode="flying" />
+          </div>
+        )
+      })}
       {drawer && <PileDrawer title={drawer === 'deck' ? '牌堆' : '冷却池'} cards={drawer === 'deck' ? game.drawPile : game.coolingPile} onClose={() => setDrawer(null)} />}
 
       {game.intermissionState && (
@@ -790,7 +1646,6 @@ function App() {
           onFire={handleFire}
           onBmBuy={handleBmBuy}
           onSchoolRoll={handleSchoolRoll}
-          onWithdrawal={handleWithdrawal}
           onBmUnsubscribe={handleBmUnsubscribe}
           onExit={handleExitIntermission}
         />
@@ -803,21 +1658,30 @@ function App() {
           onExit={() => setLayoutEditMode(false)}
         />
       )}
+
+      {screen === 'profession' && (
+        <ProfessionSelectScreen
+          onSelect={handleSelectProfession}
+          onBack={() => {
+            playUiSfx('transition')
+            setScreen('menu')
+          }}
+        />
+      )}
+      {appTooltip.renderTooltip()}
     </main>
     </LayoutEditCtx.Provider>
+    </FloatingTooltipCtx.Provider>
   )
 }
 
-function TopHud({ game, preview, activeLineAp, apLimit, onCombo, onSettings }) {
+function TopHud({ game, preview, onCombo, onSettings }) {
   const currentStageIndex = STAGES.findIndex(s => s.id === game.stage.id)
   const nextStage = STAGES[currentStageIndex + 1]
 
   const dateStr = `${game.year}.${String(game.month).padStart(2, '0')}`;
 
-  // Valuation breakdown
-  const avgProfit = computeQuarterlyAvgProfit(game.profitHistory)
-  const peValue = Math.max(0, avgProfit * 20)
-  
+  // Valuation breakdown: V = cash + (cardAsset + bmAsset)×2 + recent 3-month avg positive profit×4
   const allCards = getAllCards(game)
   let cardAssetSum = 0
   for (const card of allCards) {
@@ -832,8 +1696,14 @@ function TopHud({ game, preview, activeLineAp, apLimit, onCombo, onSettings }) {
       }
     }
   }
-  const assetValue = cardAssetSum * 0.5 + bmAssetSum * 0.5
-  const treasuryValue = Math.max(0, game.cash) * 0.3
+  const cashValue = Math.max(0, game.cash)
+  const assetValue = (cardAssetSum + bmAssetSum) * 2
+  const profitSamples = (game.profitHistory?.length ? game.profitHistory.slice(-3) : [game.lastMonthProfit ?? 0])
+    .map((profit) => Math.max(0, profit ?? 0))
+  const avgProfit = profitSamples.length
+    ? profitSamples.reduce((sum, profit) => sum + profit, 0) / profitSamples.length
+    : 0
+  const profitValue = Math.round(avgProfit * 4)
   const totalV = game.valuation
 
   const minV = game.stage.threshold;
@@ -844,13 +1714,55 @@ function TopHud({ game, preview, activeLineAp, apLimit, onCombo, onSettings }) {
   // Cash warn
   const isCashWarn = game.cash < preview.maintenance * 1.5;
 
-  // AP breakdown
-  const serviceBonus = apLimit - game.apAvailable;
+  const stageTargetValuation = nextStage ? nextStage.threshold : game.stage.threshold
+  const stageRemainingV = nextStage ? Math.max(0, nextStage.threshold - totalV) : 0
+  const isAboveThreshold = nextStage ? (totalV >= nextStage.threshold) : false
+
+  const tooltipCtx = React.useContext(FloatingTooltipCtx)
 
   return (
     <header className="top-hud">
       <EditableBlock id="hud-brand" label="品牌标题">
-        <div className="brand-mark">
+        <div
+          className="brand-mark brand-mark-hoverable"
+          onPointerEnter={(e) => tooltipCtx.showTooltip(
+            <div>
+              <div className="tooltip-title">公司发展阶段</div>
+              <div>当前阶段: {game.stage.theme}期（{game.stage.name}）</div>
+              {nextStage ? (
+                <>
+                  <div className="tooltip-divider" />
+                  <div>当前估值: V {totalV}</div>
+                  <div>晋升门槛: V {stageTargetValuation}</div>
+                  <div>估值进度: {totalV} / {stageTargetValuation}</div>
+                  <div className="tooltip-divider" />
+                  {isAboveThreshold ? (
+                    <div style={{ color: '#42d77d' }}>
+                      本月估值已达标，月末结算后进入董事会。
+                    </div>
+                  ) : (
+                    <div>
+                      还需提升估值: <strong style={{ color: '#ff3366', textShadow: 'none' }}>V {stageRemainingV}</strong>
+                      {"\n"}达到门槛后，月末结算即可进入董事会。
+                    </div>
+                  )}
+                  <div className="tooltip-divider" />
+                  <div>下一阶段: {nextStage.theme}期（{nextStage.name}）</div>
+                  <div>晋升奖励: 一次性现金 +¥{nextStage.entryGrant}</div>
+                </>
+              ) : (
+                <>
+                  <div className="tooltip-divider" />
+                  <div style={{ color: '#ffe000', fontWeight: 'bold' }}>已达到最高融资阶段！</div>
+                  <div>最终目标估值: V 80,000 (行业第一)</div>
+                </>
+              )}
+            </div>,
+            e
+          )}
+          onPointerMove={tooltipCtx.updateTooltip}
+          onPointerLeave={tooltipCtx.hideTooltip}
+        >
           <div>
             <strong><EditableText id="hud-brand-title">{`${game.stage.theme}期（${game.stage.name}）`}</EditableText></strong>
           </div>
@@ -858,89 +1770,141 @@ function TopHud({ game, preview, activeLineAp, apLimit, onCombo, onSettings }) {
       </EditableBlock>
       <div className="hud-stats-group">
         <EditableBlock id="hud-month" label="HUD · 月份">
-          <div className="hud-item hud-month">
+          <div
+            className="hud-item hud-month"
+            onPointerEnter={(e) => tooltipCtx.showTooltip(
+              <div>
+                <div className="tooltip-title">经营时间</div>
+                <div>已经营: {game.elapsedMonths} 个月</div>
+                <div>当前融资阶段: {game.stage.name}</div>
+                <div>阶段主题: {game.stage.theme}</div>
+              </div>,
+              e
+            )}
+            onPointerMove={tooltipCtx.updateTooltip}
+            onPointerLeave={tooltipCtx.hideTooltip}
+          >
             <img className="hud-icon-img" src="/assets/ui-icons/month.png" alt="" aria-hidden="true" />
-            <span>日期</span>
+            <span><EditableText id="hud-month-label">日期</EditableText></span>
             <strong>{dateStr}</strong>
-            <div className="hud-hover-tooltip">
-              <div className="tooltip-title">经营时间</div>
-              <div>已经营: {game.elapsedMonths} 个月</div>
-              <div>当前融资阶段: {game.stage.name}</div>
-              <div>阶段主题: {game.stage.theme}</div>
-            </div>
           </div>
         </EditableBlock>
         
         <EditableBlock id="hud-valuation" label="HUD · 估值">
-          <div className="hud-item hud-valuation-progress">
+          <div
+            className="hud-item hud-valuation-progress"
+            onPointerEnter={(e) => tooltipCtx.showTooltip(
+              <div>
+                <div className="tooltip-title">估值分析 (V = 现金 + 资产×2 + 近 3 月均利×4)</div>
+                <div>现金价值: ¥{cashValue}</div>
+                <div>资产价值: ¥{assetValue} (员工卡 ¥{cardAssetSum} + BM ¥{bmAssetSum}) × 2</div>
+                <div>利润质量: ¥{profitValue} (近 3 月平均 ¥{Math.round(avgProfit)} × 4)</div>
+                <div className="tooltip-divider" />
+                <div>下一阶段: {nextStage ? `${nextStage.name} (门槛 V ${maxV})` : '已达最高阶段'}</div>
+              </div>,
+              e
+            )}
+            onPointerMove={tooltipCtx.updateTooltip}
+            onPointerLeave={tooltipCtx.hideTooltip}
+          >
             <img className="hud-icon-img" src="/assets/ui-icons/cumulative-cash.png" alt="" aria-hidden="true" />
-            <span>估值</span>
+            <span><EditableText id="hud-valuation-label">估值</EditableText></span>
             <div className="valuation-progress-container">
               <strong>V {totalV}{nextStage ? ` / ${maxV}` : ''}</strong>
               <div className="stage-progress-track">
                 <div className="stage-progress-fill" style={{ width: `${pct}%` }} />
               </div>
             </div>
-            <div className="hud-hover-tooltip">
-              <div className="tooltip-title">估值分析 (V = PE + 资产 + 现金溢价)</div>
-              <div>PE 估值: ¥{peValue} (3月均利润 ¥{avgProfit.toFixed(1)} × 20)</div>
-              <div>资产折现: ¥{assetValue.toFixed(1)} (员工卡 ¥{cardAssetSum} + BM ¥{bmAssetSum} 各折半)</div>
-              <div>现金溢价: ¥{treasuryValue.toFixed(1)} (现金 ¥{game.cash} × 0.3)</div>
-              <div className="tooltip-divider" />
-              <div>下一阶段: {nextStage ? `${nextStage.name} (门槛 V ${maxV})` : '已达最高阶段'}</div>
-            </div>
           </div>
         </EditableBlock>
 
         <EditableBlock id="hud-cash" label="HUD · 现金">
-          <div className={`hud-item hud-cash ${isCashWarn ? 'warn' : ''}`}>
+          <div
+            className={`hud-item hud-cash ${isCashWarn ? 'warn' : ''}`}
+            onPointerEnter={(e) => tooltipCtx.showTooltip(
+              <div>
+                <div className="tooltip-title">现金 (生命线)</div>
+                <div>现金余额: ¥{game.cash}</div>
+                <div className="tooltip-warn">⚠ 月末 cash &lt; 0 即破产 game over</div>
+                <div className="tooltip-divider" />
+                <div>本阶段现金转化率 CCR: {Math.round((preview.ccr ?? 0.7) * 100)}%</div>
+                <div>下月预估利润: {preview.profit >= 0 ? `+¥${preview.profit}` : `-¥${Math.abs(preview.profit)}`}</div>
+                <div>预估入账 (利润×CCR): {preview.cashGain >= 0 ? `+¥${preview.cashGain}` : `-¥${Math.abs(preview.cashGain)}`}</div>
+                <div>月度运营成本: -¥{preview.monthlyOpCost ?? 0}</div>
+                <div className="tooltip-divider" />
+                <div>预估现金变化: {preview.cashDelta >= 0 ? `+¥${preview.cashDelta}` : `-¥${Math.abs(preview.cashDelta)}`}</div>
+              </div>,
+              e
+            )}
+            onPointerMove={tooltipCtx.updateTooltip}
+            onPointerLeave={tooltipCtx.hideTooltip}
+          >
             <img className="hud-icon-img" src="/assets/ui-icons/cash.png" alt="" aria-hidden="true" />
-            <span>现金</span>
+            <span><EditableText id="hud-cash-label">现金</EditableText></span>
             <strong>¥{game.cash}</strong>
-            <div className="hud-hover-tooltip">
-              <div className="tooltip-title">现金与利润</div>
-              <div>现金余额: ¥{game.cash} (唯一可支配)</div>
-              <div>留存利润: ¥{game.retainedEarnings} (不可直接花，董事会可提取)</div>
-              <div className="tooltip-divider" />
-              <div>下月预估 Monthly Burn: ¥{preview.maintenance}</div>
-              <div>下月预估净利润: {preview.netCash >= 0 ? `+¥${preview.netCash}` : `-¥${Math.abs(preview.netCash)}`}</div>
-            </div>
           </div>
         </EditableBlock>
 
-        <EditableBlock id="hud-ap" label="HUD · AP">
-          <div className="hud-item hud-ap">
-            <img className="hud-icon-img" src="/assets/ui-icons/ap.png" alt="" aria-hidden="true" />
-            <span>行动力</span>
-            <strong>{activeLineAp}/{apLimit}</strong>
-            <div className="hud-hover-tooltip">
-              <div className="tooltip-title">行动力 (AP) 组成</div>
-              <div>已分配: {activeLineAp} / {apLimit} AP</div>
-              <div className="tooltip-divider" />
-              <div>基础 AP: {GAME_CONFIG.baseAp} AP</div>
-              <div>跨月保留: +{game.apCarry} AP</div>
-              <div>事件调整: {game.event.apDelta >= 0 ? `+${game.event.apDelta}` : `${game.event.apDelta}`} AP</div>
-              {serviceBonus !== 0 && (
-                <div>产线服务卡加成: {serviceBonus >= 0 ? `+${serviceBonus}` : `${serviceBonus}`} AP</div>
-              )}
-              {game.apAvailable - GAME_CONFIG.baseAp - game.apCarry - (game.event.apDelta ?? 0) > 0 && (
-                <div>商业模式加成: +{game.apAvailable - GAME_CONFIG.baseAp - game.apCarry - (game.event.apDelta ?? 0)} AP</div>
-              )}
-            </div>
-          </div>
-        </EditableBlock>
       </div>
       <EditableBlock id="hud-actions" label="操作按钮">
         <div className="hud-actions">
-          <button className="top-icon-button" onClick={onCombo} aria-label="Combo 规则" data-tip="Combo 规则">
+          <button
+            className="top-icon-button"
+            onClick={onCombo}
+            aria-label="Combo 规则"
+            onPointerEnter={(e) => tooltipCtx.showTooltip('Combo 规则', e)}
+            onPointerMove={tooltipCtx.updateTooltip}
+            onPointerLeave={tooltipCtx.hideTooltip}
+          >
             <img src="/assets/ui-icons/combo-rules.png" alt="" aria-hidden="true" />
           </button>
-          <button className="top-icon-button" onClick={onSettings} aria-label="设置" data-tip="设置">
+          <button
+            className="top-icon-button"
+            onClick={onSettings}
+            aria-label="设置"
+            onPointerEnter={(e) => tooltipCtx.showTooltip('设置', e)}
+            onPointerMove={tooltipCtx.updateTooltip}
+            onPointerLeave={tooltipCtx.hideTooltip}
+          >
             <img src="/assets/ui-icons/settings.png" alt="" aria-hidden="true" />
           </button>
         </div>
       </EditableBlock>
     </header>
+  )
+}
+
+function ActionPowerHud({ game, activeLineAp, apLimit }) {
+  const tooltipCtx = React.useContext(FloatingTooltipCtx)
+  const serviceBonus = apLimit - game.apAvailable
+
+  return (
+    <div
+      className="hud-item hud-ap event-ap-card"
+      onPointerEnter={(e) => tooltipCtx.showTooltip(
+        <div>
+          <div className="tooltip-title">行动力 (AP) 组成</div>
+          <div>已分配: {activeLineAp} / {apLimit} AP</div>
+          <div className="tooltip-divider" />
+          <div>基础 AP: {GAME_CONFIG.baseAp} AP</div>
+          <div>跨月保留: +{game.apCarry} AP</div>
+          <div>事件调整: {game.event.apDelta >= 0 ? `+${game.event.apDelta}` : `${game.event.apDelta}`} AP</div>
+          {serviceBonus !== 0 && (
+            <div>产线服务卡加成: {serviceBonus >= 0 ? `+${serviceBonus}` : `${serviceBonus}`} AP</div>
+          )}
+          {game.apAvailable - GAME_CONFIG.baseAp - game.apCarry - (game.event.apDelta ?? 0) > 0 && (
+            <div>商业模式加成: +{game.apAvailable - GAME_CONFIG.baseAp - game.apCarry - (game.event.apDelta ?? 0)} AP</div>
+          )}
+        </div>,
+        e
+      )}
+      onPointerMove={tooltipCtx.updateTooltip}
+      onPointerLeave={tooltipCtx.hideTooltip}
+    >
+      <img className="hud-icon-img" src="/assets/ui-icons/ap.png" alt="" aria-hidden="true" />
+      <span><EditableText id="event-ap-label">行动力</EditableText></span>
+      <strong>{activeLineAp}/{apLimit}</strong>
+    </div>
   )
 }
 
@@ -1115,6 +2079,7 @@ function TutorialOverlay({ step, onNext, onSkip }) {
 
 function ActiveBusinessModelsPanel({ activeBusinessModels, slotCap }) {
   const slots = Array.from({ length: slotCap }, (_, i) => activeBusinessModels[i] || null)
+  const tooltipCtx = React.useContext(FloatingTooltipCtx)
   return (
     <section className="active-bm-panel">
       <div className="active-bm-heading">
@@ -1132,7 +2097,21 @@ function ActiveBusinessModelsPanel({ activeBusinessModels, slotCap }) {
             <div
               key={i}
               className={`active-bm-card rarity-${bm.rarity} hook-${bm.hook}`}
-              data-bm-tip={`${bm.name}\n${bm.description}${bm.flavor ? `\n${bm.flavor}` : ''}`}
+              onPointerEnter={(e) => tooltipCtx.showTooltip(
+                <div>
+                  <div className="tooltip-title">{bm.name}</div>
+                  <div>{bm.description}</div>
+                  {bm.flavor && (
+                    <>
+                      <div className="tooltip-divider" />
+                      <div style={{ fontStyle: 'italic', color: '#fff4bd', opacity: 0.8 }}>"{bm.flavor}"</div>
+                    </>
+                  )}
+                </div>,
+                e
+              )}
+              onPointerMove={tooltipCtx.updateTooltip}
+              onPointerLeave={tooltipCtx.hideTooltip}
             >
               <img className="active-bm-image" src={businessModeImageSrc(bm)} alt="" aria-hidden="true" />
               <span className="active-bm-film" aria-hidden="true" />
@@ -1178,9 +2157,11 @@ function LineBoard({
   onSettle,
   onClear,
   disabled,
+  flyingCardUids = [],
 }) {
   const isActive = line.id === activeLineId && line.status === 'planning'
   const statusLabel = getLineStatus(line, isActive)
+  const tooltipCtx = React.useContext(FloatingTooltipCtx)
   return (
     <section className={`line-board ${isActive ? 'active' : ''} ${line.status}`}>
       <EditableBlock id={`line-${line.id}-rail`} label={`产线 ${line.id} · 轨道栏`}>
@@ -1191,16 +2172,19 @@ function LineBoard({
           <em>¥{report?.total ?? 0}</em>
         </div>
       </EditableBlock>
-      <EditableBlock id={`line-${line.id}-slots`} label={`产线 ${line.id} · 卡槽排`}>
+      <EditableBlock id={`line-${line.id}-slots`} label={`产线 ${line.id} · 卡槽排`} editable={false}>
         <div className={`slot-row ${fxReport?.multFx ? 'has-mult-fx' : ''}`}>
           {line.slots.map((card, index) => {
             const slotOutput = report?.slotResults[index]?.output
             const canPlaceSelected = canPlaceCard(line, index, selectedCard)
             const canDropDragged = canPlaceCard(line, index, draggingCard)
+            const fxSlot = fxReport?.slotResults?.[index]
             return (
               <div className="line-slot-cell" key={`${line.id}-${index}`}>
                 <button
                   className={`line-slot pos-${index + 1} ${card ? 'filled' : ''} ${canPlaceSelected ? 'can-place' : ''} ${canDropDragged ? 'drop-ready' : ''}`}
+                  data-line-id={line.id}
+                  data-slot-idx={index}
                   onClick={() => onSlotClick(line, index)}
                   onDragOver={(event) => {
                     if (!canDropDragged) return
@@ -1213,31 +2197,47 @@ function LineBoard({
                     if (canDropDragged) onCardDrop(cardUid, index)
                   }}
                 >
-                  <span className="slot-label">P{index + 1}</span>
+                  <span className="slot-label">{SLOT_LABELS[index]}</span>
                   {canPlaceSelected && <span className="placement-arrow" aria-hidden="true" />}
-                  {card ? <CardView card={card} mode="slot" outputOverride={slotOutput} /> : <i>{slotRole(index)}</i>}
+                  {card ? (
+                    <CardView
+                      card={card}
+                      mode="slot"
+                      outputOverride={slotOutput}
+                      style={flyingCardUids.includes(card.uid) ? { opacity: 0, pointerEvents: 'none' } : undefined}
+                    />
+                  ) : (
+                    <i>{slotRole(index)}</i>
+                  )}
                   {slotOutput > 0 && <b>¥{slotOutput}</b>}
                 </button>
-                {fxReport?.slotResults[index]?.output > 0 && (
-                  <span
+                {fxSlot && fxSlot.output > 0 && (
+                  <div
                     className="slot-fx-number"
                     style={{
-                      '--fx-delay': `${fxReport.slotResults[index].fxDelay}ms`,
-                      '--fx-scale': fxReport.slotResults[index].fxScale,
+                      '--fx-delay': `${fxSlot.fxDelay}ms`,
+                      '--fx-scale': fxSlot.fxScale,
                     }}
                   >
-                    <span>+¥{fxReport.slotResults[index].output}</span>
-                  </span>
+                    <span>+¥{fxSlot.output}</span>
+                  </div>
                 )}
               </div>
             )
           })}
+
           {fxReport?.multFx && (
-            <div className="line-mult-fx" style={{ '--fx-delay': `${fxReport.multFx.delay}ms` }}>
-              <span>倍率</span>
-              <strong>x{fxReport.multFx.value}</strong>
+            <div
+              className="line-mult-fx"
+              style={{
+                '--fx-delay': `${fxReport.multFx.delay}ms`,
+              }}
+            >
+              <span>倍率结算</span>
+              <strong>×{fxReport.multFx.value}</strong>
             </div>
           )}
+
           {isActive && (
             <EditableBlock id={`line-${line.id}-actions`} label={`产线 ${line.id} · 操作按钮`}>
               <div className="line-actions" aria-label="产线操作">
@@ -1248,7 +2248,9 @@ function LineBoard({
                     event.stopPropagation()
                     onSettle()
                   }}
-                  data-tip="启动工作"
+                  onPointerEnter={(e) => tooltipCtx.showTooltip("启动工作", e)}
+                  onPointerMove={tooltipCtx.updateTooltip}
+                  onPointerLeave={tooltipCtx.hideTooltip}
                   aria-label="启动工作"
                   title="启动工作"
                 >
@@ -1261,7 +2263,9 @@ function LineBoard({
                     event.stopPropagation()
                     onClear()
                   }}
-                  data-tip="清空工位"
+                  onPointerEnter={(e) => tooltipCtx.showTooltip("清空工位", e)}
+                  onPointerMove={tooltipCtx.updateTooltip}
+                  onPointerLeave={tooltipCtx.hideTooltip}
                   aria-label="清空工位"
                   title="清空工位"
                 >
@@ -1464,7 +2468,7 @@ function slotRole(index) {
   return '工位'
 }
 
-function getHandCardStyle(index, count) {
+function getHandCardStyle(index, count, selectedIndex = -1) {
   const center = (count - 1) / 2
   const offset = index - center
   const maxOffset = Math.max(1, center)
@@ -1477,8 +2481,17 @@ function getHandCardStyle(index, count) {
   const enterSway = Math.round(ratio * -150)
   const stackBias = index
 
+  let selectShift = 0
+  if (selectedIndex !== -1 && index !== selectedIndex) {
+    const shiftAmount = 55
+    selectShift = index < selectedIndex ? -shiftAmount : shiftAmount
+  }
+
+  const fanX = spread + selectShift
+  const fanHoverX = spread + Math.round(ratio * 5) + selectShift
+
   return {
-    '--fan-x': `${spread}px`,
+    '--fan-x': `${fanX}px`,
     '--fan-rotate': `${rotate.toFixed(2)}deg`,
     '--fan-yaw': `${yaw.toFixed(2)}deg`,
     '--fan-lift': `${-lift}px`,
@@ -1486,295 +2499,13 @@ function getHandCardStyle(index, count) {
     '--enter-sway': `${enterSway}px`,
     '--fan-hover-rotate': `${(rotate * 0.36).toFixed(2)}deg`,
     '--fan-hover-yaw': `${(yaw * 0.72).toFixed(2)}deg`,
-    '--fan-hover-x': `${spread + Math.round(ratio * 5)}px`,
+    '--fan-hover-x': `${fanHoverX}px`,
     '--fan-hover-lift': `${-(lift + 10)}px`,
     '--fan-hover-depth': `${depth + 16}px`,
     zIndex: Math.round(100 + stackBias * 4 + (1 - Math.abs(ratio)) * 8),
   }
 }
 
-function CardView({
-  card,
-  selected = false,
-  entering = false,
-  dragging = false,
-  mode = 'hand',
-  outputOverride,
-  draggable = false,
-  onClick,
-  onDragStart,
-  onDragEnd,
-  style,
-}) {
-  const [handHint, setHandHint] = useState(null)
-  const handHintTimerRef = useRef(null)
-  const pendingHandHintRef = useRef(null)
-  const dept = DEPT_META[card.dept] ?? DEPT_META.NONE
-  const rarityLabel = RARITY_LABELS[card.rarity] ?? card.rarity
-  const DepartmentIcon = getCardDepartmentIcon(card)
-  const hasOutputOverride = card.type === 'emp' && Number.isFinite(outputOverride)
-  const isActionCard = card.type === 'fun' || card.type === 'srv'
-  const primary = hasOutputOverride ? `¥${outputOverride}` : card.type === 'emp' ? `¥${card.baseOutput}` : getActionPrimaryParts(card.effects[0])
-  const outputChanged = hasOutputOverride && outputOverride !== card.baseOutput
-  const effects = [...card.effects, ...card.affixEffects].filter((effect) => !effect.startsWith('COST') && !effect.startsWith('BASE_OUTPUT'))
-  const shortEffectText = effects.slice(0, 2).map(summarizeEffectShort).join(' · ') || '基础行动'
-  const fullEffectText = effects.map(summarizeEffect).join(' / ') || '基础行动'
-  const neighborDirection = getNeighborDirection(effects)
-  const Component = onClick ? 'button' : 'div'
-  const canTilt = (mode === 'hand' && selected) || mode === 'reveal'
-  const usesFloatingHint = mode === 'hand' || mode === 'slot'
-
-  useEffect(() => {
-    return () => window.clearTimeout(handHintTimerRef.current)
-  }, [])
-
-  function handlePointerMove(event) {
-    updateFloatingHint(event)
-    if (!canTilt) return
-    const rect = event.currentTarget.getBoundingClientRect()
-    const x = (event.clientX - rect.left) / rect.width
-    const y = (event.clientY - rect.top) / rect.height
-    const tiltY = (0.5 - x) * 11
-    const tiltX = (y - 0.5) * 8
-    event.currentTarget.style.setProperty('--tilt-x', `${tiltX.toFixed(2)}deg`)
-    event.currentTarget.style.setProperty('--tilt-y', `${tiltY.toFixed(2)}deg`)
-    event.currentTarget.style.setProperty('--portrait-tilt-x', `${tiltX.toFixed(2)}deg`)
-    event.currentTarget.style.setProperty('--portrait-tilt-y', `${tiltY.toFixed(2)}deg`)
-    event.currentTarget.style.setProperty('--person-tilt-x', `${(-tiltX * 1.28).toFixed(2)}deg`)
-    event.currentTarget.style.setProperty('--person-tilt-y', `${(-tiltY * 1.28).toFixed(2)}deg`)
-    event.currentTarget.style.setProperty('--person-shift-x', `${(-tiltY * 0.5).toFixed(2)}px`)
-    event.currentTarget.style.setProperty('--person-shift-y', `${(-tiltX * 0.42).toFixed(2)}px`)
-    event.currentTarget.style.setProperty('--glare-x', `${Math.round(x * 100)}%`)
-    event.currentTarget.style.setProperty('--glare-y', `${Math.round(y * 100)}%`)
-  }
-
-  function handlePointerLeave(event) {
-    hideFloatingHint()
-    if (!canTilt) return
-    event.currentTarget.style.setProperty('--tilt-x', '0deg')
-    event.currentTarget.style.setProperty('--tilt-y', '0deg')
-    event.currentTarget.style.setProperty('--portrait-tilt-x', '0deg')
-    event.currentTarget.style.setProperty('--portrait-tilt-y', '0deg')
-    event.currentTarget.style.setProperty('--person-tilt-x', '0deg')
-    event.currentTarget.style.setProperty('--person-tilt-y', '0deg')
-    event.currentTarget.style.setProperty('--person-shift-x', '0px')
-    event.currentTarget.style.setProperty('--person-shift-y', '0px')
-    event.currentTarget.style.setProperty('--glare-x', '50%')
-    event.currentTarget.style.setProperty('--glare-y', '18%')
-  }
-
-  function updateFloatingHint(event) {
-    if (!usesFloatingHint) return
-    // 提示框使用 position:fixed（在 body 上 portal），直接用视口坐标
-    const cx = event.clientX
-    const cy = event.clientY
-    const offset = 14       // 紧贴指针，视口像素
-    const hintW = 220       // 提示框估算宽度（视口像素）
-    const hintH = 72        // 提示框估算高度
-    const nearRight  = cx + offset + hintW > window.innerWidth
-    const nearBottom = cy + offset + hintH > window.innerHeight
-    // left/top 始终指向指针旁的锚点；CSS class 再用 translate(-100%) 翻转到另一侧
-    const nextHint = {
-      left: cx + (nearRight ? -offset : offset),
-      top:  cy + (nearBottom ? -offset : offset),
-      x: nearRight  ? 'left'  : 'right',
-      y: nearBottom ? 'top'   : 'bottom',
-    }
-    pendingHandHintRef.current = nextHint
-    if (handHint) {
-      setHandHint(nextHint)   // 已显示时实时跟随
-      return
-    }
-    if (handHintTimerRef.current) return
-    handHintTimerRef.current = window.setTimeout(() => {
-      setHandHint(pendingHandHintRef.current)
-      handHintTimerRef.current = null
-    }, 500)   // 0.5 秒后出现
-  }
-
-  function hideFloatingHint() {
-    if (!usesFloatingHint) return
-    window.clearTimeout(handHintTimerRef.current)
-    handHintTimerRef.current = null
-    pendingHandHintRef.current = null
-    setHandHint(null)
-  }
-
-  return (
-    <>
-      <span className={`card-stage ${mode} ${selected ? 'selected' : ''} ${entering ? 'entering' : ''}`} style={style} data-effect-hint={fullEffectText}>
-        <span className="card-stage-shadow" aria-hidden="true" />
-        <Component
-          className={`card-view ${mode} ${selected ? 'selected' : ''} ${entering ? 'entering' : ''} ${dragging ? 'dragging' : ''} ${neighborDirection ? `neighbor-${neighborDirection}` : ''} rarity-${card.rarity} type-${card.type} dept-${card.dept.toLowerCase()}`}
-          data-card-id={card.id}
-          draggable={draggable}
-          onClick={onClick}
-          onPointerEnter={updateFloatingHint}
-          onPointerMove={handlePointerMove}
-          onPointerLeave={handlePointerLeave}
-          onDragStart={onDragStart}
-          onDragEnd={onDragEnd}
-          title={usesFloatingHint ? undefined : `${card.name} · ${fullEffectText}`}
-          aria-label={`${card.name} · ${fullEffectText}`}
-          type={onClick ? 'button' : undefined}
-        >
-          {neighborDirection && (
-            <span className={`neighbor-cue ${neighborDirection}`} aria-hidden="true">
-              {(neighborDirection === 'left' || neighborDirection === 'both') && <i className="left" />}
-              {(neighborDirection === 'right' || neighborDirection === 'both') && <i className="right" />}
-            </span>
-          )}
-          <span className="card-top">
-            <i className="card-title-chip">
-              <DepartmentIcon className="card-dept-icon" size={12} aria-hidden="true" />
-              <span>{card.name}</span>
-            </i>
-            <em>{rarityLabel}</em>
-            <b><Zap className="card-ap-icon" size={12} />{card.ap}</b>
-          </span>
-          <span className="card-portrait" aria-hidden="true">
-            {card.type === 'emp' && <ExecutiveSvgPortrait card={card} />}
-            {(card.type === 'srv' || card.type === 'fun') && hasServiceFunSvg(card.id) && (
-              <span className="srvfun-svg-wrap"><ServiceFunSvg cardId={card.id} /></span>
-            )}
-          </span>
-          <span className={`card-output delta-${card.outputDelta} ${card.type === 'emp' ? 'exec-number' : 'action-primary'} ${outputChanged ? 'changed' : ''}`}>
-            {isActionCard ? (
-              <>
-                <span className="action-primary-label">{primary.label}</span>
-                {primary.value && <span className="action-primary-value exec-number">{primary.value}</span>}
-              </>
-            ) : primary}
-          </span>
-          {!isActionCard && <span className="card-effects">{shortEffectText}</span>}
-          {card.affixes.length > 0 && (
-            <span className="affix-row">
-              {card.affixes.slice(0, 2).map((affix) => <i key={affix.id}>★{affix.name}</i>)}
-            </span>
-          )}
-          <span className="card-flavor">"{card.flavor}"</span>
-        </Component>
-      </span>
-      {usesFloatingHint && handHint && createPortal(
-        <div
-          className={`card-effect-floating-hint x-${handHint.x} y-${handHint.y}`}
-          style={{ left: handHint.left, top: handHint.top }}
-        >
-          {fullEffectText}
-        </div>,
-        document.body,
-      )}
-    </>
-  )
-}
-
-function getCardDepartmentIcon(card) {
-  if (card.type === 'fun') return Sparkles
-  if (card.type === 'srv') return BriefcaseBusiness
-  if (card.dept === 'R') return FlaskConical
-  if (card.dept === 'S') return HandCoins
-  if (card.dept === 'O') return ClipboardList
-  return Factory
-}
-
-function getNeighborDirection(effects) {
-  const normalized = effects.join(' ')
-  const hasBoth = /\bBOTH\s*:/.test(normalized)
-  const hasLeft = /\bLEFT\s*:/.test(normalized)
-  const hasRight = /\bRIGHT\s*:/.test(normalized)
-  if (hasBoth || (hasLeft && hasRight)) return 'both'
-  if (hasLeft) return 'left'
-  if (hasRight) return 'right'
-  return ''
-}
-
-function getActionPrimaryParts(effect = '') {
-  const label = summarizeEffect(effect)
-  const value = summarizeEffectValue(String(effect).replace('TRIGGER: ', '').trim())
-  if (!value) return { label, value: '' }
-
-  return {
-    label: label
-      .replace(value, '')
-      .replace(/\s*(倍率|加强|产能)\s*$/g, '$1')
-      .replace(/\s+/g, ' ')
-      .trim(),
-    value,
-  }
-}
-
-function summarizeEffect(effect = '') {
-  const normalized = String(effect).replace('TRIGGER: ', '').trim()
-  const value = summarizeEffectValue(normalized)
-  const strengthen = value ? `加强 ${value}` : '加强'
-
-  if (normalized.includes('MONTH_NO_MAINTAIN')) return '本月免维持费'
-  if (normalized.includes('MONTH_BONUS')) return value ? `本月产能 ${value}` : '本月产能增加'
-  if (normalized.includes('MONTH_STAR_RATE')) return value ? `叙事率 ${value}` : '叙事率提高'
-  if (normalized.includes('LINE_XMULT')) return value ? `全线倍率 ${value}` : '全线倍率提高'
-  if (normalized.includes('LINE_ALL_R')) return value ? `全线研发员工${effectValueVerb(value)}` : '全线研发员工加强'
-  if (normalized.includes('LINE_ALL_S')) return value ? `全线销售员工${effectValueVerb(value)}` : '全线销售员工加强'
-  if (normalized.includes('LINE_ALL_O')) return value ? `全线运营员工${effectValueVerb(value)}` : '全线运营员工加强'
-  if (normalized.includes('LINE_ALL')) return value ? `全线员工${effectValueVerb(value)}` : '全线员工加强'
-  if (normalized.includes('RIGHT:')) return `右邻员工${effectValueVerb(value) || strengthen}`
-  if (normalized.includes('LEFT:')) return `左邻员工${effectValueVerb(value) || strengthen}`
-  if (normalized.includes('BOTH:')) return `两侧员工${effectValueVerb(value) || strengthen}`
-  if (normalized.includes('ADJ_R')) return value ? `相邻研发员工${effectValueVerb(value)}` : '相邻研发员工加强'
-  if (normalized.includes('ADJ_S')) return value ? `相邻销售员工${effectValueVerb(value)}` : '相邻销售员工加强'
-  if (normalized.includes('SAME_DEPT')) return value ? `同部门员工${effectValueVerb(value)}` : '同部门员工加强'
-  if (normalized.includes('SELF_IF_P1')) return value ? `在启动位时自身${effectValueVerb(value)}` : '启动位自身加强'
-  if (normalized.includes('SELF_IF_P3')) return value ? `在中位时自身${effectValueVerb(value)}` : '中位自身加强'
-  if (normalized.includes('SELF_IF_P5')) return value ? `在收割位时自身${effectValueVerb(value)}` : '收割位自身加强'
-  if (normalized.includes('SELF_IF_LEFT_DEPT_R')) return value ? `左邻为研发时自身${effectValueVerb(value)}` : '左邻为研发时自身加强'
-  if (normalized.includes('SELF_IF_ADJ_FUN')) return value ? `相邻功能牌时自身${effectValueVerb(value)}` : '相邻功能牌时自身加强'
-  if (normalized.includes('SELF_IF_LINE_HAS_FUN')) return value ? `产线有功能牌时自身${effectValueVerb(value)}` : '产线有功能牌时自身加强'
-  if (normalized.includes('SELF:')) return value ? `自身${effectValueVerb(value)}` : '自身加强'
-  return normalized.replace(/_/g, ' ')
-}
-
-function summarizeEffectShort(effect = '') {
-  const normalized = String(effect).replace('TRIGGER: ', '').trim()
-  const value = summarizeEffectValue(normalized)
-  if (normalized.includes('MONTH_NO_MAINTAIN')) return '免维持'
-  if (normalized.includes('MONTH_BONUS')) return value ? `本月${value}` : '本月加产'
-  if (normalized.includes('MONTH_STAR_RATE')) return value ? `叙事${value}` : '叙事率'
-  if (normalized.includes('LINE_XMULT')) return value ? `全线${value}` : '全线倍率'
-  if (normalized.includes('LINE_ALL_R')) return value ? `研发${value}` : '研发加强'
-  if (normalized.includes('LINE_ALL_S')) return value ? `销售${value}` : '销售加强'
-  if (normalized.includes('LINE_ALL_O')) return value ? `运营${value}` : '运营加强'
-  if (normalized.includes('LINE_ALL')) return value ? `全线${value}` : '全线加强'
-  if (normalized.includes('RIGHT:')) return value ? `右邻${value}` : '右邻加强'
-  if (normalized.includes('LEFT:')) return value ? `左邻${value}` : '左邻加强'
-  if (normalized.includes('BOTH:')) return value ? `两侧${value}` : '两侧加强'
-  if (normalized.includes('ADJ_R')) return value ? `邻研发${value}` : '邻研发'
-  if (normalized.includes('ADJ_S')) return value ? `邻销售${value}` : '邻销售'
-  if (normalized.includes('SAME_DEPT')) return value ? `同部门${value}` : '同部门'
-  if (normalized.includes('SELF_IF_P1')) return value ? `启动${value}` : '启动位'
-  if (normalized.includes('SELF_IF_P3')) return value ? `中位${value}` : '中位'
-  if (normalized.includes('SELF_IF_P5')) return value ? `收割${value}` : '收割位'
-  if (normalized.includes('SELF_IF_LEFT_DEPT_R')) return value ? `左研发${value}` : '左研发'
-  if (normalized.includes('SELF_IF_ADJ_FUN')) return value ? `邻功能${value}` : '邻功能'
-  if (normalized.includes('SELF_IF_LINE_HAS_FUN')) return value ? `有功能${value}` : '有功能'
-  if (normalized.includes('SELF:')) return value ? `自身${value}` : '自身加强'
-  return summarizeEffect(normalized)
-}
-
-function summarizeEffectValue(effect = '') {
-  const multiplier = effect.match(/x\d+(?:\.\d+)?/)
-  if (multiplier) return multiplier[0]
-  const yen = effect.match(/[+-]¥\d+(?:\.\d+)?/)
-  if (yen) return yen[0]
-  const percent = effect.match(/[+-]\d+(?:\.\d+)?%/)
-  if (percent) return percent[0]
-  return ''
-}
-
-function effectValueVerb(value = '') {
-  if (!value) return ''
-  if (value.startsWith('x')) return `倍率 ${value}`
-  if (value.includes('¥')) return `产能 ${value}`
-  return `加强 ${value}`
-}
 
 function PackMarket({ packs, budget, used, onOpen, textId }) {
   const visiblePackCount = used ? 0 : packs.length
@@ -1798,7 +2529,7 @@ function PackMarket({ packs, budget, used, onOpen, textId }) {
               <span className="pack-shine" aria-hidden="true" />
               <PackBox3D variant={pack.svgVariant} />
               <strong className="pack-name">{pack.name}</strong>
-              <span className="pack-price">{canAfford ? `💰${pack.cost}` : '💰不足'}</span>
+              <span className="pack-price">{canAfford ? `¥${pack.cost}` : '¥不足'}</span>
             </button>
           )
         })}
@@ -1843,8 +2574,17 @@ function RecruitPackReveal({ card, onClose }) {
 function DeckButton({ label, count, onClick }) {
   const isCooling = label === '冷却'
   const metaLabel = isCooling ? '休息' : '待命'
+  const tooltipCtx = React.useContext(FloatingTooltipCtx)
+  const tipText = isCooling ? '休息员工' : '员工册'
   return (
-    <button className="deck-button" onClick={onClick} data-tip={isCooling ? '休息员工' : '员工册'} aria-label={isCooling ? '休息员工' : '员工册'}>
+    <button
+      className="deck-button"
+      onClick={onClick}
+      aria-label={tipText}
+      onPointerEnter={(e) => tooltipCtx.showTooltip(tipText, e)}
+      onPointerMove={tooltipCtx.updateTooltip}
+      onPointerLeave={tooltipCtx.hideTooltip}
+    >
       <span className="meta-word-icon" aria-hidden="true">{metaLabel}</span>
       <span className="meta-copy">
         <strong>{count}</strong>
@@ -1854,8 +2594,15 @@ function DeckButton({ label, count, onClick }) {
 }
 
 function HandCount({ discardRequired, handCount }) {
+  const tooltipCtx = React.useContext(FloatingTooltipCtx)
   return (
-    <div className={`hand-title ${discardRequired > 0 ? 'discard-alert' : ''}`} data-tip="待命员工" aria-label="待命员工">
+    <div
+      className={`hand-title ${discardRequired > 0 ? 'discard-alert' : ''}`}
+      aria-label="待命员工"
+      onPointerEnter={(e) => tooltipCtx.showTooltip("待命员工", e)}
+      onPointerMove={tooltipCtx.updateTooltip}
+      onPointerLeave={tooltipCtx.hideTooltip}
+    >
       {discardRequired > 0 ? (
         <span className="meta-word-icon discard-badge" aria-hidden="true">需弃牌 {discardRequired}</span>
       ) : (
@@ -1868,30 +2615,71 @@ function HandCount({ discardRequired, handCount }) {
   )
 }
 
-function ComboRulesOverlay({ onClose }) {
-  const rules = CARD_TEMPLATES
-    .map((card) => ({
-      id: card.id,
-      name: card.name,
-      type: card.type,
-      rarity: card.rarity,
-      rules: card.effects.filter(isComboRule),
-    }))
-    .filter((card) => card.rules.length > 0)
+// v4: 5 个产线 Combo 的定义与说明（与 engine.js detectCombos 一一对应）
+const V4_COMBO_DEFS = [
+  {
+    id: 'pair',
+    name: '双子 (Pair)',
+    rarity: 'common',
+    trigger: '相邻 2 个槽位都是同部门「专员」级别',
+    effect: '该 2 张卡 +30% 产出',
+    note: '低门槛 combo，适合开局靠数量起手',
+  },
+  {
+    id: 'chain',
+    name: '升阶链 (Promotion Chain)',
+    rarity: 'rare',
+    trigger: '同部门「专员 → 经理 → 总监」按 tier 递增排列在连续 3 槽（如 P1/P2/P3）',
+    effect: '整条产线 ×1.5',
+    note: '体现"团队梯队"的商业逻辑，奖励有节奏的招聘',
+  },
+  {
+    id: 'fullRoster',
+    name: '满编 (Full Roster)',
+    rarity: 'elite',
+    trigger: '一条产线 5 张卡全部是同部门（且非 NONE）',
+    effect: '整线 ×2 + 触发对应部门 5 张流派质变 buff',
+    note: '"All in 一个部门"的终极爆发，但 burn 也会非常高',
+  },
+  {
+    id: 'rainbow',
+    name: '三色管理 (Rainbow Trio)',
+    rarity: 'epic',
+    trigger: '一条产线含 3 张相同 tier、不同部门（R/S/O）',
+    effect: '整线 +40% + 下月免费抽 1 张',
+    note: '奖励"高管管理团队"的均衡布局',
+  },
+  {
+    id: 'execMeeting',
+    name: '高管会议 (Exec Meeting)',
+    rarity: 'legendary',
+    trigger: '三色管理的升级版：3 张同 tier 必须是 VP 或 CXO 级且不同部门',
+    effect: '整线 ×1.8（覆盖三色管理）+ 下月 AP +3',
+    note: '需要大量传奇/史诗卡，但对应回报也最猛',
+  },
+]
 
+function ComboRulesOverlay({ onClose }) {
   return (
     <div className="modal-backdrop retro-backdrop" onMouseDown={onClose}>
       <section className="retro-panel combo-panel" onMouseDown={(event) => event.stopPropagation()}>
         <div className="retro-title">
-          <strong>Combo 规则</strong>
+          <strong>5 个产线 Combo · 规则与定义</strong>
           <button onClick={onClose}>返回</button>
         </div>
+        <p style={{ padding: '8px 16px', fontSize: 12, opacity: 0.75, marginBottom: 0 }}>
+          Combo 自动检测，无需手动触发。所有效果叠加在 lineMultiplier 上，与流派质变、槽位区位 buff 共同生效。
+        </p>
         <div className="combo-rules-list">
-          {rules.map((card) => (
-            <article key={card.id} className={`combo-rule rarity-${card.rarity}`}>
-              <span>{card.type === 'emp' ? '员工' : card.type === 'fun' ? '功能' : '服务'}</span>
-              <strong>{card.name}</strong>
-              <p>{card.rules.map(summarizeEffect).join(' / ')}</p>
+          {V4_COMBO_DEFS.map((c) => (
+            <article key={c.id} className={`combo-rule rarity-${c.rarity}`} style={{ display: 'block', padding: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                <strong style={{ fontSize: 16 }}>{c.name}</strong>
+                <span style={{ fontSize: 11, opacity: 0.7 }}>稀有度示意: {c.rarity}</span>
+              </div>
+              <div style={{ fontSize: 13, marginBottom: 4 }}><b style={{ color: '#60a5fa' }}>触发：</b>{c.trigger}</div>
+              <div style={{ fontSize: 13, marginBottom: 4 }}><b style={{ color: '#4ade80' }}>效果：</b>{c.effect}</div>
+              <div style={{ fontSize: 12, opacity: 0.65, fontStyle: 'italic' }}>— {c.note}</div>
             </article>
           ))}
         </div>
@@ -1963,43 +2751,15 @@ function VolumeSlider({ label, value, onChange }) {
   )
 }
 
-function StagnationAdvisor({ onSelect, onClose }) {
-  return (
-    <div className="modal-backdrop retro-backdrop" onMouseDown={onClose}>
-      <section className="retro-panel stagnation-advisor-panel" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="retro-title">
-          <strong>滞涨顾问建议</strong>
-        </div>
-        <p className="stagnation-intro">
-          老板，公司已连续 6 个月估值未能创新高。为打破焦灼状态，请从以下三个战略建议中选择一个执行：
-        </p>
-        <div className="advisor-options">
-          <button className="advisor-opt-btn" onClick={() => onSelect('A')}>
-            <strong>A. 精简团队</strong>
-            <span>免费解雇月 burn 最高的一张卡牌</span>
-          </button>
-          <button className="advisor-opt-btn" onClick={() => onSelect('B')}>
-            <strong>B. 注资援助</strong>
-            <span>获得紧急资金注资 +¥50</span>
-          </button>
-          <button className="advisor-opt-btn" onClick={() => onSelect('C')}>
-            <strong>C. 战略冲刺</strong>
-            <span>下个月所有生产线产出提升 30% (×1.3)</span>
-          </button>
-        </div>
-        <button className="advisor-close-btn" onClick={onClose}>暂不理会</button>
-      </section>
-    </div>
-  )
-}
-
 // ============================================================
 // EditableBlock — drag + resize + scale wrapper for battle layout editor
 // ============================================================
-function EditableBlock({ id, label, children }) {
+function EditableBlock({ id, label, children, editable = true, editZIndex = 100, dragPlate = false }) {
   const { editMode, overrides, update } = React.useContext(LayoutEditCtx)
-  const ov = overrides[id] ?? {}
   const elRef = React.useRef(null)
+  if (!editable) return <>{children}</>
+
+  const ov = _resolveLayoutOverride(id, overrides)
 
   const elemScale = ov.scale ?? 1
 
@@ -2015,12 +2775,15 @@ function EditableBlock({ id, label, children }) {
   if (ov.h != null) style.height = `${ov.h}px`
   if (editMode) {
     style.position = 'relative'
-    style.zIndex = 100
+    style.zIndex = editZIndex
     style.overflow = 'visible'
   }
 
   function startPointerDrag(type, event) {
     if (!editMode) return
+    if (event.pointerId != null) {
+      try { elRef.current?.setPointerCapture?.(event.pointerId) } catch {}
+    }
     event.preventDefault()
     event.stopPropagation()
     const appScale = parseFloat(
@@ -2057,14 +2820,27 @@ function EditableBlock({ id, label, children }) {
     function onUp() {
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      if (event.pointerId != null) {
+        try { elRef.current?.releasePointerCapture?.(event.pointerId) } catch {}
+      }
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
   }
 
   function adjustScale(delta) {
     const next = Math.max(0.1, Math.min(5, parseFloat((elemScale + delta).toFixed(2))))
     update(id, { ...ov, scale: next })
+  }
+
+  function shouldStartBlockMove(event) {
+    const target = event.target
+    if (!(target instanceof Element)) return true
+    return !target.closest(
+      '.edit-handle, .edit-scale-ctrl, .edit-reset-btn, .editable-text-field, button, input, textarea, select, a'
+    )
   }
 
   if (!editMode) {
@@ -2079,10 +2855,24 @@ function EditableBlock({ id, label, children }) {
 
   const HANDLES = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw']
   return (
-    <div ref={elRef} className="edit-block" style={style}>
+    <div
+      ref={elRef}
+      className="edit-block"
+      data-edit-id={id}
+      style={style}
+      onPointerDown={(e) => {
+        if (shouldStartBlockMove(e)) startPointerDrag('move', e)
+      }}
+    >
+      {dragPlate && (
+        <div
+          className="edit-drag-plate"
+          onPointerDown={(e) => startPointerDrag('move', e)}
+        />
+      )}
       {/* Move bar */}
-      <div className="edit-move-bar">
-        <div className="edit-move-grip" onPointerDown={(e) => startPointerDrag('move', e)}>
+      <div className="edit-move-bar" onPointerDown={(e) => startPointerDrag('move', e)}>
+        <div className="edit-move-grip">
           <span className="edit-move-icon">✥</span>
           <span className="edit-move-label">{label}</span>
         </div>
@@ -2174,6 +2964,7 @@ function MenuTiltButton({ onClick, children }) {
   }
   return (
     <button
+      className="menu-tilt-btn-wrap"
       onPointerDown={(event) => {
         if (event.button === 0) {
           event.preventDefault()
@@ -2186,7 +2977,9 @@ function MenuTiltButton({ onClick, children }) {
       onPointerMove={handleMove}
       onPointerLeave={handleLeave}
     >
-      {children}
+      <div className="menu-tilt-btn-inner">
+        {children}
+      </div>
     </button>
   )
 }
@@ -2407,6 +3200,44 @@ function isComboRule(effect = '') {
   return /LEFT|RIGHT|BOTH|ADJ|SAME_DEPT|LINE_ALL|LINE_XMULT|SELF_IF|IF_ALL|x\d|[+]\d+%/.test(effect)
 }
 
+function HighlightModal({ candidates, onPick, onDismiss }) {
+  return (
+    <div className="modal-backdrop retro-backdrop" onMouseDown={onDismiss}>
+      <section className="retro-panel highlight-modal" onMouseDown={(e) => e.stopPropagation()} style={{ minWidth: 600, padding: 24 }}>
+        <div className="retro-title" style={{ marginBottom: 8 }}>
+          <strong>🎉 月末高光时刻</strong>
+        </div>
+        <p style={{ opacity: 0.8, fontSize: 13, marginBottom: 16 }}>
+          上月利润足够亮眼，请从 3 张候选中挑选 1 张免费加入牌堆：
+        </p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginBottom: 16 }}>
+          {candidates.map((c, i) => (
+            <button
+              key={c.uid}
+              onClick={() => onPick(i)}
+              style={{
+                flex: 1, padding: 12, background: '#1a1d29', border: '2px solid #c084fc',
+                borderRadius: 8, color: '#f4f4f5', cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <div style={{ fontSize: 12, opacity: 0.7 }}>{c.dept} · {c.tier} · {c.rarity}</div>
+              <div style={{ fontSize: 16, fontWeight: 'bold', margin: '4px 0' }}>{c.name}</div>
+              <div style={{ fontSize: 12 }}>AP {c.ap} · 产出 {c.baseOutput}</div>
+              {c.effects?.slice(0, 3).map((e, idx) => (
+                <div key={idx} style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>• {e}</div>
+              ))}
+            </button>
+          ))}
+        </div>
+        <button onClick={onDismiss} style={{
+          background: 'transparent', border: '1px solid #555', color: '#999',
+          padding: '6px 14px', borderRadius: 4, cursor: 'pointer', fontSize: 12,
+        }}>跳过（不挑选）</button>
+      </section>
+    </div>
+  )
+}
+
 function ResultOverlay({ game, onRestart, onEnterIntermission }) {
   const result = game.result
   if (!result) return null
@@ -2426,16 +3257,17 @@ function ResultOverlay({ game, onRestart, onEnterIntermission }) {
         </div>
 
         <div className="result-actions">
-          {!isGameWon && onEnterIntermission && (
+          {!isGameWon ? (
             <button className="command-button primary" onClick={onEnterIntermission}>
               <Sparkles size={18} />
               进入董事会会议
             </button>
+          ) : (
+            <button className="command-button primary" onClick={onRestart}>
+              <RotateCcw size={18} />
+              再玩一局
+            </button>
           )}
-          <button className={`command-button ${!isGameWon ? 'quiet' : 'primary'}`} onClick={onRestart}>
-            <RotateCcw size={18} />
-            {isGameWon ? '再玩一局' : '重新开始'}
-          </button>
         </div>
       </section>
     </div>
@@ -2486,6 +3318,99 @@ function PileDrawer({ title, cards, onClose }) {
 // 关间「董事会会议」UI (详见 BOARD_MEETING_DESIGN.md §8)
 // ============================================================================
 
+function ShopStationIcon() {
+  return (
+    <svg className="bm-station-svg" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
+      <rect x="4" y="24" width="24" height="4" fill="#0c1f47" />
+      <rect x="4" y="10" width="24" height="14" fill="#1e3a8a" />
+      <rect x="6" y="12" width="20" height="10" fill="#3b82f6" />
+      <rect x="8" y="14" width="16" height="6" fill="#60a5fa" />
+      <rect x="4" y="8" width="24" height="4" fill="#93c5fd" />
+      <rect x="4" y="8" width="2" height="16" fill="#1d4ed8" />
+      <rect x="26" y="8" width="2" height="16" fill="#172554" />
+      <rect x="4" y="22" width="24" height="2" fill="#172554" />
+      <rect x="14" y="12" width="4" height="6" fill="#fbbf24" />
+      <rect x="15" y="14" width="2" height="2" fill="#78350f" />
+      <rect x="8" y="10" width="2" height="2" fill="#ffffff" />
+      <rect x="22" y="16" width="2" height="2" fill="#ffffff" />
+    </svg>
+  )
+}
+
+function HrStationIcon() {
+  return (
+    <svg className="bm-station-svg" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
+      <rect x="6" y="4" width="20" height="24" fill="#78350f" />
+      <rect x="8" y="6" width="16" height="20" fill="#b45309" />
+      <rect x="10" y="8" width="12" height="16" fill="#f8fafc" />
+      <rect x="10" y="8" width="12" height="3" fill="#ef4444" />
+      <rect x="12" y="13" width="8" height="2" fill="#cbd5e1" />
+      <rect x="12" y="17" width="8" height="2" fill="#cbd5e1" />
+      <rect x="12" y="21" width="5" height="2" fill="#cbd5e1" />
+      <rect x="19" y="21" width="2" height="2" fill="#10b981" />
+      <rect x="12" y="2" width="8" height="4" fill="#94a3b8" />
+      <rect x="14" y="3" width="4" height="2" fill="#cbd5e1" />
+      <rect x="24" y="10" width="2" height="12" fill="#3b82f6" />
+      <rect x="24" y="8" width="2" height="2" fill="#ef4444" />
+    </svg>
+  )
+}
+
+function SchoolStationIcon() {
+  return (
+    <svg className="bm-station-svg" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
+      <rect x="11" y="18" width="10" height="6" fill="#4c1d95" />
+      <rect x="12" y="18" width="8" height="5" fill="#6d28d9" />
+      <rect x="15" y="8" width="2" height="2" fill="#8b5cf6" />
+      <rect x="13" y="10" width="6" height="2" fill="#8b5cf6" />
+      <rect x="15" y="10" width="2" height="2" fill="#a78bfa" />
+      <rect x="9" y="12" width="14" height="2" fill="#8b5cf6" />
+      <rect x="11" y="12" width="10" height="2" fill="#a78bfa" />
+      <rect x="15" y="12" width="2" height="2" fill="#fbbf24" />
+      <rect x="5" y="14" width="22" height="2" fill="#8b5cf6" />
+      <rect x="7" y="14" width="18" height="2" fill="#a78bfa" />
+      <rect x="9" y="16" width="14" height="2" fill="#8b5cf6" />
+      <rect x="11" y="16" width="10" height="2" fill="#7c3aed" />
+      <rect x="13" y="18" width="6" height="2" fill="#4c1d95" />
+      <rect x="17" y="13" width="6" height="1" fill="#fbbf24" />
+      <rect x="23" y="14" width="1" height="6" fill="#fbbf24" />
+      <rect x="22" y="20" width="3" height="3" fill="#d97706" />
+    </svg>
+  )
+}
+
+function RecordsStationIcon() {
+  return (
+    <svg className="bm-station-svg" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" shapeRendering="crispEdges">
+      <rect x="4" y="4" width="24" height="24" fill="#b45309" />
+      <rect x="6" y="6" width="20" height="20" fill="#fef3c7" />
+      <rect x="8" y="8" width="16" height="4" fill="#fbbf24" />
+      <rect x="10" y="9" width="12" height="2" fill="#78350f" />
+      <rect x="8" y="14" width="7" height="1" fill="#d97706" />
+      <rect x="8" y="16" width="7" height="1" fill="#d97706" />
+      <rect x="8" y="18" width="7" height="1" fill="#d97706" />
+      <rect x="8" y="20" width="5" height="1" fill="#d97706" />
+      <rect x="17" y="14" width="7" height="1" fill="#d97706" />
+      <rect x="17" y="16" width="7" height="1" fill="#d97706" />
+      <rect x="17" y="18" width="7" height="1" fill="#d97706" />
+      <rect x="17" y="20" width="7" height="4" fill="#f59e0b" />
+      <rect x="19" y="21" width="3" height="2" fill="#fef3c7" />
+    </svg>
+  )
+}
+
+function getPackBoxVariant(id) {
+  switch (id) {
+    case 'PACK_HEADHUNTER': return 'rd';
+    case 'PACK_ELITE': return 'sales';
+    case 'PACK_SERVICE': return 'srv';
+    case 'PACK_FUNCTION': return 'ops';
+    case 'PACK_INSIGHT': return 'tools';
+    case 'PACK_MYSTERY': return 'mystery';
+    default: return 'rd';
+  }
+}
+
 function BoardMeetingHub({
   game,
   onResolveEvent,
@@ -2496,7 +3421,6 @@ function BoardMeetingHub({
   onFire,
   onBmBuy,
   onSchoolRoll,
-  onWithdrawal,
   onBmUnsubscribe,
   onExit,
 }) {
@@ -2505,6 +3429,15 @@ function BoardMeetingHub({
   const [pendingReplaceIdx, setPendingReplaceIdx] = useState(null)
   const [pendingBmSchoolIdx, setPendingBmSchoolIdx] = useState(null)
   const [confirmExit, setConfirmExit] = useState(false)
+  const [popActive, setPopActive] = useState(true)
+  const panelRef = useRef(null)
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPopActive(false)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [])
 
   const im = game.intermissionState
   if (!im) return null
@@ -2513,9 +3446,36 @@ function BoardMeetingHub({
   const nextStage = STAGES[currentStageIndex + 1]
   const isEventPhase = im.phase === 'event'
 
+  function handleMouseMove(event) {
+    if (!panelRef.current) return
+    const rect = panelRef.current.getBoundingClientRect()
+    const panelCenterX = rect.left + rect.width / 2
+    const panelCenterY = rect.top + rect.height / 2
+    const dx = event.clientX - panelCenterX
+    const dy = event.clientY - panelCenterY
+
+    const maxDistanceX = window.innerWidth / 2
+    const maxDistanceY = window.innerHeight / 2
+
+    const pctX = dx / maxDistanceX
+    const pctY = dy / maxDistanceY
+
+    const tiltY = pctX * 4.5  // Max horizontal tilt
+    const tiltX = -pctY * 4.0 // Max vertical tilt
+
+    panelRef.current.style.setProperty('--bm-tilt-x', `${tiltX.toFixed(2)}deg`)
+    panelRef.current.style.setProperty('--bm-tilt-y', `${tiltY.toFixed(2)}deg`)
+  }
+
+  function handleMouseLeave() {
+    if (!panelRef.current) return
+    panelRef.current.style.setProperty('--bm-tilt-x', '0deg')
+    panelRef.current.style.setProperty('--bm-tilt-y', '0deg')
+  }
+
   return (
-    <div className="bm-overlay">
-      <section className="bm-panel">
+    <div className="bm-overlay" onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
+      <section className={`bm-panel ${popActive ? 'pop-active' : ''}`} ref={panelRef}>
         <header className="bm-panel-header">
           <div className="bm-cash-chip">
             <span aria-hidden="true">¥</span>
@@ -2559,6 +3519,7 @@ function BoardMeetingHub({
                   onBuy={onShopBuy}
                   onPack={onPack}
                   onRoll={onShopRoll}
+                  onClose={() => setActiveStation(null)}
                 />
               )}
               {activeStation === 'hr' && (
@@ -2568,6 +3529,7 @@ function BoardMeetingHub({
                   setHrCardUid={setHrCardUid}
                   onUpgrade={onUpgrade}
                   onFire={onFire}
+                  onClose={() => setActiveStation(null)}
                 />
               )}
               {activeStation === 'school' && (
@@ -2581,20 +3543,19 @@ function BoardMeetingHub({
                   onBmBuy={onBmBuy}
                   onBmUnsubscribe={onBmUnsubscribe}
                   onRoll={onSchoolRoll}
+                  onClose={() => setActiveStation(null)}
                 />
               )}
               {activeStation === 'log' && (
-                <LogDrawer logTrail={im.logTrail} />
+                <LogDrawer logTrail={im.logTrail} onClose={() => setActiveStation(null)} />
               )}
             </div>
           ) : (
             <div className="bm-menu-and-finance">
-              <FinanceStation game={game} im={im} onWithdrawal={onWithdrawal} />
-              
               <div className="bm-stations-grid">
                 <StationCard
                   color="azure"
-                  icon="💼"
+                  icon={<ShopStationIcon />}
                   title="投资部"
                   tag="SHOP"
                   description="epic / 传奇单卡 · 6 类卡包"
@@ -2602,7 +3563,7 @@ function BoardMeetingHub({
                 />
                 <StationCard
                   color="rose"
-                  icon="📋"
+                  icon={<HrStationIcon />}
                   title="人事部"
                   tag="HR"
                   description={`升职 / 免费解雇 · 本场操作 ${im.hrActionsCount}`}
@@ -2610,7 +3571,7 @@ function BoardMeetingHub({
                 />
                 <StationCard
                   color="violet"
-                  icon="🎓"
+                  icon={<SchoolStationIcon />}
                   title="商学院"
                   tag="SCHOOL"
                   description={`已学 ${game.activeBusinessModels.length}/${game.businessModelSlotCap} 商业模式`}
@@ -2618,7 +3579,7 @@ function BoardMeetingHub({
                 />
                 <StationCard
                   color="amber"
-                  icon="📰"
+                  icon={<RecordsStationIcon />}
                   title="董事访谈"
                   tag="RECORDS"
                   description="本场会议日志"
@@ -2638,56 +3599,6 @@ function BoardMeetingHub({
           onConfirm={() => { setConfirmExit(false); onExit() }}
           onCancel={() => setConfirmExit(false)}
         />
-      )}
-    </div>
-  )
-}
-
-function FinanceStation({ game, im, onWithdrawal }) {
-  const [withdrawRatio, setWithdrawRatio] = useState(0.3)
-  const previewExtracted = Math.floor(game.retainedEarnings * withdrawRatio)
-  
-  return (
-    <div className="finance-station">
-      <div className="finance-title">🏢 财务部 (Finance Department)</div>
-      {im.withdrawn ? (
-        <div className="finance-withdrawn">
-          <span>已完成本阶段资金提取：</span>
-          <strong>+¥{im.extractedAmount}</strong>
-          <em>({Math.round((im.withdrawalRatio || 0) * 100)}% 留存利润)</em>
-        </div>
-      ) : (
-        <div className="finance-active">
-          <div className="finance-retained">
-            <span>当前留存利润:</span>
-            <strong>¥{game.retainedEarnings}</strong>
-          </div>
-          <div className="finance-controls">
-            <label>提取比例:</label>
-            <div className="ratio-buttons">
-              {[0, 0.3, 0.6, 1.0].map((r) => (
-                <button
-                  key={r}
-                  className={`ratio-btn ${withdrawRatio === r ? 'selected' : ''}`}
-                  onClick={() => setWithdrawRatio(r)}
-                >
-                  {r * 100}%
-                </button>
-              ))}
-            </div>
-            <div className="finance-preview">
-              <span>预计提取:</span>
-              <strong>+¥{previewExtracted}</strong>
-            </div>
-            <button
-              className="finance-confirm-btn"
-              disabled={game.retainedEarnings <= 0}
-              onClick={() => onWithdrawal(withdrawRatio)}
-            >
-              确认提取并注入现金
-            </button>
-          </div>
-        </div>
       )}
     </div>
   )
@@ -2751,6 +3662,52 @@ function StationCard({ icon, title, tag, description, color, onClick }) {
 }
 
 function ShopDrawer({ shopRoll, purchased, budget, nextLevelId, onBuy, onPack, onRoll, onClose }) {
+  const mysteryPack = shopRoll.packs[0]; // Always PACK_MYSTERY at index 0
+  const pack1 = shopRoll.packs[1];
+  const pack2 = shopRoll.packs[2];
+
+  const renderPackSlot = (entry, idx) => {
+    if (!entry) return <div key={idx} className="shop-slot pack empty">—</div>;
+    const state = purchased.packs[idx]
+    return (
+      <div key={idx} className="shop-slot pack">
+        <div className="shop-slot-tag">{['C', 'D', 'E'][idx]} · {entry.packDef.name}</div>
+        <div className="pack-icon" aria-hidden="true">
+          <PackBox3D variant={getPackBoxVariant(entry.packDef.id)} />
+        </div>
+        <div className="pack-desc">{entry.packDef.description}</div>
+        {!state && (
+          <button
+            className="shop-buy-btn"
+            disabled={budget < entry.cost}
+            onClick={() => onPack(idx)}
+          >买入 −¥{entry.cost}</button>
+        )}
+        {state?.opened && state.pickIndex === null && (
+          <div className="pack-picks">
+            <div className="pack-picks-hint">选 1：</div>
+            <div className="pack-picks-row">
+              {entry.contents.map((item, pickIdx) => (
+                <button
+                  key={pickIdx}
+                  className="pack-pick"
+                  onClick={() => onPack(idx, pickIdx)}
+                >
+                  {item.isBusinessModel
+                    ? <BmCardMini bm={{ name: item.bmName, description: item.bmDescription, rarity: item.bmRarity }} />
+                    : <CardView card={item} mode="market" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {state?.pickIndex !== null && state?.pickIndex !== undefined && (
+          <div className="shop-sold">✓ 已挑选</div>
+        )}
+      </div>
+    )
+  };
+
   return (
     <section className="bm-drawer shop-drawer">
       <header>
@@ -2762,7 +3719,10 @@ function ShopDrawer({ shopRoll, purchased, budget, nextLevelId, onBuy, onPack, o
       </header>
 
       <div className="shop-grid">
-        {/* Slot A: epic */}
+        {/* Column 1: Mystery Pack */}
+        {renderPackSlot(mysteryPack, 0)}
+
+        {/* Column 2: Epic Card (Slot A) */}
         <div className="shop-slot">
           <div className="shop-slot-tag">A · EPIC</div>
           {shopRoll.epicCard ? (
@@ -2783,7 +3743,7 @@ function ShopDrawer({ shopRoll, purchased, budget, nextLevelId, onBuy, onPack, o
           )}
         </div>
 
-        {/* Slot B: legendary */}
+        {/* Column 3: Legendary Card (Slot B) */}
         <div className="shop-slot legendary">
           <div className="shop-slot-tag">B · LEGENDARY ✨</div>
           {shopRoll.legendaryCard ? (
@@ -2804,45 +3764,11 @@ function ShopDrawer({ shopRoll, purchased, budget, nextLevelId, onBuy, onPack, o
           )}
         </div>
 
-        {/* Pack slots */}
-        {shopRoll.packs.map((entry, idx) => {
-          const state = purchased.packs[idx]
-          return (
-            <div key={idx} className="shop-slot pack">
-              <div className="shop-slot-tag">{['C', 'D', 'E'][idx]} · {entry.packDef.name}</div>
-              <div className="pack-icon" aria-hidden="true">{entry.packDef.icon}</div>
-              <div className="pack-desc">{entry.packDef.description}</div>
-              {!state && (
-                <button
-                  className="shop-buy-btn"
-                  disabled={budget < entry.cost}
-                  onClick={() => onPack(idx)}
-                >买入 −¥{entry.cost}</button>
-              )}
-              {state?.opened && state.pickIndex === null && (
-                <div className="pack-picks">
-                  <div className="pack-picks-hint">选 1：</div>
-                  <div className="pack-picks-row">
-                    {entry.contents.map((item, pickIdx) => (
-                      <button
-                        key={pickIdx}
-                        className="pack-pick"
-                        onClick={() => onPack(idx, pickIdx)}
-                      >
-                        {item.isBusinessModel
-                          ? <BmCardMini bm={{ name: item.bmName, description: item.bmDescription, rarity: item.bmRarity }} />
-                          : <CardView card={createDisplayCard(item)} mode="market" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {state?.pickIndex !== null && state?.pickIndex !== undefined && (
-                <div className="shop-sold">✓ 已挑选</div>
-              )}
-            </div>
-          )
-        })}
+        {/* Column 4: Pack 1 */}
+        {renderPackSlot(pack1, 1)}
+
+        {/* Column 5: Pack 2 */}
+        {renderPackSlot(pack2, 2)}
       </div>
     </section>
   )
@@ -2853,8 +3779,9 @@ function HrDrawer({ game, hrCardUid, setHrCardUid, onUpgrade, onFire, onClose })
   const allCards = [...game.hand, ...game.drawPile, ...game.coolingPile]
   const selectedCard = allCards.find((c) => c.uid === hrCardUid)
   const fireCost = 0 // Dismiss is free now
-  const upgradePath = selectedCard ? UPGRADE_PATHS[selectedCard.rarity] : null
+  const upgradePath = selectedCard ? UPGRADE_PATHS[selectedCard.tier] : null
   const [affixChoice, setAffixChoice] = useState(null)
+  const isHrLimitReached = (im?.hrActionsCount || 0) >= 1
 
   // 升职词缀池：固定从全 6 个里挑前 3 个（避免每次重渲打乱）
   const randomAffixes = useMemo(() => {
@@ -2905,16 +3832,22 @@ function HrDrawer({ game, hrCardUid, setHrCardUid, onUpgrade, onFire, onClose })
             <>
               <h4>对 <em>{selectedCard.name}</em> 执行：</h4>
 
+              {isHrLimitReached && (
+                <div className="hr-limit-warning" style={{ color: '#ff7676', fontSize: '11px', marginBottom: '12px', fontWeight: 'bold', lineHeight: '1.4' }}>
+                  ⚠️ 本期已进行人事变动（每个董事会仅限一次升职或加词缀）
+                </div>
+              )}
+
               {upgradePath ? (
                 <button
                   className="hr-action-btn upgrade-rarity"
-                  disabled={game.cash < upgradePath.cost}
-                  onClick={() => { onUpgrade(selectedCard.uid, 'rarity'); setHrCardUid(null) }}
+                  disabled={isHrLimitReached || game.cash < upgradePath.cost}
+                  onClick={() => { onUpgrade(selectedCard.uid, 'tier'); setHrCardUid(null) }}
                 >
-                  ① 升稀有度 {selectedCard.rarity} → {upgradePath.next} （−¥{upgradePath.cost}）
+                  ① 升职 {selectedCard.tier || '未知'} → {upgradePath.next} （−¥{upgradePath.cost}）
                 </button>
               ) : (
-                <button className="hr-action-btn disabled" disabled>① 已达稀有度上限</button>
+                <button className="hr-action-btn disabled" disabled>① 已达职级上限</button>
               )}
 
               <div className="hr-action-section">
@@ -2924,7 +3857,7 @@ function HrDrawer({ game, hrCardUid, setHrCardUid, onUpgrade, onFire, onClose })
                     <button
                       key={aff.id}
                       className={`hr-affix-pick ${affixChoice === aff.id ? 'selected' : ''}`}
-                      disabled={game.cash < 8}
+                      disabled={isHrLimitReached || game.cash < 8}
                       onClick={() => setAffixChoice(aff.id)}
                     >
                       {aff.label}
@@ -2933,7 +3866,7 @@ function HrDrawer({ game, hrCardUid, setHrCardUid, onUpgrade, onFire, onClose })
                 </div>
                 <button
                   className="hr-action-btn confirm-affix"
-                  disabled={!affixChoice || game.cash < 8}
+                  disabled={isHrLimitReached || !affixChoice || game.cash < 8}
                   onClick={() => { onUpgrade(selectedCard.uid, 'affix', affixChoice); setHrCardUid(null); setAffixChoice(null) }}
                 >
                   确认词缀
@@ -2970,6 +3903,8 @@ function SchoolDrawer({
   const activeBMs = game.activeBusinessModels
   const slotCap = game.businessModelSlotCap
   const isFull = activeBMs.length >= slotCap
+  const im = game.intermissionState
+  const schoolPurchased = im?.schoolPurchased || false
 
   function attemptBuy(schoolIdx) {
     if (!isFull) {
@@ -2993,7 +3928,7 @@ function SchoolDrawer({
         <strong>🎓 商学院 · Business School</strong>
         <div className="drawer-actions">
           <span className="school-stat">{activeBMs.length} / {slotCap} 槽位</span>
-          <button className="bm-roll-btn" disabled={game.cash < 4} onClick={onRoll}>刷新 (−¥4)</button>
+          <button className="bm-roll-btn" disabled={game.cash < 4 || schoolPurchased} onClick={onRoll}>刷新 (−¥4)</button>
           <button className="bm-close-btn" onClick={onClose}>×</button>
         </div>
       </header>
@@ -3014,9 +3949,12 @@ function SchoolDrawer({
                   {bm ? <BmCardMini bm={bm} charged={slot.charged} /> : <div className="bm-empty-text">空</div>}
                 </div>
                 {bm && (
-                  <div className="bm-slot-actions">
-                    <div className="bm-slot-cost">月费: ¥{getBMMonthlyCost(bm)}</div>
-                    <button className="bm-unsubscribe-btn" onClick={() => onBmUnsubscribe(bm.id)}>退订</button>
+                  <div className="bm-under-info">
+                    <p className="bm-under-desc">{bm.description}</p>
+                    <div className="bm-under-cost">月费: ¥{getBMMonthlyCost(bm)} / 资产: +¥{getBMAssetValue(bm)}</div>
+                    <div className="bm-slot-actions">
+                      <button className="bm-unsubscribe-btn" onClick={() => onBmUnsubscribe(bm.id)}>退订</button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -3044,13 +3982,21 @@ function SchoolDrawer({
             const bm = BUSINESS_MODELS.find((b) => b.id === bmId)
             if (!bm) return null
             return (
-              <div key={idx} className="bm-pick">
-                <BmCardMini bm={bm} />
-                <button
-                  className="bm-buy-btn"
-                  disabled={game.cash < bm.cost}
-                  onClick={() => attemptBuy(idx)}
-                >订阅 −¥{bm.cost}</button>
+              <div key={idx} className="bm-pick-container">
+                <div className="bm-slot filled">
+                  <BmCardMini bm={bm} />
+                </div>
+                <div className="bm-under-info">
+                  <p className="bm-under-desc">{bm.description}</p>
+                  <div className="bm-under-cost">订阅费: ¥{bm.cost} / 月费: ¥{getBMMonthlyCost(bm)}</div>
+                  <button
+                    className="bm-buy-btn"
+                    disabled={game.cash < bm.cost || schoolPurchased}
+                    onClick={() => attemptBuy(idx)}
+                  >
+                    {schoolPurchased ? '已选择本期订阅' : `订阅 −¥${bm.cost}`}
+                  </button>
+                </div>
               </div>
             )
           })}
@@ -3061,9 +4007,26 @@ function SchoolDrawer({
 }
 
 function BmCardMini({ bm, charged }) {
-  const monthlyCost = getBMMonthlyCost(bm);
+  const tooltipCtx = React.useContext(FloatingTooltipCtx)
   return (
-    <div className={`bm-card rarity-${bm.rarity}`} data-bm-tip={bm.flavor}>
+    <div
+      className={`bm-card rarity-${bm.rarity}`}
+      onPointerEnter={(e) => tooltipCtx.showTooltip(
+        <div>
+          <div className="tooltip-title">{bm.name}</div>
+          <div>{bm.description}</div>
+          {bm.flavor && (
+            <>
+              <div className="tooltip-divider" />
+              <div style={{ fontStyle: 'italic', color: '#fff4bd', opacity: 0.8 }}>"{bm.flavor}"</div>
+            </>
+          )}
+        </div>,
+        e
+      )}
+      onPointerMove={tooltipCtx.updateTooltip}
+      onPointerLeave={tooltipCtx.hideTooltip}
+    >
       {businessModeImageSrc(bm) && (
         <img className="bm-card-image" src={businessModeImageSrc(bm)} alt="" aria-hidden="true" />
       )}
@@ -3071,16 +4034,16 @@ function BmCardMini({ bm, charged }) {
         <strong>{bm.name}</strong>
         <span>{RARITY_LABELS[bm.rarity] ?? bm.rarity}</span>
       </div>
-      <p className="bm-card-desc">{bm.description}</p>
-      <div className="bm-card-burn-label">月费: ¥{monthlyCost} / 资产: +¥{getBMAssetValue(bm)}</div>
-      {bm.hook && (
-        <span className={`bm-hook-tag hook-${bm.hook}`}>
-          {bm.hook === 'onMonthStart' ? '月初' : bm.hook === 'onSettle' ? '结算' : '充能'}
-        </span>
-      )}
-      {bm.hook === 'onCharge' && charged !== undefined && (
-        <span className="bm-charge-mark">{charged ? '⚡ 已充能' : '○ 已消耗'}</span>
-      )}
+      <div className="bm-card-mid">
+        {bm.hook && (
+          <span className={`bm-hook-tag hook-${bm.hook}`}>
+            {bm.hook === 'onMonthStart' ? '月初' : bm.hook === 'onSettle' ? '结算' : '充能'}
+          </span>
+        )}
+        {bm.hook === 'onCharge' && charged !== undefined && (
+          <span className="bm-charge-mark">{charged ? '⚡ 已充能' : '○ 已消耗'}</span>
+        )}
+      </div>
     </div>
   )
 }

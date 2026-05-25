@@ -182,6 +182,26 @@ const VARIANTS = {
       </g>
     ),
   },
+
+  // 神秘包 - 金黄色 - 问号
+  mystery: {
+    top: '#fef08a',
+    front: '#eab308',
+    side: '#a16207',
+    dark: '#451a03',
+    seal: '#ef4444',
+    sealMark: '#991b1b',
+    pattern: (
+      <g shapeRendering="crispEdges">
+        <rect x="26" y="32" width="12" height="4" fill="#ffffff" />
+        <rect x="24" y="36" width="4" height="6" fill="#ffffff" />
+        <rect x="36" y="36" width="4" height="10" fill="#ffffff" />
+        <rect x="30" y="44" width="8" height="4" fill="#ffffff" />
+        <rect x="28" y="48" width="4" height="4" fill="#ffffff" />
+        <rect x="28" y="56" width="4" height="4" fill="#ffffff" />
+      </g>
+    ),
+  },
 }
 
 export function PackBox3D({ variant = 'rd' }) {

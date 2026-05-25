@@ -1,11 +1,16 @@
 import React, { useState, useMemo } from 'react'
 import { CardView } from './CardView.jsx'
+import { useFloatingTooltip } from './hooks/useFloatingTooltip.jsx'
 import {
   BOARD_EVENTS,
   BUSINESS_MODELS,
   CARD_TEMPLATES,
   EVENTS,
   RARITY_LABELS,
+  RARITY_TABLE,
+  RARITY_RANDOM_SPEC,
+  RANDOM_FUNCTION_POOL,
+  DEPT_L1_EFFECTS,
 } from './game/cards.js'
 
 /**
@@ -21,6 +26,33 @@ const TABS = [
   { id: 'bm', label: '商业模式', subtitle: '全局 buff' },
   { id: 'event', label: '月度事件', subtitle: '局内随机' },
   { id: 'board', label: '董事访谈', subtitle: '关间事件' },
+  { id: 'combo', label: 'Combo 规则', subtitle: '5 个产线组合' },
+  { id: 'rarity', label: '稀有度参数', subtitle: 'Burn/资产/Roll' },
+  { id: 'random', label: '随机功能池', subtitle: 'lv1-4 词条' },
+]
+
+// v4: 5 个产线 Combo 的定义与说明
+const V4_COMBO_DEFS = [
+  { id: 'pair', name: '双子 (Pair)', rarity: 'common',
+    trigger: '相邻 2 个槽位都是同部门「专员」级别',
+    effect: '该 2 张卡 +30% 产出',
+    note: '低门槛 combo，适合开局靠数量起手' },
+  { id: 'chain', name: '升阶链 (Promotion Chain)', rarity: 'rare',
+    trigger: '同部门「专员 → 经理 → 总监」按 tier 递增排列在连续 3 槽',
+    effect: '整条产线 ×1.5',
+    note: '体现"团队梯队"的商业逻辑，奖励有节奏的招聘' },
+  { id: 'fullRoster', name: '满编 (Full Roster)', rarity: 'elite',
+    trigger: '一条产线 5 张卡全部是同部门（且非 NONE）',
+    effect: '整线 ×2 + 触发对应部门 5 张流派质变 buff',
+    note: '"All in 一个部门"的终极爆发，但 burn 也会非常高' },
+  { id: 'rainbow', name: '三色管理 (Rainbow Trio)', rarity: 'epic',
+    trigger: '一条产线含 3 张相同 tier、不同部门 (R/S/O)',
+    effect: '整线 +40% + 下月免费抽 1 张',
+    note: '奖励"高管管理团队"的均衡布局' },
+  { id: 'execMeeting', name: '高管会议 (Exec Meeting)', rarity: 'legendary',
+    trigger: '3 张同 tier 必须是 VP 或 CXO 级且不同部门',
+    effect: '整线 ×1.8 + 下月 AP +3',
+    note: '需要大量传奇/史诗卡，但对应回报也最猛' },
 ]
 
 const EFFECT_TEMPLATES = [
@@ -63,12 +95,15 @@ const DEPTS = ['R', 'S', 'O', 'NONE']
 const TIERS = ['专员', '经理', '总监', 'VP', 'CXO', '顶级', '进阶', '基础', '功能']
 const EVENT_TONES = ['增益', '风险', '机会', '中性']
 
+const CompendiumTooltipCtx = React.createContext(null)
+
 export default function CompendiumScreen({ onClose }) {
   const [activeTab, setActiveTab] = useState('emp')
   const [devMode, setDevMode] = useState(true)
   const [editing, setEditing] = useState(null) // { type, item }
   const [, setDirty] = useState(0)
   const forceUpdate = () => setDirty((d) => d + 1)
+  const compTooltip = useFloatingTooltip({ delay: 150 })
 
   // 按 tab 过滤数据
   const items = useMemo(() => {
@@ -87,6 +122,14 @@ export default function CompendiumScreen({ onClose }) {
         return EVENTS
       case 'board':
         return BOARD_EVENTS
+      case 'combo':
+        return V4_COMBO_DEFS
+      case 'rarity':
+        return Object.entries(RARITY_TABLE).map(([key, val]) => ({ id: key, ...val, spec: RARITY_RANDOM_SPEC[key] }))
+      case 'random':
+        return Object.entries(RANDOM_FUNCTION_POOL).flatMap(([lv, fns]) =>
+          fns.map(fn => ({ ...fn, lv }))
+        )
       default:
         return []
     }
@@ -111,6 +154,7 @@ export default function CompendiumScreen({ onClose }) {
   }
 
   return (
+    <CompendiumTooltipCtx.Provider value={compTooltip}>
     <main className="compendium-shell">
       <div className="compendium-bg" aria-hidden="true" />
 
@@ -208,6 +252,15 @@ export default function CompendiumScreen({ onClose }) {
               ))}
             </div>
           )}
+          {activeTab === 'combo' && (
+            <ComboReferencePanel combos={items} />
+          )}
+          {activeTab === 'rarity' && (
+            <RarityReferencePanel rows={items} devMode={devMode} onEdit={(r) => handleEdit('rarity', r)} />
+          )}
+          {activeTab === 'random' && (
+            <RandomFunctionPanel items={items} devMode={devMode} onEdit={(fn) => handleEdit('random', fn)} />
+          )}
         </section>
       </div>
 
@@ -223,7 +276,15 @@ export default function CompendiumScreen({ onClose }) {
       {editing && editing.type === 'board' && (
         <BoardEventEditModal event={editing.item} onSave={handleSave} onCancel={handleCancelEdit} />
       )}
+      {editing && editing.type === 'rarity' && (
+        <RarityEditModal row={editing.item} onSave={handleSave} onCancel={handleCancelEdit} />
+      )}
+      {editing && editing.type === 'random' && (
+        <RandomFunctionEditModal fn={editing.item} onSave={handleSave} onCancel={handleCancelEdit} />
+      )}
+      {compTooltip.renderTooltip()}
     </main>
+    </CompendiumTooltipCtx.Provider>
   )
 }
 
@@ -236,11 +297,20 @@ function countOf(tabId) {
     case 'bm': return BUSINESS_MODELS.length
     case 'event': return EVENTS.length
     case 'board': return BOARD_EVENTS.length
+    case 'combo': return V4_COMBO_DEFS.length
+    case 'rarity': return Object.keys(RARITY_TABLE).length
+    case 'random': return Object.values(RANDOM_FUNCTION_POOL).reduce((s, arr) => s + arr.length, 0)
     default: return 0
   }
 }
 
 async function persistCompendiumItem(type, item) {
+  // v4: 稀有度 / 随机功能池属于 object-export 常量，本会话内存生效
+  // 但不会自动写回 cards.js（需手动编辑文件以做永久保存）
+  if (type === 'rarity' || type === 'random') {
+    console.info(`[Compendium] ${type} 已在内存中更新（本会话生效）。如需永久保存，请手动编辑 src/game/cards.js 的 RARITY_TABLE / RANDOM_FUNCTION_POOL 常量。`)
+    return
+  }
   const response = await fetch('/__dev/write-cards', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -287,10 +357,25 @@ function createCompendiumDisplayCard(card) {
 
 function CompendiumBM({ bm, devMode, onEdit }) {
   const hookLabel = BM_HOOKS.find((h) => h.id === bm.hook)?.label ?? bm.hook
+  const tooltipCtx = React.useContext(CompendiumTooltipCtx)
   return (
     <div
       className={`compendium-bm rarity-${bm.rarity} hook-${bm.hook}`}
-      data-bm-tip={bm.flavor}
+      onPointerEnter={(e) => tooltipCtx.showTooltip(
+        <div>
+          <div className="tooltip-title">{bm.name}</div>
+          <div>{bm.description}</div>
+          {bm.flavor && (
+            <>
+              <div className="tooltip-divider" />
+              <div style={{ fontStyle: 'italic', color: '#fff4bd', opacity: 0.8 }}>"{bm.flavor}"</div>
+            </>
+          )}
+        </div>,
+        e
+      )}
+      onPointerMove={tooltipCtx.updateTooltip}
+      onPointerLeave={tooltipCtx.hideTooltip}
     >
       <img className="compendium-bm-image" src={businessModeImageSrc(bm)} alt="" aria-hidden="true" />
       {devMode && (
@@ -302,7 +387,7 @@ function CompendiumBM({ bm, devMode, onEdit }) {
       </div>
       <em className="cc-bm-hook">{hookLabel}</em>
       <p className="cc-bm-desc">{bm.description}</p>
-      <span className="cc-bm-cost">💰{bm.cost} · 解锁 关{bm.unlockLevel}</span>
+      <span className="cc-bm-cost">¥{bm.cost} · 解锁 关{bm.unlockLevel}</span>
       <p className="cc-bm-flavor">{bm.flavor || '—'}</p>
       <span className="cc-id">{bm.id}</span>
     </div>
@@ -346,7 +431,7 @@ function CompendiumBoardEvent({ event, devMode, onEdit }) {
       <ul className="cc-event-effects">
         {(event.options || []).map((opt, i) => (
           <li key={i}>
-            <b>{opt.label}</b> {opt.cost ? ` (-💰${opt.cost})` : ''} — {opt.result || (opt.effect?.type ?? '—')}
+            <b>{opt.label}</b> {opt.cost ? ` (-¥${opt.cost})` : ''} — {opt.result || (opt.effect?.type ?? '—')}
           </li>
         ))}
       </ul>
@@ -464,7 +549,7 @@ function BmEditModal({ bm, onSave, onCancel }) {
           <SelectField label="钩子类型" value={draft.hook} options={BM_HOOKS.map((h) => h.id)} onChange={(v) => setDraft({ ...draft, hook: v })} />
           <SelectField label="稀有度" value={draft.rarity} options={RARITIES} onChange={(v) => setDraft({ ...draft, rarity: v })} />
           <Field label="解锁关卡" type="number" value={draft.unlockLevel} onChange={(v) => setDraft({ ...draft, unlockLevel: v })} />
-          <Field label="💰 价格" type="number" value={draft.cost} onChange={(v) => setDraft({ ...draft, cost: v })} />
+          <Field label="¥ 价格" type="number" value={draft.cost} onChange={(v) => setDraft({ ...draft, cost: v })} />
           <Field label="描述（图鉴显示）" value={draft.description} onChange={(v) => setDraft({ ...draft, description: v })} />
         </div>
 
@@ -744,6 +829,226 @@ function SelectField({ label, value, options, onChange }) {
           <option key={opt} value={opt}>{opt}</option>
         ))}
       </select>
+    </div>
+  )
+}
+
+// ============================================================================
+// v4: Combo 规则参考面板（read-only，5 个 combo 定义）
+// ============================================================================
+function ComboReferencePanel({ combos }) {
+  return (
+    <div style={{ padding: 16, maxWidth: 1100 }}>
+      <h2 style={{ marginBottom: 4 }}>5 个产线 Combo · 规则与定义</h2>
+      <p style={{ opacity: 0.7, fontSize: 13, marginBottom: 24 }}>
+        Combo 在 computeLineOutput 中自动检测，无需手动触发。所有效果叠加在 lineMultiplier 上，与流派质变、槽位区位 buff 共同生效。详见 engine.js detectCombos。
+      </p>
+      <div style={{ display: 'grid', gap: 14 }}>
+        {combos.map((c) => (
+          <article key={c.id} className={`combo-rule rarity-${c.rarity}`} style={{ padding: 16, border: '1px solid #444', borderRadius: 8, background: '#1a1d29' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+              <strong style={{ fontSize: 18, color: '#fff' }}>{c.name}</strong>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>稀有度示意: {c.rarity}</span>
+            </div>
+            <div style={{ fontSize: 14, marginBottom: 6, color: '#f4f4f5' }}><b style={{ color: '#60a5fa' }}>触发条件：</b>{c.trigger}</div>
+            <div style={{ fontSize: 14, marginBottom: 6, color: '#f4f4f5' }}><b style={{ color: '#4ade80' }}>效果：</b>{c.effect}</div>
+            <div style={{ fontSize: 13, opacity: 0.7, fontStyle: 'italic', color: '#94a3b8' }}>— {c.note}</div>
+          </article>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// v4: 稀有度参数面板（可编辑 RARITY_TABLE 与 RARITY_RANDOM_SPEC）
+// ============================================================================
+function RarityReferencePanel({ rows, devMode, onEdit }) {
+  return (
+    <div style={{ padding: 16, overflowX: 'auto' }}>
+      <h2 style={{ marginBottom: 4 }}>稀有度参数表</h2>
+      <p style={{ opacity: 0.7, fontSize: 13, marginBottom: 16 }}>
+        左半部分（Burn/资产）控制经济成本与估值贡献；右半部分（Roll 配置）控制员工卡开包时抽随机功能的数量与 lv 范围。
+      </p>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ background: '#2a2f3d', color: '#fff' }}>
+            <th style={cellStyle}>稀有度</th>
+            <th style={cellStyle}>Base Burn</th>
+            <th style={cellStyle}>Extra Burn</th>
+            <th style={cellStyle}>卡牌资产</th>
+            <th style={cellStyle}>BM 月费</th>
+            <th style={cellStyle}>BM 资产</th>
+            <th style={cellStyle}>随机功能数</th>
+            <th style={cellStyle}>2 个几率</th>
+            <th style={cellStyle}>可抽 lv</th>
+            {devMode && <th style={cellStyle}></th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} style={{ borderBottom: '1px solid #333' }}>
+              <td style={cellStyle}><b className={`rarity-${r.id}`}>{RARITY_LABELS[r.id] ?? r.id}</b></td>
+              <td style={cellStyle}>{r.baseBurn}</td>
+              <td style={cellStyle}>{r.extraBurn}</td>
+              <td style={cellStyle}>{r.assetValue}</td>
+              <td style={cellStyle}>{r.bmMonthlyCost}</td>
+              <td style={cellStyle}>{r.bmAssetValue}</td>
+              <td style={cellStyle}>{r.spec?.fnCount ?? 0}</td>
+              <td style={cellStyle}>{Math.round((r.spec?.secondFnChance ?? 0) * 100)}%</td>
+              <td style={cellStyle}>{(r.spec?.lvRange ?? []).join(', ') || '—'}</td>
+              {devMode && (
+                <td style={cellStyle}>
+                  <button className="compendium-edit-btn" onClick={() => onEdit(r)} title="编辑">✎</button>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+const cellStyle = { padding: '10px 12px', textAlign: 'left', borderBottom: '1px solid #2a2f3d' }
+
+function RarityEditModal({ row, onSave, onCancel }) {
+  const [draft, setDraft] = useState({
+    baseBurn: row.baseBurn, extraBurn: row.extraBurn, assetValue: row.assetValue,
+    bmMonthlyCost: row.bmMonthlyCost, bmAssetValue: row.bmAssetValue,
+    fnCount: row.spec?.fnCount ?? 0,
+    secondFnChance: row.spec?.secondFnChance ?? 0,
+    lvRange: (row.spec?.lvRange ?? []).join(','),
+  })
+
+  function save() {
+    // Mutate live constants
+    const target = RARITY_TABLE[row.id]
+    target.baseBurn = parseInt(draft.baseBurn) || 0
+    target.extraBurn = parseInt(draft.extraBurn) || 0
+    target.assetValue = parseInt(draft.assetValue) || 0
+    target.bmMonthlyCost = parseInt(draft.bmMonthlyCost) || 0
+    target.bmAssetValue = parseInt(draft.bmAssetValue) || 0
+    const spec = RARITY_RANDOM_SPEC[row.id]
+    if (spec) {
+      spec.fnCount = parseInt(draft.fnCount) || 0
+      spec.secondFnChance = parseFloat(draft.secondFnChance) || 0
+      spec.lvRange = draft.lvRange.split(',').map(s => s.trim()).filter(Boolean)
+    }
+    onSave('rarity', { id: row.id, ...target, spec })
+  }
+
+  return (
+    <div className="edit-backdrop" onMouseDown={onCancel}>
+      <section className="edit-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <header>
+          <strong>编辑稀有度参数 · {RARITY_LABELS[row.id]}</strong>
+          <span>影响所有该稀有度的卡牌与商业模式</span>
+        </header>
+        <div className="edit-grid">
+          <Field label="Base Burn (每月)" type="number" value={draft.baseBurn} onChange={(v) => setDraft({ ...draft, baseBurn: v })} />
+          <Field label="Extra Burn (上线当月)" type="number" value={draft.extraBurn} onChange={(v) => setDraft({ ...draft, extraBurn: v })} />
+          <Field label="卡牌资产值 (V 贡献 ×0.5×2)" type="number" value={draft.assetValue} onChange={(v) => setDraft({ ...draft, assetValue: v })} />
+          <Field label="BM 月费" type="number" value={draft.bmMonthlyCost} onChange={(v) => setDraft({ ...draft, bmMonthlyCost: v })} />
+          <Field label="BM 资产值" type="number" value={draft.bmAssetValue} onChange={(v) => setDraft({ ...draft, bmAssetValue: v })} />
+          <Field label="随机功能 N 个" type="number" value={draft.fnCount} onChange={(v) => setDraft({ ...draft, fnCount: v })} />
+          <Field label="额外 1 个几率 (0-1)" value={draft.secondFnChance} onChange={(v) => setDraft({ ...draft, secondFnChance: v })} />
+          <Field label="可抽 lv (逗号分隔)" value={draft.lvRange} placeholder="lv1,lv2" onChange={(v) => setDraft({ ...draft, lvRange: v })} />
+        </div>
+        <p className="field-hint">注：v4 资产路径 = (cardAssetSum + bmAssetSum) × 2 计入 V。Burn 控制玩家经济压力。</p>
+        <div className="edit-actions">
+          <button className="edit-cancel" onClick={onCancel}>取消</button>
+          <button className="edit-save" onClick={save}>保存</button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+// ============================================================================
+// v4: 随机功能池面板（可编辑 RANDOM_FUNCTION_POOL）
+// ============================================================================
+function RandomFunctionPanel({ items, devMode, onEdit }) {
+  const grouped = items.reduce((acc, fn) => {
+    if (!acc[fn.lv]) acc[fn.lv] = []
+    acc[fn.lv].push(fn)
+    return acc
+  }, {})
+  const lvOrder = ['lv1', 'lv2', 'lv3', 'lv4']
+  return (
+    <div style={{ padding: 16 }}>
+      <h2 style={{ marginBottom: 4 }}>随机功能池（按 lv 分级）</h2>
+      <p style={{ opacity: 0.7, fontSize: 13, marginBottom: 16 }}>
+        员工卡（rare 及以上）开包时按稀有度抽 N 个随机功能。lv 越高效果越强，但通常只对 epic/legendary 开放。
+      </p>
+      {lvOrder.map(lv => grouped[lv] && (
+        <section key={lv} style={{ marginBottom: 24 }}>
+          <h3 style={{ marginBottom: 8, color: '#c084fc' }}>
+            {lv.toUpperCase()} · {lv === 'lv1' ? '微小' : lv === 'lv2' ? '小' : lv === 'lv3' ? '中' : '大'}
+            <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.6 }}>{grouped[lv].length} 个</span>
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+            {grouped[lv].map(fn => (
+              <div key={fn.id} style={{ padding: 12, border: '1px solid #444', borderRadius: 6, background: '#1a1d29', position: 'relative' }}>
+                <div style={{ fontWeight: 'bold', color: '#f4f4f5', marginBottom: 4 }}>{fn.name}</div>
+                <div style={{ fontSize: 11, opacity: 0.6, marginBottom: 4 }}>{fn.id}</div>
+                {(fn.effects || []).map((e, i) => (
+                  <div key={i} style={{ fontSize: 12, color: '#4ade80' }}>• {e}</div>
+                ))}
+                {devMode && (
+                  <button className="compendium-edit-btn" onClick={() => onEdit(fn)} title="编辑">✎</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+function RandomFunctionEditModal({ fn, onSave, onCancel }) {
+  const [draft, setDraft] = useState({
+    name: fn.name,
+    effects: [...(fn.effects || [])],
+    lv: fn.lv,
+  })
+
+  function save() {
+    // Find and mutate the entry in RANDOM_FUNCTION_POOL
+    const oldLvArr = RANDOM_FUNCTION_POOL[fn.lv]
+    const target = oldLvArr?.find(f => f.id === fn.id)
+    if (!target) return
+    target.name = draft.name
+    target.effects = draft.effects.filter(e => e.trim())
+    // If lv changed, move
+    if (draft.lv !== fn.lv) {
+      const idx = oldLvArr.indexOf(target)
+      if (idx >= 0) oldLvArr.splice(idx, 1)
+      if (!RANDOM_FUNCTION_POOL[draft.lv]) RANDOM_FUNCTION_POOL[draft.lv] = []
+      RANDOM_FUNCTION_POOL[draft.lv].push(target)
+    }
+    onSave('random', { ...target, lv: draft.lv })
+  }
+
+  return (
+    <div className="edit-backdrop" onMouseDown={onCancel}>
+      <section className="edit-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <header>
+          <strong>编辑随机功能 · {fn.id}</strong>
+          <span>影响所有员工卡开包时可能抽到的功能</span>
+        </header>
+        <div className="edit-grid">
+          <Field label="名称" value={draft.name} onChange={(v) => setDraft({ ...draft, name: v })} />
+          <SelectField label="等级 (lv)" value={draft.lv} options={['lv1', 'lv2', 'lv3', 'lv4']} onChange={(v) => setDraft({ ...draft, lv: v })} />
+        </div>
+        <EffectsEditor effects={draft.effects} onChange={(effects) => setDraft({ ...draft, effects })} />
+        <p className="field-hint">提示：lv1 微小 / lv2 小 / lv3 中 / lv4 大。共抽 lv 由稀有度配置决定。</p>
+        <div className="edit-actions">
+          <button className="edit-cancel" onClick={onCancel}>取消</button>
+          <button className="edit-save" onClick={save}>保存</button>
+        </div>
+      </section>
     </div>
   )
 }

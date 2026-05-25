@@ -100,6 +100,9 @@ export const EMPLOYEE_SVG_AVATAR_TABLE = {
   LEG_O_01: { outfit: 'armor', hair: 'crown_hair', hand_accessory: 'keycard', head_accessory: 'small_crown', effect_back: 'gold_aura' },
   LEG_O_02: { outfit: 'armor', hair: 'bald_executive', hand_accessory: 'document', head_accessory: 'halo', effect_back: 'gold_aura', hairTone: 'silver' },
   LEG_M_01: { outfit: 'armor', hair: 'crown_hair', eyewear: 'sunglasses', hand_accessory: 'rocket', head_accessory: 'small_crown', background: 'halo' },
+  EMP_FOUNDER_R: { outfit: 'labcoat', hair: 'swept_back', eyewear: 'ar_glasses', hand_accessory: 'laptop', expression: 'confident', skin: 'classic', hairTone: 'teal', head_accessory: 'none', badge: 'chart_badge' },
+  EMP_FOUNDER_S: { outfit: 'business_suit', hair: 'spiky', eyewear: 'sunglasses', hand_accessory: 'money_clip', expression: 'sales_charm', skin: 'tan', hairTone: 'gold', badge: 'stock_badge' },
+  EMP_FOUNDER_O: { outfit: 'business_suit', hair: 'crown_hair', eyewear: 'none', hand_accessory: 'document', expression: 'proud', skin: 'warm', hairTone: 'ink', head_accessory: 'small_crown', badge: 'id_badge' },
 }
 
 export function composeEmployeeSvgAvatar(card) {
@@ -107,7 +110,7 @@ export function composeEmployeeSvgAvatar(card) {
   const dept = card?.dept ?? 'NONE'
   const tier = card?.tier ?? '专员'
   const rank = RANK_BY_TIER[tier] ?? 'specialist'
-  const complexity = card?.unlockLevel === 1 ? 'lv1-simple' : 'standard'
+  const complexity = (card?.unlockLevel === 1 && (card?.rarity === 'common' || card?.rarity === 'rare')) ? 'lv1-simple' : 'standard'
   const table = EMPLOYEE_SVG_AVATAR_TABLE[card?.id] ?? {}
   const spec = {
     rank,

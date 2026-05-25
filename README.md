@@ -1,20 +1,42 @@
 # Frank's Adventure
 
-> 网页端「商业经营 Roguelike 卡牌」—— 玩家扮演刚上任 CEO 的 Frank，用员工 / 功能 / 服务三类卡组合「打出商业行动」，沿 **A 轮 → B 轮 → C 轮 → IPO → 百亿 → 千亿 → 500 强 → 国际巨头 → 行业第一** 闯关。
+> **Frank's Adventure** 是一款网页端公司经营 Roguelike Deckbuilder：玩家扮演刚上任 CEO 的 Frank，每周用 员工 / 功能 / 服务 三类卡组合「打出商业行动」，在 9 个融资阶段中连续经营，不断提升公司估值以达成行业第一的终极目标。
 
-[![Stack](https://img.shields.io/badge/stack-React%2019%20%2B%20Phaser%204%20%2B%20Vite-61dafb)]()
-[![Status](https://img.shields.io/badge/status-M1%20delivered%20%2F%20M2%20WIP-orange)]()
+[![Stack](https://img.shields.io/badge/stack-React%2019%20%2B%20Vite%20%2B%20JSX%20%2B%20Vitest-61dafb)]()
+[![Status](https://img.shields.io/badge/status-v4%20PR1%20Landed-orange)]()
 [![Style](https://img.shields.io/badge/style-Pixel%20%2B%202.5D-7c3aed)]()
+
+> **v4 重构 PR1 已落地**：估值公式简化为 `V = cash + 资产×2 + 上月利润×8`；月利润按现金转化率 CCR (阶段 1-3 = 70% / 4-6 = 60% / 7-9 = 50%) 入账；**月末 cash < 0 即 game over**（移除所有救济）；阶段门槛 `[0, 250, 700, 1500, 3000, 6000, 12000, 22000, 40000]`。PR2-4（卡牌新 schema、流派质变、Combo、区位 buff、高光时刻、事件双向化等）规划中，详见 `~/.claude/plans/delightful-chasing-castle.md`。
+> **当前实装规模**：80 张卡牌模板 + 3 张创始人 EPIC 卡 + 37 张商业模式 + 5 张董事访谈事件 + 9 阶段融资旅程。
 
 ---
 
-## ✨ 项目特色
+## ✨ 核心特色与 v3.3 规则
 
-- **像素 + 2.5D 透视** —— Balatro 风格的厚阴影、斜视桌面、扇形手牌
-- **Fusion Pixel 12px 中文字体** —— TakWolf/fusion-pixel-font，CJK 全覆盖
-- **像素斜角边框** —— `clip-path` 切外角 + `::before` 背景渐变绘制内角斜线
-- **Roguelike 牌组构筑** —— 董事会随机事件 / 投资部商店 / 商学院商业模式
-- **资源与资金**：¥ 现金唯一可支配 · 留存利润累积 · AP 行动点数约束
+1. **极简 HUD**：主界面仅显示 4 项（日期 `2026.05`、估值进度条 `V 480 / 1000`、唯一可支配 `¥ Cash`、行动力 `AP`），其余明细与拆解一律通过 hover tooltip 浮窗显示。
+2. **现金/留存利润解耦**：每月结算时，产线净利润 (`income - burn`) 将累积至留存利润 `retainedEarnings` 中，现金 `cash` 保持不变。玩家只能在跨阶段董事会会议中，通过**财务部**选择比例 (0% / 30% / 60% / 100%) 提取留存利润转为可支配的 ¥ 现金。
+3. **季度动态估值**：估值 V 采用多路径即时计算：`V = 最近 3 个月平均利润 × 20 + 资产价值 (卡牌资产 + BM 资产折半) + 现金溢价 (现金 × 0.3)`。
+4. **卡牌内生 Burn**：移除了固定的维持费，Burn 属性直接包含在卡牌和商业模式 (BM) 中：
+   - 卡牌 Base Burn 在牌库中即按月扣减。
+   - 新上线的卡牌在上线当月需要额外支付 Extra Burn。
+   - 商业模式 (BM) 每月需支付固定的订阅月费。
+5. **9 阶段连续制**：游戏流程从天使轮开始连续推进，估值跨过门槛触发董事会，期间所有卡牌、产线状态、累积月份均连续保留不重置。最终目标在 stage 9 达成估值 80,000+ 获得终极胜利。
+6. **滞涨救济与现金告急保护**：
+   - 连续 6 月估值未创新高触发滞涨 3 选 1（免费解雇 / +50¥ 援助 / 下月产出 1.3 倍）。
+   - 现金 < 1.5 * monthlyBurn 时 HUD 闪红；连续 3 月 retained=0 且 cash <= 0 时自动触发救助。
+7. **起始职业选择**：开始新游戏时有科学家、销售冠军、大厂 CXO 三种背景选择，界面呈现 3D 反透视效果。选择后起始牌堆追加 1 张随机 common 同部门员工 + 1 张随机 rare/elite 同部门经理/总监，外加一张专属的 **EPIC 级「创始人」牌**默认在起手手牌中：
+   - **科学家 Founder** (`EMP_FOUNDER_R`)：EPIC，AP 3，基础产出 66。功能 *AI-Driven 研发*——在手时月初抽牌 +1；在产线时月初抽牌 +3（手牌仍受 `handLimit` 约束）。
+   - **销售冠军 Founder** (`EMP_FOUNDER_S`)：EPIC，AP 3，基础产出 66。功能 *Sales High*——在手时全产线收入 ×1.2；在产线时全产线收入 ×1.8。
+   - **大厂 CXO Founder** (`EMP_FOUNDER_O`)：EPIC，AP 3，基础产出 66。功能 *精益管理*——在手时最大 AP +1；在产线时本月 AP 再额外 +3。
+
+> 起始牌组总规模：**25 张** = 7 张 `STARTER_HAND` + 1 张创始人 + 15 张 `STARTER_DECK` + 2 张职业补充。
+
+8. **完整董事会会议**：估值跨过门槛后进入【董事会】，含 5 大功能区——
+   - **财务部**：单次提取留存利润 (0% / 30% / 60% / 100%) 转为现金。
+   - **投资部 (Shop)**：5 槽位（A 史诗必出 / B 传奇 40%+保底 / C 神秘礼包必出 / D-E 随机卡包），刷新 ¥5。
+   - **人事部 (HR)**：升职（rarity ¥10-20，词缀 ¥8）/ 解雇（按阶段 ¥3-8，单场上限 5 张）。
+   - **商学院**：3 槽位订阅商业模式（37 张可选），默认 BM 槽位上限 4 个，刷新 ¥4。
+   - **董事访谈**：进场强制 1 张 BOARD_EVENT，3 选 1 战略调整。
 
 ---
 
@@ -23,9 +45,9 @@
 ```bash
 cd web-battle
 npm install
-npm run dev          # http://127.0.0.1:5173
-npm run build        # 生产构建
-npm run test         # Vitest 单元测试（engine.test.js）
+npm run dev          # 启动本地开发服务器 -> http://127.0.0.1:5173
+npm run build        # 验证生产编译（无 error 编译通过）
+npm run test         # Vitest 单元测试（确保 engine.test.js 通过）
 ```
 
 需要 **Node 18+**。
@@ -34,14 +56,13 @@ npm run test         # Vitest 单元测试（engine.test.js）
 
 ## 🛠 技术栈
 
-| 层 | 选型 |
+| 模块 | 选型 |
 |---|---|
-| UI 框架 | React 19（JSX，M2 接入 TypeScript）|
-| 渲染 | DOM + CSS（卡面 / HUD）+ Phaser 4（VFX / 粒子）|
-| 构建 | Vite 7 |
-| 测试 | Vitest 4 |
-| 字体 | Fusion Pixel 12px Monospaced（中文 zh_hans + 拉丁）|
-| 图标 | lucide-react（HUD 部分图标）|
+| **核心 UI 框架** | **React 19 + JSX** |
+| **项目构建** | **Vite** |
+| **测试框架** | **Vitest** |
+| **样式语言** | **Vanilla CSS (styles.css)** |
+| **特效表现** | **Phaser 3.x**（做 combo 和粒子 VFX 辅助层） |
 
 ---
 
@@ -50,116 +71,48 @@ npm run test         # Vitest 单元测试（engine.test.js）
 ```
 .
 ├── README.md                          ← 本文件
-├── AGENTS.md                          ← Agent 入口（30 秒上手）
-├── GAME_DESIGN_FOUNDATION.md          ← 核心规则基石（§A 锁定 / §B 待填）
-├── CARDS_DESIGN.md                    ← 卡表 / 起始牌组 / 平衡公式
-├── BATTLEFIELD_DESIGN.md              ← 主战斗场景 UI / 动效 / 文件骨架
-├── BOARD_MEETING_DESIGN.md            ← 关间「董事会会议」机制 / 商店 / 商业模式 / UI
+├── AGENTS.md                          ← Agent 快速上手指南与推送规范
+├── GAME_DESIGN_FOUNDATION.md          ← 核心设计规则 (v3.2)
+├── CARDS_DESIGN.md                    ← 卡牌及商业模式集中配置数据与公式
+├── BATTLEFIELD_DESIGN.md              ← 主战斗场景 UI / 动效流程
+├── BOARD_MEETING_DESIGN.md            ← 董事会会议（HR/Shop/财务部/商学院）设计
 └── web-battle/
     ├── src/
-    │   ├── App.jsx                    ← 主战斗界面
-    │   ├── styles.css                 ← 全部 CSS（像素 + 2.5D）
-    │   ├── DaylightBoardroomBg.jsx    ← 像素背景
+    │   ├── App.jsx                    ← 主游戏 React UI 与交互组件
+    │   ├── styles.css                 ← 核心 UI 样式
+    │   ├── CardView.jsx               ← 卡牌渲染渲染组件
+    │   ├── CompendiumScreen.jsx       ← 卡牌图鉴与调试编辑器
     │   └── game/
-    │       ├── cards.js               ← 起始牌组 / 招聘池
-    │       ├── engine.js              ← 战斗引擎（AP / 抽牌 / 结算）
-    │       └── engine.test.js         ← 引擎单测
-    └── public/assets/
-        ├── fonts/                     ← Fusion Pixel woff2
-        └── ui-icons/                  ← 像素 UI 图标
+    │       ├── cards.js               ← 9 阶段配置、卡牌及事件参数
+    │       ├── engine.js              ← 核心引擎 (估值计算、月份结算、提取等)
+    │       └── engine.test.js         ← 引擎单元测试
 ```
 
 ---
 
-## 🎮 核心规则速览
+## 🎮 融资阶段与晋升注资
 
-> 详尽规则见 [`GAME_DESIGN_FOUNDATION.md`](./GAME_DESIGN_FOUNDATION.md)。
+跨过估值门槛并在下一月结算达标后将触发**董事会会议**，投资人会注入阶段注资 (Entry Grant) 到现金中：
 
-### 时间与关卡结构
-
-```
-1 局 = 1 个月（核心游戏循环）
-融资阶段 = 天使轮/种子轮/A轮/B轮/C轮/D轮/IPO/千亿/行业第一 (共 9 阶段连续进行，不重置状态)
-```
-
-### 资源与资金
-
-| 资源/指标 | 符号 | 性质 | 跨阶段保留 |
+| Stage | 阶段名 | 估值门槛 ($V$) | 阶段注资 (¥ cash) |
 |---|---|---|---|
-| 现金 | ¥ | 唯一可支配资金，用于商店购买、升级等 | 完全保留，阶段间不重置 |
-| 留存利润 | retainedEarnings | 月度收益累积，不能直接花，可在董事会中通过财务部提取 | 完全保留 |
-| 管理力 | AP | 每月布置产线的行动点约束 | **未使用的 AP 一半可跨月保留（上限 +5）** |
-| 估值 | V | 阶段晋升的唯一硬指标 (V = 3月均利润*20 + 资产*0.5 + 现金*0.3) | 连续两月达标则触发晋升 |
-
-### 产线
-
-- **2 条产线 × 5 格单行**，强制轮转布置
-- 位置加成：P1 启动位 +20% · P3 中枢位（左右邻 +20%）· P5 收割位（贡献 ≥60% × 1.5）
-- 邻接 buff：卡自身效果（→ 右邻 / ← 左邻 / ↔ 双向） + 同部门 +20%
-
-### 牌组 & 每月流程
-
-- 起始牌组 **22 张**（7 张起始手牌 + 15 张牌堆，卡牌内生 Base Burn）
-- 每月抽 3 张，**手牌上限 10 张**（可根据商业模式或事件加成）
-- **起始 AP 5 点**，未使用部分一半进入下月（封顶 +5）
-- 流程：月度结算汇报 → 新事件生效 → 抽牌 → **产线布置（核心决策）** → 激活结算 → 月末
-
-### 卡牌三类
-
-| 类型 | 部门 | 用法 |
-|---|---|---|
-| 员工卡 | R 研发 / S 销售 / O 运营 | 放产线槽位产出 ¥；具有 Base Burn、Extra Burn 和资产价值 |
-| 服务卡 | 顶级 / 标准 / 基础 | 一次性 buff 或 AP/手牌操作 |
-| 功能卡 | 全局 | 修改规则（如 +AP 上限、+1 抽牌） |
+| 1 | 天使轮 | 0 | 起步 ¥30 (开局自动注入) |
+| 2 | 种子轮 | 300 | +¥25 |
+| 3 | A 轮 | 1,000 | +¥50 |
+| 4 | B 轮 | 2,500 | +¥100 |
+| 5 | C 轮 | 5,000 | +¥200 |
+| 6 | D 轮 | 10,000 | +¥400 |
+| 7 | IPO | 20,000 | +¥700 |
+| 8 | 千亿 | 40,000 | +¥1,200 |
+| 9 | 行业第一 | 80,000 | 直接达成终极胜利 |
 
 ---
 
-## 🎨 视觉规范
+## 🤝 开发约定与提规
 
-- **配色**：研发蓝 #2563eb / 销售红 #b91c1c / 运营绿 #15803d / 管理橙 #fb923c
-- **稀有度色**：普通 #94a3b8 / 稀有 #60a5fa / 精英 #c084fc / 史诗 #fb923c / 传奇 #ffc857
-- **边框**：4px 实线 + 7px 像素斜切角 + 内角 45° 斜线三角形
-- **阴影**：`filter: drop-shadow()` 替代 box-shadow（兼容 `clip-path`）
-
----
-
-## 🗺 路线图
-
-| 里程碑 | 状态 | 内容 |
-|---|---|---|
-| **M1 (v3.0)** | ✅ | AP 引擎 / 起手属性 / ±20% 随机 / 像素 + 2.5D 视觉 |
-| M2.1 | ✅ | 文档/代码对齐 / 补卡补事件 / 蒙特卡洛模拟 |
-| M2.2 | ✅ | 第 1 月教程 / 招聘明牌三选一 / 失败战报 |
-| M2.3 | ✅ | Phaser 链式结算 / WebAudio 音效 / roll 数字徽章 |
-| M3 | ✅ | 关 1-3 Boss 事件 / 效果 AST 解析 / 内容扩展 |
-| M4 | ⬜ | Boss 深化 / 简单商店 |
-| M5 | ⬜ | 数值平衡 / Vercel 部署 |
-
----
-
-## 🤝 开发约定
-
-| 路径 | 必跑 |
-|---|---|
-| `web-battle/src/game/` | `npm run test` |
-| `web-battle/src/*.jsx` | `npm run build`（无 TS 检查则跑一次）|
-| `*.md` 设计文档 | 单文档自洽，跨文档冲突以 `GAME_DESIGN_FOUNDATION.md` 为准 |
-
-提交信息使用简体中文 + 短描述，例如：
-```
-手牌上限 10 / 起始 AP 5 / 未用 AP 一半转下回合
-```
-
----
-
-## 📜 License
-
-私有项目，暂未公开授权。
-
----
-
-## 🙏 致谢
-
-- [TakWolf/fusion-pixel-font](https://github.com/TakWolf/fusion-pixel-font) — Fusion Pixel 中文像素字体
-- [Phaser](https://phaser.io/) / [Vite](https://vitejs.dev/) / [React](https://react.dev/)
-- 设计灵感：Slay the Spire · Balatro · 炉石传说
+- **测试铁律**：任何对结算/估值公式的修改都必须在 `engine.test.js` 中同步修改并保证 `npm run test` 通过。
+- **构建铁律**：提交前必须跑 `npm run build`，不允许有任何 error。
+- **解雇卡牌**：董事会中解雇卡牌 (onFire) 改为调用免费的 `dismissCardInBoardMeeting` 逻辑。
+- **双推送规范**：正式提交必须双推：
+  1. `git push origin <branch>` (GitHub)
+  2. `git push codeup <branch>` (云效)

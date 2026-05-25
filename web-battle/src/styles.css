@@ -74,6 +74,7 @@ body {
   position: fixed;
   top: 50%;
   left: 50%;
+  z-index: 1;
   width: var(--design-w, 1920px);
   height: var(--design-h, 1080px);
   transform: translate(-50%, -50%) rotate(var(--app-rotation, 0deg)) scale(var(--app-scale, 1));
@@ -134,13 +135,13 @@ button {
 .battle-shell {
   position: relative;
   display: grid;
-  grid-template-rows: 104px minmax(0, 1fr) 254px;
+  grid-template-rows: 124px minmax(0, 1fr) 254px;
   gap: 8px;
   width: 100%;
   height: 100%;
   padding: 10px 12px 12px;
   overflow: hidden;
-  background: #dcecf5;
+  background: transparent;
 }
 
 .main-menu-shell {
@@ -259,6 +260,11 @@ button {
   animation: indiana-entrance 1.8s cubic-bezier(0.16, 0.9, 0.32, 1.1) both;
 }
 
+.main-menu-shell .main-menu-logo {
+  opacity: 0;
+  animation: none;
+}
+
 @keyframes indiana-entrance {
   0% {
     transform: translateY(-50vh) scale(0.35) rotate(-22deg);
@@ -290,13 +296,10 @@ button {
 
 /* 落定后金光一闪 */
 .main-menu-logo::after { content: none; }
-.main-menu-shell .main-menu-logo {
-  /* 接落定阴影：补一个 0 延迟的 ::after 没法用在 img，改用 shell 的伪元素 */
-}
 
 .main-menu-panel {
   position: absolute;
-  z-index: 2;
+  z-index: 4;
   top: calc(50vh + 5px);
   left: 50%;
   display: grid;
@@ -314,6 +317,19 @@ button {
   transform-style: preserve-3d;
 }
 
+.phaser-menu-fx-canvas {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+}
+
+.phaser-menu-fx-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .main-menu-actions {
   display: grid;
   gap: 16px;
@@ -328,14 +344,30 @@ button {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.main-menu-actions button {
+.menu-tilt-btn-wrap {
+  position: relative;
+  min-height: 56px;
+  width: 280px;            /* 紧凑：小框 */
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  perspective: 700px;
+  transform-style: preserve-3d;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.menu-tilt-btn-inner {
   --btn-tilt-x: 0deg;
   --btn-tilt-y: 0deg;
   --btn-glare-x: 50%;
   --btn-glare-y: 25%;
-  position: relative;
-  min-height: 56px;
-  width: 280px;            /* 紧凑：小框 */
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 8px 24px;
   border: 3px solid rgba(255, 200, 87, 0.84);
   border-radius: 0;
@@ -351,7 +383,7 @@ button {
   font-family: "Fusion Pixel SC", "Fusion Pixel", monospace;
   font-size: 24px;
   letter-spacing: 4px;
-  cursor: pointer;
+  pointer-events: none;
   /* 像素斜切外框 */
   clip-path: polygon(
     7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px),
@@ -364,10 +396,8 @@ button {
   filter:
     drop-shadow(4px 5px 0 rgba(0, 0, 0, 0.55))
     drop-shadow(0 0 0 transparent);
-  /* 3D 视差 (鼠标移动时由 JS 设置 CSS 变量) */
-  transform-style: preserve-3d;
+  /* 3D 视差 (由 CSS 变量控制) */
   transform:
-    perspective(700px)
     rotateX(var(--btn-tilt-x, 0deg))
     rotateY(var(--btn-tilt-y, 0deg))
     translateZ(0);
@@ -375,7 +405,7 @@ button {
   will-change: transform;
 }
 
-.main-menu-actions button:hover {
+.menu-tilt-btn-wrap:hover .menu-tilt-btn-inner {
   filter:
     brightness(1.16)
     drop-shadow(6px 8px 0 rgba(0, 0, 0, 0.55))
@@ -383,12 +413,11 @@ button {
 }
 
 /* 按下回弹 */
-.main-menu-actions button:active {
+.menu-tilt-btn-wrap:active .menu-tilt-btn-inner {
   filter:
     brightness(0.92)
     drop-shadow(2px 3px 0 rgba(0, 0, 0, 0.6));
   transform:
-    perspective(700px)
     rotateX(var(--btn-tilt-x, 0deg))
     rotateY(var(--btn-tilt-y, 0deg))
     translateY(2px);
@@ -441,12 +470,13 @@ button {
     gap: 18px;
   }
 
-  .main-menu-actions button {
-    display: grid;
-    place-items: center;
+  .menu-tilt-btn-wrap {
     width: 160px;
     min-height: 160px;
     height: 160px;
+  }
+
+  .menu-tilt-btn-inner {
     padding: 14px 10px;
     font-size: 22px;
     line-height: 1.18;
@@ -761,9 +791,9 @@ button {
 
 .top-hud {
   display: grid;
-  grid-template-columns: 270px 1fr 132px;
+  grid-template-columns: 324px 1fr 158px;
   align-items: center;
-  gap: 12px;
+  gap: 20px;
   min-width: 0;
   border: 0;
   border-radius: 0;
@@ -773,10 +803,11 @@ button {
 
 /* 三栏居中统计组 */
 .hud-stats-group {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 16px;
 }
 
 .brand-mark {
@@ -797,14 +828,14 @@ button {
 .brand-logo {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 46px;
+  height: 46px;
   border: 0;
   border-radius: 0;
   color: #05070a;
   background: transparent;
   font-family: "Fusion Pixel SC", "Fusion Pixel", monospace;
-  font-size: 31px;
+  font-size: 37px;
   text-shadow:
     0 1px 0 rgba(255, 255, 255, 0.92),
     3px 4px 0 rgba(116, 89, 173, 0.34),
@@ -824,7 +855,7 @@ button {
   display: inline-block;
   white-space: nowrap;
   color: #05070a;
-  font-size: 34px;
+  font-size: 41px;
   line-height: 0.9;
   letter-spacing: 0;
   text-shadow:
@@ -869,9 +900,9 @@ button {
   grid-template-columns: auto 1fr;
   grid-template-rows: auto auto;
   align-content: center;
-  gap: 4px 8px;
+  gap: 5px 10px;
   min-width: 0;
-  padding: 8px 16px;
+  padding: 10px 20px;
   border-right: 0;
   isolation: isolate;
 }
@@ -884,8 +915,8 @@ button {
   grid-row: span 2;
   align-self: center;
   color: #6d28d9;
-  width: 24px;
-  height: 24px;
+  width: 29px;
+  height: 29px;
   filter:
     drop-shadow(0 1px 0 rgba(255, 255, 255, 0.7))
     drop-shadow(3px 4px 0 rgba(116, 89, 173, 0.28));
@@ -895,8 +926,8 @@ button {
 .hud-icon-img {
   grid-row: span 2;
   align-self: center;
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   object-fit: contain;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
@@ -906,13 +937,17 @@ button {
   transform: rotateX(18deg) rotateY(-8deg) translateZ(12px);
 }
 
+.hud-item span {
+  font-size: 18px;
+}
+
 .hud-item strong {
   display: inline-block;
   min-width: 0;
   overflow: hidden;
   color: #7c3aed;
   font-family: "Fusion Pixel SC", "Fusion Pixel", monospace;
-  font-size: 34px;
+  font-size: 41px;
   line-height: 0.86;
   text-shadow:
     0 1px 0 rgba(255, 255, 255, 0.86),
@@ -952,7 +987,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 12px;
   padding: 10px;
 }
 
@@ -975,9 +1010,9 @@ button {
 
 .hud-actions button {
   position: relative;
-  width: 44px;
-  height: 44px;
-  min-height: 44px;
+  width: 53px;
+  height: 53px;
+  min-height: 53px;
   padding: 2px;
   border-color: transparent;
   color: #eff8ff;
@@ -988,8 +1023,8 @@ button {
 }
 
 .top-icon-button img {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   object-fit: contain;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
@@ -1371,8 +1406,8 @@ button {
   bottom: 10%;
   border-radius: 50%;
   background:
-    linear-gradient(90deg, rgba(96, 165, 250, 0.08) 1px, transparent 1px) 0 0 / 46px 46px,
-    linear-gradient(rgba(96, 165, 250, 0.07) 1px, transparent 1px) 0 0 / 46px 46px,
+    linear-gradient(90deg, var(--stage-accent-glow, rgba(96, 165, 250, 0.08)) 1px, transparent 1px) 0 0 / 46px 46px,
+    linear-gradient(var(--stage-accent-glow-sub, rgba(96, 165, 250, 0.07)) 1px, transparent 1px) 0 0 / 46px 46px,
     radial-gradient(ellipse, rgba(255, 255, 255, 0.16), transparent 72%);
   transform: rotateX(62deg) translateY(60px);
   transform-origin: center bottom;
@@ -1514,14 +1549,14 @@ button {
   gap: 8px;
   grid-template-rows: 24px 1fr;
   padding: 10px;
-  border: 4px solid rgba(96, 165, 250, 0.36);
+  border: none;
   border-radius: 0;
-  /* 像素斜切角：7px 切四角 */
+  /* 像素斜切角：6px 斜线切四角 */
   clip-path: polygon(
-    7px 0, calc(100% - 7px) 0,
-    100% 7px, 100% calc(100% - 7px),
-    calc(100% - 7px) 100%, 7px 100%,
-    0 calc(100% - 7px), 0 7px
+    6px 0, calc(100% - 6px) 0,
+    100% 6px, 100% calc(100% - 6px),
+    calc(100% - 6px) 100%, 6px 100%,
+    0 calc(100% - 6px), 0 6px
   );
   background:
     linear-gradient(180deg, rgba(14, 24, 40, 0.86), rgba(6, 12, 22, 0.78));
@@ -1544,10 +1579,31 @@ button {
     transform 520ms cubic-bezier(0.19, 1, 0.22, 1);
 }
 
+.line-board::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  color: rgba(96, 165, 250, 0.36);
+  background:
+    /* 内角斜线三角 (cutout size 6px, offset 4px) */
+    linear-gradient(to bottom right, currentColor 50%, transparent 50%) 4px 4px / 6px 6px no-repeat,
+    linear-gradient(to bottom left,  currentColor 50%, transparent 50%) calc(100% - 4px) 4px / 6px 6px no-repeat,
+    linear-gradient(to top right,    currentColor 50%, transparent 50%) 4px calc(100% - 4px) / 6px 6px no-repeat,
+    linear-gradient(to top left,     currentColor 50%, transparent 50%) calc(100% - 4px) calc(100% - 4px) / 6px 6px no-repeat,
+    /* 4 border bars of thickness 4px */
+    linear-gradient(currentColor, currentColor) 0 0 / 100% 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 0 100% / 100% 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 0 0 / 4px 100% no-repeat,
+    linear-gradient(currentColor, currentColor) 100% 0 / 4px 100% no-repeat;
+  pointer-events: none;
+  transition: color 240ms ease;
+}
+
 .line-board.active {
   top: 74px;  /* 上边不变 */
   z-index: 6;
-  border: 4px solid rgba(178, 156, 93, 0.84);
+  border: none;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.5), rgba(228, 218, 180, 0.22)),
     linear-gradient(180deg, rgba(181, 172, 126, 0.62), rgba(118, 114, 90, 0.44));
@@ -1559,6 +1615,10 @@ button {
   opacity: 1;
   filter: saturate(0.9) brightness(1.08);
   transform: translateX(-50%) translateY(-2px) translateZ(38px) rotateX(7deg) scale(1);
+}
+
+.line-board.active::before {
+  color: rgba(178, 156, 93, 0.84);
 }
 
 .line-rail {
@@ -1618,14 +1678,14 @@ button {
   width: 100%;
   height: 100%;
   padding: 9px 7px;
-  border: 4px dashed rgba(148, 163, 184, 0.46);
+  border: none;
   border-radius: 0;
-  /* 像素斜切角 7px */
+  /* 像素斜切角：6px 斜线切四角 */
   clip-path: polygon(
-    7px 0, calc(100% - 7px) 0,
-    100% 7px, 100% calc(100% - 7px),
-    calc(100% - 7px) 100%, 7px 100%,
-    0 calc(100% - 7px), 0 7px
+    6px 0, calc(100% - 6px) 0,
+    100% 6px, 100% calc(100% - 6px),
+    calc(100% - 6px) 100%, 6px 100%,
+    0 calc(100% - 6px), 0 6px
   );
   color: var(--muted);
   background:
@@ -1728,7 +1788,6 @@ button {
   transform: translateX(50%) translateY(0);
 }
 
-/* 产线槽内矩形斜角：4px 边框 + 7px 内角三角，与 clip-path 外切角对应 */
 .line-slot::before {
   content: "";
   position: absolute;
@@ -1736,12 +1795,17 @@ button {
   z-index: 0;
   pointer-events: none;
   color: rgba(148, 163, 184, 0.46);
-  /* ::before 已在 border:4px 内侧，坐标原点即为内角，直接用 0/100% 定位 */
   background:
-    linear-gradient(to bottom right, currentColor 50%, transparent 50%) 0    0    / 7px 7px no-repeat,
-    linear-gradient(to bottom left,  currentColor 50%, transparent 50%) 100% 0    / 7px 7px no-repeat,
-    linear-gradient(to top right,    currentColor 50%, transparent 50%) 0    100% / 7px 7px no-repeat,
-    linear-gradient(to top left,     currentColor 50%, transparent 50%) 100% 100% / 7px 7px no-repeat;
+    /* 内角斜线三角 (cutout size 6px, offset 4px) */
+    linear-gradient(to bottom right, currentColor 50%, transparent 50%) 4px 4px / 6px 6px no-repeat,
+    linear-gradient(to bottom left,  currentColor 50%, transparent 50%) calc(100% - 4px) 4px / 6px 6px no-repeat,
+    linear-gradient(to top right,    currentColor 50%, transparent 50%) 4px calc(100% - 4px) / 6px 6px no-repeat,
+    linear-gradient(to top left,     currentColor 50%, transparent 50%) calc(100% - 4px) calc(100% - 4px) / 6px 6px no-repeat,
+    /* 4 border bars of thickness 4px */
+    linear-gradient(currentColor, currentColor) 0 0 / 100% 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 0 100% / 100% 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 0 0 / 4px 100% no-repeat,
+    linear-gradient(currentColor, currentColor) 100% 0 / 4px 100% no-repeat;
   transition: color 160ms ease;
 }
 
@@ -1764,6 +1828,10 @@ button {
   background:
     linear-gradient(155deg, rgba(255, 255, 255, 0.5), transparent 44%),
     rgba(221, 185, 94, 0.36);
+}
+
+.line-slot.drop-ready::before {
+  color: rgba(255, 200, 87, 0.94);
 }
 
 .line-slot.filled::before {
@@ -2285,9 +2353,11 @@ button {
   left: 8px;
   top: 7px;
   z-index: 2;
-  color: var(--gold);
+  color: #3a3f4d; /* v4: 黑灰色（替代原金色） */
   font-family: "Fusion Pixel SC", "Fusion Pixel", monospace;
   font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 
 .line-slot > i {
@@ -2365,6 +2435,16 @@ button {
   flex-direction: column !important;
   gap: 16px !important;
   height: auto !important;
+}
+
+.event-ap-slot {
+  margin-top: 4px;
+  width: 100%;
+}
+
+.event-ap-card {
+  width: 100%;
+  padding: 0;
 }
 
 .preview-card {
@@ -2811,33 +2891,51 @@ button {
   position: fixed;
   z-index: 20000;
   width: max-content;
-  max-width: 293px;
-  padding: 10px 12px;
-  border: 2px solid rgba(255, 200, 87, 0.74);
+  max-width: 320px;
+  padding: 6px 8px; /* Reduced by 50% to decrease space between border and font */
   color: #fff4bd;
-  background: rgba(15, 23, 42, 0.95);
   font-family: "Fusion Pixel SC", "Fusion Pixel", monospace;
-  font-size: 11px;
+  font-size: 12px; /* Sized down slightly */
   font-weight: 700;
   line-height: 1.45;
   text-align: left;
-  white-space: normal;
+  white-space: pre-line;
   pointer-events: none;
-  clip-path: polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px);
-  filter: drop-shadow(4px 5px 0 rgba(0, 0, 0, 0.38));
+  
+  /* SVG pixelated border - thickened to 12px border width, background changed to solid pure black (#000000) */
+  border: 12px solid transparent;
+  border-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'><path d='M8 2h8v2h2v2h2v2h2v8h-2v2h-2v2h-2v2H8v-2H6v-2H4v-2H2V8h2V6h2V4h2z' fill='%23000000'/><rect x='8' y='0' width='8' height='2' fill='%23ffc857'/><rect x='8' y='22' width='8' height='2' fill='%23ffc857'/><rect x='0' y='8' width='2' height='8' fill='%23ffc857'/><rect x='22' y='8' width='2' height='8' fill='%23ffc857'/><rect x='6' y='2' width='2' height='2' fill='%23ffc857'/><rect x='4' y='4' width='2' height='2' fill='%23ffc857'/><rect x='2' y='6' width='2' height='2' fill='%23ffc857'/><rect x='16' y='2' width='2' height='2' fill='%23ffc857'/><rect x='18' y='4' width='2' height='2' fill='%23ffc857'/><rect x='20' y='6' width='2' height='2' fill='%23ffc857'/><rect x='2' y='16' width='2' height='2' fill='%23ffc857'/><rect x='4' y='18' width='2' height='2' fill='%23ffc857'/><rect x='6' y='20' width='2' height='2' fill='%23ffc857'/><rect x='20' y='16' width='2' height='2' fill='%23ffc857'/><rect x='18' y='18' width='2' height='2' fill='%23ffc857'/><rect x='16' y='20' width='2' height='2' fill='%23ffc857'/></svg>") 8 fill stretch;
+  
+  filter: drop-shadow(8px 10px 0 rgba(0, 0, 0, 0.46));
   animation: hand-hint-pop 110ms ease both;
+  transform: perspective(600px) rotateX(8deg) rotateY(-6deg) translateZ(30px);
+  transform-style: preserve-3d;
+}
+
+.card-effect-floating-hint .tooltip-title {
+  color: #ffe000;
+  font-weight: 800;
+  font-size: 13px;
+  margin-bottom: 6px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.card-effect-floating-hint .tooltip-divider {
+  height: 1px;
+  background: rgba(255, 200, 87, 0.25);
+  margin: 6px 0;
 }
 
 .card-effect-floating-hint.x-left {
-  transform: translateX(-100%);
+  transform: translateX(-100%) perspective(600px) rotateX(8deg) rotateY(-6deg) translateZ(30px);
 }
 
 .card-effect-floating-hint.y-top {
-  transform: translateY(-100%);
+  transform: translateY(-100%) perspective(600px) rotateX(8deg) rotateY(-6deg) translateZ(30px);
 }
 
 .card-effect-floating-hint.x-left.y-top {
-  transform: translate(-100%, -100%);
+  transform: translate(-100%, -100%) perspective(600px) rotateX(8deg) rotateY(-6deg) translateZ(30px);
 }
 
 @keyframes hand-hint-pop {
@@ -2851,10 +2949,10 @@ button {
   z-index: 0;
   display: block;
   clip-path: polygon(
-    7px 0, calc(100% - 7px) 0,
-    100% 7px, 100% calc(100% - 7px),
-    calc(100% - 7px) 100%, 7px 100%,
-    0 calc(100% - 7px), 0 7px
+    6px 0, calc(100% - 6px) 0,
+    100% 6px, 100% calc(100% - 6px),
+    calc(100% - 6px) 100%, 6px 100%,
+    0 calc(100% - 6px), 0 6px
   );
   background: rgba(0, 0, 0, 0.32);
   filter: blur(1px);
@@ -2917,24 +3015,20 @@ button {
   padding: 7px;
   border: none;
   border-radius: 0;
-  /* 像素斜切角：7px 斜线切掉四个直角 */
+  /* 像素斜切角：6px 斜线切掉四个直角 */
   clip-path: polygon(
-    7px 0, calc(100% - 7px) 0,
-    100% 7px, 100% calc(100% - 7px),
-    calc(100% - 7px) 100%, 7px 100%,
-    0 calc(100% - 7px), 0 7px
+    6px 0, calc(100% - 6px) 0,
+    100% 6px, 100% calc(100% - 6px),
+    calc(100% - 6px) 100%, 6px 100%,
+    0 calc(100% - 6px), 0 6px
   );
   color: var(--card-text);
   text-align: center;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.34), transparent 30%),
     linear-gradient(180deg, color-mix(in srgb, var(--pantone) 94%, #ffffff), color-mix(in srgb, var(--pantone-deep) 94%, #000000));
-  /* clip-path 会裁掉 box-shadow，改用 filter:drop-shadow */
-  filter:
-    drop-shadow(0 7px 0 rgba(54, 42, 36, 0.72))
-    drop-shadow(0 15px 0 rgba(0, 0, 0, 0.46))
-    drop-shadow(14px 20px 0 rgba(0, 0, 0, 0.24))
-    drop-shadow(18px 26px 18px rgba(0, 0, 0, 0.38));
+  /* clip-path 会裁掉 box-shadow，改用 filter:drop-shadow（单层） */
+  filter: drop-shadow(8px 12px 0 rgba(0, 0, 0, 0.42));
   box-shadow: none;
   isolation: isolate;
   overflow: hidden;
@@ -2952,9 +3046,9 @@ button {
 /*
   像素边框层：
   - color = 当前边框颜色（通过 currentColor 驱动所有渐变色块）
-  - 4 条边框条（4px 宽）+ 4 个内角斜线三角形（7px）
-  - 外轮廓斜角由父 clip-path(7px) 决定，内矩形斜角由三角形决定
-  - border 厚度=4px，三角形偏移=4px，三角尺寸=7px → calc(100%-11px)
+  - 4 条边框条（4px 宽）+ 4 个内角斜线三角形（6px）
+  - 外轮廓斜角由父 clip-path(6px) 决定，内矩形斜角由三角形决定
+  - border 厚度=4px，三角形位置=4px，三角尺寸=6px
 */
 .card-view::before {
   content: "";
@@ -2963,18 +3057,16 @@ button {
   z-index: 3;
   color: var(--rarity);
   background:
-    /* 内角斜线三角（覆盖在边框条顶层，形成内矩形斜角）
-       注意：100% 在 background-position 中 = containerSize - bgSize，
-       所以右/下角偏移量 = calc(100% - borderWidth) 而非 calc(100% - borderWidth - triSize) */
-    linear-gradient(to bottom right, currentColor 50%, transparent 50%) 4px              4px              / 7px 7px no-repeat,
-    linear-gradient(to bottom left,  currentColor 50%, transparent 50%) calc(100% - 4px) 4px              / 7px 7px no-repeat,
-    linear-gradient(to top right,    currentColor 50%, transparent 50%) 4px              calc(100% - 4px) / 7px 7px no-repeat,
-    linear-gradient(to top left,     currentColor 50%, transparent 50%) calc(100% - 4px) calc(100% - 4px) / 7px 7px no-repeat,
-    /* 四条边框条 4px */
-    linear-gradient(currentColor, currentColor) 0    0    / 100% 4px   no-repeat,
-    linear-gradient(currentColor, currentColor) 0    100% / 100% 4px   no-repeat,
-    linear-gradient(currentColor, currentColor) 0    0    / 4px  100%  no-repeat,
-    linear-gradient(currentColor, currentColor) 100% 0    / 4px  100%  no-repeat;
+    /* 内角斜线三角 (cutout size 6px, offset 4px) */
+    linear-gradient(to bottom right, currentColor 50%, transparent 50%) 4px 4px / 6px 6px no-repeat,
+    linear-gradient(to bottom left,  currentColor 50%, transparent 50%) calc(100% - 4px) 4px / 6px 6px no-repeat,
+    linear-gradient(to top right,    currentColor 50%, transparent 50%) 4px calc(100% - 4px) / 6px 6px no-repeat,
+    linear-gradient(to top left,     currentColor 50%, transparent 50%) calc(100% - 4px) calc(100% - 4px) / 6px 6px no-repeat,
+    /* 4 border bars of thickness 4px */
+    linear-gradient(currentColor, currentColor) 0 0 / 100% 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 0 100% / 100% 4px no-repeat,
+    linear-gradient(currentColor, currentColor) 0 0 / 4px 100% no-repeat,
+    linear-gradient(currentColor, currentColor) 100% 0 / 4px 100% no-repeat;
   pointer-events: none;
   transition: color 160ms ease;
 }
@@ -3006,12 +3098,9 @@ button {
 .card-view:hover,
 .card-view.selected {
   filter: saturate(1.06) contrast(1.04)
-    drop-shadow(0 7px 0 rgba(54, 42, 36, 0.66))
-    drop-shadow(0 15px 0 rgba(0, 0, 0, 0.42))
     drop-shadow(0 0 14px rgba(255, 255, 255, 0.22))
     drop-shadow(0 0 18px color-mix(in srgb, var(--rarity) 28%, transparent))
-    drop-shadow(16px 22px 0 rgba(0, 0, 0, 0.25))
-    drop-shadow(21px 30px 20px rgba(0, 0, 0, 0.42));
+    drop-shadow(10px 16px 0 rgba(0, 0, 0, 0.48));
   transform: translateY(-6px) rotateX(0deg) translateZ(10px);
   box-shadow: none;
 }
@@ -3111,6 +3200,10 @@ button {
   transform-origin: 50% 100%;
 }
 
+.card-stage.hand:not(.dragging):not(.entering) {
+  transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
 .card-stage.hand:first-child {
   margin-left: 0;
 }
@@ -3188,12 +3281,9 @@ button {
 .card-stage.hand.selected {
   z-index: 999 !important;
   filter: saturate(1.12)
-    drop-shadow(0 7px 0 rgba(54, 42, 36, 0.66))
-    drop-shadow(0 15px 0 rgba(0, 0, 0, 0.42))
     drop-shadow(0 0 16px rgba(255, 255, 255, 0.22))
     drop-shadow(0 0 22px color-mix(in srgb, var(--rarity) 28%, transparent))
-    drop-shadow(18px 24px 0 rgba(0, 0, 0, 0.26))
-    drop-shadow(24px 34px 22px rgba(0, 0, 0, 0.46));
+    drop-shadow(12px 18px 0 rgba(0, 0, 0, 0.52));
   transform:
     perspective(900px)
     translateX(var(--fan-hover-x, var(--fan-x, 0px)))
@@ -3212,24 +3302,24 @@ button {
 }
 
 .card-stage.hand.selected {
+  /* 选中后变成 prof-card-wrap 同款干净容器：只保留位移/抬升/缩放，清掉扇形旋转，让 useCursorTilt 算出的角度不被扭曲 */
   transform:
-    perspective(900px)
+    perspective(1000px)
     translateX(var(--fan-hover-x, var(--fan-x, 0px)))
     translateY(var(--fan-hover-lift, -10px))
     translateZ(calc(var(--fan-hover-depth, 16px) + 24px))
-    rotateX(2deg)
-    rotateY(var(--fan-hover-yaw, 0deg))
-    rotateZ(var(--fan-hover-rotate, 0deg))
     scale(calc(var(--hand-scale, 1) * 1.1));
 }
 
 .card-stage.hand.selected .card-view {
   transform:
+    perspective(1000px)
     rotateX(var(--tilt-x, 0deg))
     rotateY(var(--tilt-y, 0deg))
-    translateZ(18px);
-  transition: transform 70ms ease-out, filter 160ms ease;
+    translateZ(20px);
+  transition: transform 180ms cubic-bezier(0.1, 0.8, 0.2, 1), filter 160ms ease;
   will-change: transform;
+  transform-style: preserve-3d;
 }
 
 .card-stage.hand.selected .card-view::after {
@@ -3296,8 +3386,8 @@ button {
 }
 
 .card-stage.drawer {
-  width: 139px;
-  height: 204px;
+  width: 134px;
+  height: 200px;
 }
 
 .rarity-common {
@@ -3318,6 +3408,93 @@ button {
 
 .rarity-legendary {
   --rarity: #ffc857;
+}
+
+/* ── Epic+ 卡牌跑马灯光圈（独立 DOM 元素 .card-glow-ring，不覆盖卡面 filter）── */
+@keyframes card-marquee-spin {
+  to { transform: rotate(360deg); }
+}
+
+.card-glow-ring {
+  position: absolute;
+  inset: -6px;
+  z-index: 0;
+  display: block;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    color-mix(in srgb, var(--rarity, #fb923c) 0%, transparent) 0%,
+    color-mix(in srgb, var(--rarity, #fb923c) 0%, transparent) 40%,
+    var(--rarity, #fb923c)                                      55%,
+    rgba(255, 255, 255, 0.95)                                   65%,
+    var(--rarity, #fb923c)                                      75%,
+    color-mix(in srgb, var(--rarity, #fb923c) 0%, transparent) 100%
+  );
+  filter: blur(3px);
+  opacity: 0;
+  transition: opacity 180ms ease;
+  animation: card-marquee-spin 2s linear infinite;
+  transform-origin: center center;
+}
+
+.card-stage.selected.rarity-elite .card-glow-ring,
+.card-stage.selected.rarity-epic .card-glow-ring,
+.card-stage.selected.rarity-legendary .card-glow-ring {
+  opacity: 0.95;
+}
+
+.card-stage.selected.rarity-legendary .card-glow-ring {
+  animation-duration: 1.4s;
+  filter: blur(4px);
+}
+
+/* ── 创始人专属卡牌边框跑马灯 Glow 轻微描边效果 ── */
+@property --founder-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes founder-border-spin {
+  to { --founder-angle: 360deg; }
+}
+
+.founder-border-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 4;              /* Draws on top of the card's native border (z-index: 3) */
+  pointer-events: none;
+  border: 4px solid transparent; /* 4px pixel-thick glowing border line */
+  background: conic-gradient(
+    from var(--founder-angle) at 50% 50%,
+    rgba(0, 242, 254, 0.9) 0%,
+    rgba(255, 51, 102, 0.9) 25%,
+    rgba(255, 200, 87, 0.9) 50%,
+    rgba(66, 215, 125, 0.9) 75%,
+    rgba(0, 242, 254, 0.9) 100%
+  ) border-box;
+  
+  /* Mask out the interior content box, keeping only the border-box (the border outline itself) */
+  -webkit-mask:
+    linear-gradient(#fff 0 0) padding-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: destination-out;
+  mask-composite: exclude;
+  
+  opacity: 0.65;
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.4));
+  transition: opacity 180ms ease, filter 180ms ease;
+  animation: founder-border-spin 3.5s linear infinite;
+}
+
+/* Hover or Selected highlight state */
+.card-stage.selected .founder-border-glow,
+.card-stage:hover .founder-border-glow {
+  opacity: 1.0;
+  filter: 
+    drop-shadow(0 0 2px rgba(255, 255, 255, 0.7))
+    drop-shadow(0 0 4px rgba(0, 242, 254, 0.5));
+  animation-duration: 1.8s; /* Spins faster when active */
 }
 
 .dept-r {
@@ -3445,12 +3622,12 @@ button {
   align-items: center;
   min-width: 0;
   overflow: hidden;
-  min-height: 22px;
-  padding: 4px 4px;
+  min-height: 0;
+  padding: 0;
   border-radius: 0;
   color: var(--card-chip-text);
-  background: var(--card-chip-bg);
-  font-size: 8px;
+  background: transparent;
+  font-size: 9px;
   font-style: normal;
   line-height: 1;
   text-overflow: ellipsis;
@@ -3478,8 +3655,8 @@ button {
 
 .card-dept-icon {
   flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   color: currentColor;
   fill: none;
   stroke: currentColor;
@@ -3491,7 +3668,7 @@ button {
   align-items: center;
   gap: 2px;
   color: #fff4bd;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .card-view.dept-s .card-top b {
@@ -3503,8 +3680,8 @@ button {
 }
 
 .card-ap-icon {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   color: #facc15;
   fill: currentColor;
   stroke: none;
@@ -3696,6 +3873,8 @@ button {
 .card-view.slot .executive-svg-avatar {
   animation: none;
 }
+
+
 
 .pixel-person-portrait {
   --person-skin: #e9b887;
@@ -4645,25 +4824,59 @@ button {
 }
 
 .result-panel > span {
-  color: var(--gold);
-  font-size: 16px;
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
 }
 
 .result-panel h1 {
   margin: 0;
-  color: var(--text);
-  font-size: 34px;
+  color: #ffffff;
+  font-size: 50px;
+  text-shadow:
+    0 3px 0 #1e293b,
+    0 0 20px rgba(255, 255, 255, 0.3);
 }
 
 .result-panel.failed > span {
   color: var(--red);
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
 }
 
 .result-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  display: flex;
+  justify-content: center;
+  gap: 24px;
   width: 100%;
+  margin-top: 10px;
+}
+
+.result-panel .metric {
+  padding: 12px 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  display: grid;
+  gap: 6px;
+  min-width: 160px;
+}
+
+.result-panel .metric span {
+  color: #e2e8f0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.result-panel .metric strong {
+  color: #ffffff;
+  font-size: 32px;
+  font-weight: 900;
+  text-shadow:
+    0 2px 0 #0f172a,
+    0 0 15px rgba(255, 255, 255, 0.4);
 }
 
 .failure-report {
@@ -4727,7 +4940,7 @@ button {
 
 .drawer-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 12px;
 }
 
@@ -4953,7 +5166,7 @@ button {
 
 @media (max-height: 790px) {
   .battle-shell {
-    grid-template-rows: 104px minmax(0, 1fr) 232px;
+    grid-template-rows: 124px minmax(0, 1fr) 232px;
     gap: 8px;
   }
 
@@ -5003,6 +5216,7 @@ button {
   backdrop-filter: blur(3px);
   font-family: "Fusion Pixel SC", "Fusion Pixel", monospace;
   image-rendering: pixelated;
+  perspective: 1200px;
   animation: bm-overlay-fade-in 280ms ease-out both;
 }
 
@@ -5017,8 +5231,8 @@ button {
   display: grid;
   grid-template-rows: auto auto 1fr;
   gap: 14px;
-  width: min(880px, calc(100vw - 48px));
-  height: min(640px, calc(100vh - 48px));
+  width: min(1080px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 48px));
   padding: 22px 26px 26px;
   border: 4px solid rgba(255, 200, 87, 0.82);
   clip-path: polygon(
@@ -5036,22 +5250,29 @@ button {
       rgba(0, 0, 0, 0.05) 3px 6px
     ),
     linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(3, 7, 18, 0.96));
+  box-shadow:
+    inset 0 0 0 4px #101418,
+    inset 0 0 0 8px rgba(255, 200, 87, 0.4);
   filter:
     drop-shadow(0 10px 0 rgba(82, 57, 17, 0.74))
     drop-shadow(0 28px 50px rgba(0, 0, 0, 0.5));
-  transform: rotateX(4deg);
+  transform: rotateX(var(--bm-tilt-x, 0deg)) rotateY(var(--bm-tilt-y, 0deg)) rotateZ(0deg);
   transform-style: preserve-3d;
+  transition: transform 150ms cubic-bezier(0.1, 0.8, 0.2, 1);
+}
+
+.bm-panel.pop-active {
   animation: bm-panel-pop 360ms cubic-bezier(0.18, 0.9, 0.22, 1) both;
 }
 
 @keyframes bm-panel-pop {
   from {
     opacity: 0;
-    transform: rotateX(4deg) translateY(28px) scale(0.94);
+    transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) translateY(28px) scale(0.94);
   }
   to {
     opacity: 1;
-    transform: rotateX(4deg) translateY(0) scale(1);
+    transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) translateY(0) scale(1);
   }
 }
 
@@ -5145,12 +5366,20 @@ button {
     calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px
   );
   box-shadow: 4px 5px 0 rgba(0, 0, 0, 0.4);
-  transition: transform 120ms ease, filter 120ms ease;
+  transform: translateY(0) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 120ms cubic-bezier(0.18, 0.9, 0.22, 1), filter 120ms ease, box-shadow 120ms ease;
 }
 
 .bm-next-button:hover:not(:disabled) {
-  transform: translateY(-2px);
+  transform: translateY(-5px) translateZ(10px);
   filter: brightness(1.12);
+  box-shadow: 4px 10px 0 rgba(0, 0, 0, 0.4);
+}
+
+.bm-next-button:active:not(:disabled) {
+  transform: translateY(2px) translateZ(-2px);
+  box-shadow: 4px 3px 0 rgba(0, 0, 0, 0.4);
 }
 
 .bm-next-button:disabled {
@@ -5224,26 +5453,29 @@ button {
   );
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -3px 0 rgba(0, 0, 0, 0.36),
-    4px 5px 0 rgba(0, 0, 0, 0.42);
-  transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
+    inset 0 -3px 0 rgba(0, 0, 0, 0.36);
+  filter:
+    drop-shadow(0 4px 0 var(--tone-deep))
+    drop-shadow(0 0 1px #101418);
+  transform: translateY(0) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 180ms cubic-bezier(0.18, 0.9, 0.22, 1), filter 180ms cubic-bezier(0.18, 0.9, 0.22, 1);
 }
 
 .bm-station:hover {
-  transform: translate(-2px, -3px);
-  filter: brightness(1.1) saturate(1.06);
-  box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.24),
-    inset 0 -3px 0 rgba(0, 0, 0, 0.36),
-    7px 8px 0 rgba(0, 0, 0, 0.42);
+  transform: translateY(-8px) translateZ(16px);
+  filter:
+    drop-shadow(0 12px 0 var(--tone-deep))
+    drop-shadow(0 0 1px #101418)
+    brightness(1.1) saturate(1.06);
 }
 
 .bm-station:active {
-  transform: translate(2px, 2px);
-  box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -3px 0 rgba(0, 0, 0, 0.46),
-    1px 2px 0 rgba(0, 0, 0, 0.42);
+  transform: translateY(4px) translateZ(-4px);
+  filter:
+    drop-shadow(0 0 0 var(--tone-deep))
+    drop-shadow(0 0 1px #101418)
+    brightness(0.95);
 }
 
 /* 配色: 投资部蓝 / 人事部红 / 商学院紫 / 日志金 */
@@ -5286,6 +5518,12 @@ button {
   font-size: 44px;
   line-height: 1;
   filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.6));
+}
+
+.bm-station-svg {
+  width: 52px;
+  height: 52px;
+  image-rendering: pixelated;
 }
 
 .bm-station-title {
@@ -5354,10 +5592,21 @@ button {
     calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px
   );
   box-shadow: 3px 4px 0 rgba(0, 0, 0, 0.36);
-  transition: transform 120ms ease;
+  transform: translateY(0) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 160ms cubic-bezier(0.18, 0.9, 0.22, 1), filter 120ms ease, box-shadow 120ms ease;
 }
 
-.bm-back-btn:hover { transform: translateX(-2px); filter: brightness(1.1); }
+.bm-back-btn:hover {
+  transform: translateX(-4px) translateZ(6px);
+  filter: brightness(1.1);
+  box-shadow: 3px 6px 0 rgba(0, 0, 0, 0.36);
+}
+
+.bm-back-btn:active {
+  transform: translateX(2px) translateZ(-2px);
+  box-shadow: 1px 2px 0 rgba(0, 0, 0, 0.36);
+}
 
 .bm-drawer {
   flex: 1;
@@ -5422,6 +5671,9 @@ button {
     calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px
   );
   box-shadow: 3px 4px 0 rgba(0, 0, 0, 0.34);
+  transform: translateY(0) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 160ms cubic-bezier(0.18, 0.9, 0.22, 1), filter 120ms ease, box-shadow 120ms ease;
 }
 
 .bm-cancel-btn { border-color: rgba(148, 163, 184, 0.58); color: #cbd5e1; }
@@ -5436,7 +5688,18 @@ button {
 
 .bm-roll-btn:hover:not(:disabled),
 .bm-confirm-btn:hover:not(:disabled),
-.bm-cancel-btn:hover { transform: translateY(-1px); filter: brightness(1.1); }
+.bm-cancel-btn:hover {
+  transform: translateY(-4px) translateZ(6px);
+  filter: brightness(1.1);
+  box-shadow: 3px 8px 0 rgba(0, 0, 0, 0.34);
+}
+
+.bm-roll-btn:active:not(:disabled),
+.bm-confirm-btn:active:not(:disabled),
+.bm-cancel-btn:active {
+  transform: translateY(2px) translateZ(-2px);
+  box-shadow: 3px 2px 0 rgba(0, 0, 0, 0.34);
+}
 
 .bm-roll-btn:disabled,
 .bm-confirm-btn:disabled { cursor: not-allowed; opacity: 0.45; filter: grayscale(0.4); }
@@ -5512,6 +5775,9 @@ button {
     calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px
   );
   box-shadow: 3px 4px 0 rgba(0, 0, 0, 0.36);
+  transform: translateY(0) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 160ms cubic-bezier(0.18, 0.9, 0.22, 1), filter 120ms ease, box-shadow 120ms ease;
 }
 
 .shop-buy-btn.legendary {
@@ -5522,7 +5788,15 @@ button {
 }
 
 .shop-buy-btn:disabled { cursor: not-allowed; opacity: 0.45; filter: grayscale(0.5); }
-.shop-buy-btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.12); }
+.shop-buy-btn:hover:not(:disabled) {
+  transform: translateY(-4px) translateZ(6px);
+  filter: brightness(1.12);
+  box-shadow: 3px 8px 0 rgba(0, 0, 0, 0.36);
+}
+.shop-buy-btn:active:not(:disabled) {
+  transform: translateY(2px) translateZ(-2px);
+  box-shadow: 3px 2px 0 rgba(0, 0, 0, 0.36);
+}
 
 .shop-sold,
 .shop-empty {
@@ -5605,7 +5879,7 @@ button {
 
 .hr-list-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 6px;
   padding: 6px;
   overflow-y: auto;
@@ -5620,7 +5894,18 @@ button {
   border: 2px solid transparent;
   background: transparent;
   cursor: pointer;
-  transition: all 120ms;
+  transform: translateY(0) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 160ms cubic-bezier(0.18, 0.9, 0.22, 1), filter 120ms ease;
+}
+
+.hr-card-pick:hover:not(.acted) {
+  transform: translateY(-4px) translateZ(6px);
+  filter: brightness(1.08);
+}
+
+.hr-card-pick:active:not(.acted) {
+  transform: translateY(2px) translateZ(-2px);
 }
 
 .hr-card-pick.selected {
@@ -5848,7 +6133,7 @@ button {
   z-index: 0;
   width: 100%;
   height: 100%;
-  object-fit: fill;
+  object-fit: cover;
   pointer-events: none;
 }
 
@@ -6065,8 +6350,10 @@ button {
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.18),
     inset 0 -3px 0 rgba(0, 0, 0, 0.36),
-    4px 5px 0 rgba(0, 0, 0, 0.42);
-  transition: all 120ms;
+    3px 4px 0 rgba(0, 0, 0, 0.34);
+  transform: translateY(0) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 180ms cubic-bezier(0.18, 0.9, 0.22, 1), filter 180ms ease, box-shadow 180ms ease;
 }
 
 .event-option strong {
@@ -6082,8 +6369,20 @@ button {
 
 .event-option:hover:not(.disabled) {
   border-color: rgba(255, 200, 87, 0.86);
-  transform: translateX(3px);
+  transform: translateY(-4px) translateZ(8px);
   filter: brightness(1.1);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.36),
+    3px 8px 0 rgba(0, 0, 0, 0.34);
+}
+
+.event-option:active:not(.disabled) {
+  transform: translateY(2px) translateZ(-2px);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.36),
+    3px 2px 0 rgba(0, 0, 0, 0.34);
 }
 
 .event-option.disabled {
@@ -7133,104 +7432,7 @@ button {
    通过 data-bm-tip="..." 属性触发, 不需要 JS
    ============================================================================ */
 
-[data-bm-tip] {
-  position: relative;
-}
-
-[data-bm-tip]:hover::after {
-  content: attr(data-bm-tip);
-  position: absolute;
-  left: calc(100% + 14px);
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 9999;
-  padding: 9px 13px;
-  width: max-content;
-  max-width: 260px;
-  border: 3px solid rgba(255, 200, 87, 0.86);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 32%),
-    linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(3, 7, 18, 0.98));
-  color: #fff4bd;
-  font-family: "Fusion Pixel SC", "Fusion Pixel", monospace;
-  font-size: 11px;
-  letter-spacing: 1px;
-  line-height: 1.65;
-  white-space: pre-line;
-  clip-path: polygon(
-    7px 0, calc(100% - 7px) 0,
-    100% 7px, 100% calc(100% - 7px),
-    calc(100% - 7px) 100%, 7px 100%,
-    0 calc(100% - 7px), 0 7px
-  );
-  box-shadow: 4px 5px 0 rgba(0, 0, 0, 0.5);
-  pointer-events: none;
-  animation: bm-tip-pop 160ms cubic-bezier(0.18, 0.9, 0.22, 1) both;
-}
-
-/* 箭头（指向卡片左侧） */
-[data-bm-tip]:hover::before {
-  content: '';
-  position: absolute;
-  left: calc(100% + 4px);
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 9999;
-  border: 8px solid transparent;
-  border-right-color: rgba(255, 200, 87, 0.86);
-  pointer-events: none;
-  filter: drop-shadow(-2px 0 0 rgba(0, 0, 0, 0.4));
-}
-
-@keyframes bm-tip-pop {
-  from { opacity: 0; transform: translateY(-50%) translateX(-8px); }
-  to { opacity: 1; transform: translateY(-50%) translateX(0); }
-}
-
-/* 图鉴里的 BM 卡片 → tooltip 显示在下方（卡片有自己宽度，右侧易溢出） */
-.compendium-bm[data-bm-tip]:hover::after {
-  left: 50%;
-  top: calc(100% + 14px);
-  transform: translateX(-50%);
-  max-width: 280px;
-  animation-name: bm-tip-pop-bottom;
-}
-.compendium-bm[data-bm-tip]:hover::before {
-  left: 50%;
-  top: 100%;
-  transform: translateX(-50%);
-  border: 8px solid transparent;
-  border-right-color: transparent;
-  border-bottom-color: rgba(255, 200, 87, 0.86);
-  filter: drop-shadow(0 -2px 0 rgba(0, 0, 0, 0.4));
-}
-@keyframes bm-tip-pop-bottom {
-  from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
-}
-
-/* 商学院抽屉里的 bm-card → tooltip 向上弹（下方常被挤压） */
-.bm-card[data-bm-tip]:hover::after {
-  left: 50%;
-  top: auto;
-  bottom: calc(100% + 14px);
-  transform: translateX(-50%);
-  animation-name: bm-tip-pop-top;
-}
-.bm-card[data-bm-tip]:hover::before {
-  left: 50%;
-  top: auto;
-  bottom: 100%;
-  transform: translateX(-50%);
-  border: 8px solid transparent;
-  border-right-color: transparent;
-  border-top-color: rgba(255, 200, 87, 0.86);
-  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.4));
-}
-@keyframes bm-tip-pop-top {
-  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
-}
+/* data-bm-tip CSS tooltips removed in favor of unified 2.5D floating tooltips */
 
 /* ============================================================================
  * 制作组 · 电影字幕滚动 (Pixel Cinema Credits)
@@ -7960,6 +8162,35 @@ button:disabled,
   box-shadow: 0 0 0 1px rgba(0,0,0,0.55), inset 0 0 32px rgba(255, 200, 87, 0.06);
 }
 
+.layout-editing .hud-stats-group {
+  z-index: 180;
+}
+
+.layout-editing .top-hud > .edit-block[data-edit-id="hud-actions"] {
+  z-index: 40 !important;
+}
+
+.edit-block[data-edit-id="hud-ap"] {
+  pointer-events: auto;
+  isolation: isolate;
+}
+
+.edit-block[data-edit-id="hud-ap"] .edit-move-bar {
+  top: -30px;
+  min-width: 170px;
+  height: 28px;
+  box-shadow: 0 3px 0 rgba(26, 18, 6, 0.28);
+}
+
+.edit-drag-plate {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  cursor: move;
+  pointer-events: all;
+  background: transparent;
+}
+
 /* Move bar — top stripe */
 .edit-move-bar {
   position: absolute;
@@ -8198,46 +8429,7 @@ button:disabled,
   position: relative;
 }
 
-.hud-item .hud-hover-tooltip {
-  display: none;
-  position: absolute;
-  top: calc(100% + 10px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 10000;
-  padding: 10px 14px;
-  width: 280px;
-  border: 3px solid rgba(255, 200, 87, 0.86);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.1), transparent 32%),
-    linear-gradient(180deg, rgba(15, 23, 42, 0.98), rgba(3, 7, 18, 0.98));
-  color: #fff4bd;
-  font-family: "Fusion Pixel SC", "Fusion Pixel", monospace;
-  font-size: 11px;
-  letter-spacing: 1px;
-  line-height: 1.65;
-  white-space: pre-line;
-  clip-path: polygon(
-    7px 0, calc(100% - 7px) 0,
-    100% 7px, 100% calc(100% - 7px),
-    calc(100% - 7px) 100%, 7px 100%,
-    0 calc(100% - 7px), 0 7px
-  );
-  box-shadow: 4px 5px 0 rgba(0, 0, 0, 0.5);
-  pointer-events: none;
-  text-shadow: none;
-  text-align: left;
-}
-
-.hud-item:hover .hud-hover-tooltip {
-  display: block;
-  animation: hud-tip-pop 160ms cubic-bezier(0.18, 0.9, 0.22, 1) both;
-}
-
-@keyframes hud-tip-pop {
-  from { opacity: 0; transform: translateX(-50%) translateY(-8px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
-}
+/* hud-item tooltips removed in favor of unified 2.5D floating tooltips */
 
 /* ---- Valuation progress bar ---- */
 .valuation-progress-container {
@@ -8247,10 +8439,10 @@ button:disabled,
 }
 
 .stage-progress-track {
-  width: 130px;
-  height: 8px;
+  width: 156px;
+  height: 10px;
   background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(167, 139, 250, 0.4);
+  border: 1px solid var(--stage-accent-glow, rgba(167, 139, 250, 0.4));
   margin-top: 5px;
   position: relative;
   overflow: hidden;
@@ -8259,8 +8451,8 @@ button:disabled,
 
 .stage-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #a78bfa, #8b5cf6);
-  box-shadow: 0 0 8px rgba(139, 92, 246, 0.8);
+  background: linear-gradient(90deg, var(--stage-accent-color, #a78bfa), var(--stage-accent-color, #8b5cf6));
+  box-shadow: 0 0 8px var(--stage-accent-color, rgba(139, 92, 246, 0.8));
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -8382,6 +8574,9 @@ button:disabled,
   font-size: 12px;
   cursor: pointer;
   clip-path: polygon(4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px), 0 4px);
+  transform: translateY(0) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 150ms cubic-bezier(0.18, 0.9, 0.22, 1), filter 150ms ease, background 150ms ease;
 }
 .ratio-btn.selected {
   background: #fbbf24;
@@ -8391,6 +8586,10 @@ button:disabled,
 }
 .ratio-btn:hover:not(.selected) {
   background: rgba(255, 200, 87, 0.15);
+  transform: translateY(-3px) translateZ(6px);
+}
+.ratio-btn:active {
+  transform: translateY(2px) translateZ(-2px);
 }
 
 .finance-confirm-btn {
@@ -8403,7 +8602,10 @@ button:disabled,
   font-weight: bold;
   cursor: pointer;
   box-shadow: 2px 2px 0 rgba(0,0,0,0.3);
-  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
+  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 6px), 0 6px);
+  transform: translateY(0) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 150ms cubic-bezier(0.18, 0.9, 0.22, 1), filter 120ms ease, box-shadow 120ms ease;
 }
 .finance-confirm-btn:disabled {
   opacity: 0.5;
@@ -8413,14 +8615,120 @@ button:disabled,
 }
 .finance-confirm-btn:hover:not(:disabled) {
   filter: brightness(1.1);
+  transform: translateY(-4px) translateZ(8px);
+  box-shadow: 2px 6px 0 rgba(0, 0, 0, 0.3);
+}
+.finance-confirm-btn:active:not(:disabled) {
+  transform: translateY(2px) translateZ(-2px);
+  box-shadow: 2px 1px 0 rgba(0, 0, 0, 0.3);
 }
 
 /* ---- Business Model slot actions & unsubscribe ---- */
-.bm-slot-container {
+/* ---- Scoped visual consistency inside Business School ---- */
+.school-drawer .bm-slot,
+.school-drawer .bm-pick-empty,
+.school-drawer .bm-card {
+  width: 144px !important;
+  height: 144px !important;
+  aspect-ratio: 1 / 1;
+  box-sizing: border-box;
+  transform: translateY(0) translateZ(0);
+  transform-style: preserve-3d;
+  transition: transform 180ms cubic-bezier(0.18, 0.9, 0.22, 1), box-shadow 150ms ease, filter 150ms ease;
+}
+
+.school-drawer .bm-slot.filled {
+  border: none;
+  background: none;
+  padding: 0;
+  clip-path: none;
+  width: 144px;
+  height: 144px;
+}
+
+.school-drawer .bm-slot.empty {
+  display: grid;
+  place-items: center;
+  font-family: inherit;
+  font-size: 14px;
+  color: #64748b;
+  border: 3px dashed rgba(96, 165, 250, 0.34);
+}
+
+.school-drawer .bm-slot-row,
+.school-drawer .bm-pick-row {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  gap: 20px !important;
+  justify-content: center !important;
+  width: 100% !important;
+}
+
+.bm-slot-container,
+.bm-pick-container {
   display: flex;
   flex-direction: column;
   align-items: center;
+  width: 144px;
   gap: 8px;
+}
+
+.bm-under-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 144px;
+  align-items: center;
+  text-align: center;
+  font-family: inherit;
+}
+
+.bm-under-desc {
+  margin: 0;
+  font-size: 11px;
+  color: #fff4bd;
+  line-height: 1.35;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  min-height: 30px;
+}
+
+.bm-under-cost {
+  font-size: 10px;
+  color: #94a3b8;
+  letter-spacing: 0.5px;
+}
+
+.school-drawer .bm-card {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  padding: 10px !important;
+}
+
+.school-drawer .bm-card-mid {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+/* 3D float pop-out when hovering options/cards in School Drawer */
+.school-drawer .bm-slot.replaceable:hover {
+  transform: translateY(-5px) translateZ(10px);
+  border-color: rgba(255, 200, 87, 0.88);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.42);
+}
+
+.school-drawer .bm-card:hover {
+  transform: translateY(-5px) translateZ(12px);
+  filter: brightness(1.08);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.45);
+}
+
+.school-drawer .bm-card:active {
+  transform: translateY(2px) translateZ(-4px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .bm-slot-actions {
@@ -8473,3 +8781,423 @@ button:disabled,
     opacity: 1;
   }
 }
+
+/* ---- Flying Card Overlay & Flight Animation ---- */
+.flying-card-overlay {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 134px;
+  height: 200px;
+  z-index: 99999;
+  pointer-events: none;
+}
+
+.card-stage.flying {
+  width: 134px;
+  height: 200px;
+  pointer-events: none;
+}
+
+/* Hide flying card effects overlay/tooltip */
+.card-stage.flying::after {
+  display: none !important;
+}
+
+/* ============================================================================
+ * Profession Select Screen
+ * ========================================================================= */
+.profession-select-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.5); /* 50% white background */
+  backdrop-filter: blur(4px);
+  perspective: 1500px;
+  font-family: "Fusion Pixel SC", "Fusion Pixel", monospace;
+  animation: prof-overlay-fade-in 300ms ease-out both;
+  overflow: hidden;
+}
+
+@keyframes prof-overlay-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.profession-select-title {
+  font-size: 36px;
+  color: #0f172a; /* dark slate title */
+  text-shadow: 0 2px 4px rgba(255, 255, 255, 0.8), 0 0 10px rgba(255, 255, 255, 0.5);
+  margin-bottom: 8px;
+  letter-spacing: 3px;
+  font-weight: bold;
+}
+
+.profession-select-subtitle {
+  font-size: 16px;
+  color: #334155; /* dark subtitle */
+  margin-bottom: 40px;
+  letter-spacing: 1.5px;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+}
+
+.profession-cards-container {
+  display: flex;
+  gap: 64px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 40px;
+}
+
+/* Individual card wrapper to set perspective */
+.profession-card-wrap {
+  position: relative;
+  width: 290px;
+  height: 480px;
+  perspective: 1000px;
+  transform-style: preserve-3d;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  display: block;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The actual 3D card */
+.profession-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  padding: 3px; /* border offset */
+  background: rgba(15, 23, 42, 0.85);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  transform-style: preserve-3d;
+  transform: rotateX(var(--prof-tilt-x, 0deg)) rotateY(var(--prof-tilt-y, 0deg)) translateZ(0px);
+  transition: transform 180ms cubic-bezier(0.1, 0.8, 0.2, 1), box-shadow 300ms ease;
+  overflow: visible;
+}
+
+/* Hover shadow and float effects */
+.profession-card:hover {
+  box-shadow:
+    0 25px 50px rgba(0, 0, 0, 0.7),
+    0 0 25px var(--hover-glow-color, rgba(255, 255, 255, 0.15));
+}
+
+/* A glossy glare overlay that follows the mouse */
+.prof-card-shine {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background: radial-gradient(
+    circle 150px at var(--prof-glare-x, 50%) var(--prof-glare-y, 50%),
+    rgba(255, 255, 255, 0.12),
+    transparent 80%
+  );
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Inner card frame */
+.prof-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 13px;
+  background:
+    linear-gradient(180deg, rgba(20, 30, 55, 0.95) 0%, rgba(10, 15, 30, 0.98) 100%);
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform-style: preserve-3d;
+  border: 2px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Accent borders depending on profession */
+.profession-card.prof-scientist {
+  --hover-glow-color: rgba(0, 242, 254, 0.25);
+  border: 2px solid rgba(0, 242, 254, 0.4);
+}
+.profession-card.prof-sales {
+  --hover-glow-color: rgba(255, 51, 102, 0.25);
+  border: 2px solid rgba(255, 51, 102, 0.4);
+}
+.profession-card.prof-cxo {
+  --hover-glow-color: rgba(66, 215, 125, 0.25);
+  border: 2px solid rgba(66, 215, 125, 0.4);
+}
+
+/* 3D Elements floating out of the card */
+.prof-card-dept-badge {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--badge-color, #94a3b8);
+  font-weight: bold;
+  transform: translateZ(10px);
+  transition: transform 180ms ease;
+}
+
+.prof-scientist .prof-card-dept-badge {
+  --badge-color: #00f2fe;
+  border-color: rgba(0, 242, 254, 0.3);
+}
+.prof-sales .prof-card-dept-badge {
+  --badge-color: #ff3366;
+  border-color: rgba(255, 51, 102, 0.3);
+}
+.prof-cxo .prof-card-dept-badge {
+  --badge-color: #42d77d;
+  border-color: rgba(66, 215, 125, 0.3);
+}
+
+/* Icon Container with moderate Z displacement for clean 3D effect */
+.prof-card-icon-container {
+  width: 130px;
+  height: 130px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.05) 0%, transparent 70%);
+  border-radius: 50%;
+  transform: translateZ(20px) scale(1.02);
+  transition: transform 180ms ease;
+  filter: drop-shadow(0 15px 15px rgba(0, 0, 0, 0.6));
+}
+
+.prof-card-svg-icon {
+  width: 90px;
+  height: 90px;
+  --icon-color: #94a3b8;
+  --icon-accent: #ffe000;
+  filter: drop-shadow(0 0 10px var(--icon-color));
+  animation: prof-icon-float 4s ease-in-out infinite;
+}
+
+.prof-scientist .prof-card-svg-icon {
+  --icon-color: #00f2fe;
+}
+.prof-sales .prof-card-svg-icon {
+  --icon-color: #ff3366;
+}
+.prof-cxo .prof-card-svg-icon {
+  --icon-color: #42d77d;
+}
+
+@keyframes prof-icon-float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(2deg); }
+}
+
+.prof-card-title {
+  font-size: 24px;
+  font-weight: bold;
+  margin: 8px 0 2px 0;
+  color: #ffffff;
+  transform: translateZ(15px);
+  transition: transform 180ms ease;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+  letter-spacing: 2px;
+}
+
+.prof-card-subtitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 1.5px;
+  transform: translateZ(12px);
+  transition: transform 180ms ease;
+  margin-bottom: 12px;
+}
+
+.prof-card-divider {
+  width: 80%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+  margin-bottom: 16px;
+  transform: translateZ(8px);
+}
+
+.prof-card-details {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #cbd5e1;
+  text-align: center;
+  transform: translateZ(10px);
+  transition: transform 180ms ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.prof-card-details p {
+  margin: 0;
+  font-style: italic;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.prof-card-details ul {
+  margin: 4px 0 0 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.prof-card-details li {
+  position: relative;
+  padding-left: 14px;
+  color: #cbd5e1;
+}
+
+.prof-card-details li::before {
+  content: "▪";
+  position: absolute;
+  left: 0;
+  color: var(--bullet-color, #ffc857);
+}
+
+.prof-scientist .prof-card-details li::before { --bullet-color: #00f2fe; }
+.prof-sales .prof-card-details li::before { --bullet-color: #ff3366; }
+.prof-cxo .prof-card-details li::before { --bullet-color: #42d77d; }
+
+.prof-card-details strong {
+  color: #ffffff;
+}
+
+/* When the card is active/clicked */
+.profession-card:active {
+  transform: rotateX(var(--prof-tilt-x, 0deg)) rotateY(var(--prof-tilt-y, 0deg)) translateZ(-10px) scale(0.97);
+}
+
+/* Exit/Back Button */
+.prof-back-button {
+  margin-top: 12px;
+  padding: 10px 24px;
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: #475569;
+  background: rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  border-radius: 6px;
+  transition: all 200ms ease;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.prof-back-button:hover {
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.15);
+  border-color: rgba(15, 23, 42, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  transform: translateY(-2px);
+}
+
+/* Selected active state for profession cards */
+.profession-card.selected-active {
+  transform: rotateX(var(--prof-tilt-x, 0deg)) rotateY(var(--prof-tilt-y, 0deg)) translateZ(25px) scale(1.03) !important;
+  box-shadow:
+    0 30px 60px rgba(0, 0, 0, 0.8),
+    0 0 35px var(--hover-glow-color, rgba(255, 255, 255, 0.4));
+  border-width: 3px;
+  border-color: var(--hover-glow-color) !important;
+}
+
+/* Confirm Button and Actions Area */
+.prof-actions-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+
+.prof-confirm-button {
+  padding: 14px 48px;
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  color: #ffffff;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  transition: all 200ms ease;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.prof-confirm-button.theme-scientist {
+  background: #00f2fe;
+  color: #0f172a;
+  box-shadow: 0 6px 20px rgba(0, 242, 254, 0.5);
+  --hover-glow-color: rgba(0, 242, 254, 0.5);
+  text-shadow: none;
+  animation: prof-confirm-pulse 1.5s infinite alternate;
+}
+
+.prof-confirm-button.theme-sales {
+  background: #ff3366;
+  box-shadow: 0 6px 20px rgba(255, 51, 102, 0.5);
+  --hover-glow-color: rgba(255, 51, 102, 0.5);
+  animation: prof-confirm-pulse 1.5s infinite alternate;
+}
+
+.prof-confirm-button.theme-cxo {
+  background: #42d77d;
+  color: #0f172a;
+  box-shadow: 0 6px 20px rgba(66, 215, 125, 0.5);
+  --hover-glow-color: rgba(66, 215, 125, 0.5);
+  text-shadow: none;
+  animation: prof-confirm-pulse 1.5s infinite alternate;
+}
+
+.prof-confirm-button:hover {
+  transform: scale(1.05) translateY(-2px);
+  filter: brightness(1.1);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.prof-confirm-button:active {
+  transform: scale(0.98) translateY(1px);
+}
+
+@keyframes prof-confirm-pulse {
+  from { box-shadow: 0 0 10px rgba(255, 255, 255, 0.2); }
+  to { box-shadow: 0 0 25px var(--hover-glow-color, rgba(255, 255, 255, 0.5)); }
+}
+
+/* Stage/Brand Mark Tooltip */
+.brand-mark-hoverable {
+  position: relative;
+  cursor: help;
+}
+
+/* brand-mark tooltips removed in favor of unified 2.5D floating tooltips */

@@ -11,7 +11,7 @@ function updateScale() {
   const isPortraitMobile = getOrientationState().isPortraitMobile
   const scaleX = window.innerWidth / (isPortraitMobile ? DESIGN_H : DESIGN_W)
   const scaleY = window.innerHeight / (isPortraitMobile ? DESIGN_W : DESIGN_H)
-  const scale = Math.max(scaleX, scaleY)
+  const scale = Math.min(scaleX, scaleY)
   document.documentElement.style.setProperty('--app-scale', String(scale))
   document.documentElement.style.setProperty('--app-rotation', isPortraitMobile ? '90deg' : '0deg')
   document.documentElement.style.setProperty('--design-w', `${DESIGN_W}px`)

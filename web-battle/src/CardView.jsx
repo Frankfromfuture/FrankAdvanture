@@ -12,6 +12,8 @@ import {
 import { DEPT_META, RARITY_LABELS } from './game/cards.js'
 import { ServiceFunSvg, hasServiceFunSvg } from './ServiceFunSvg.jsx'
 import { ExecutiveSvgPortrait } from './人物/ExecutiveSvgPortrait.jsx'
+import { useCursorTilt } from './hooks/useCursorTilt.js'
+import { useFloatingTooltip } from './hooks/useFloatingTooltip.jsx'
 
 export function CardView({
   card,
@@ -26,9 +28,7 @@ export function CardView({
   onDragEnd,
   style,
 }) {
-  const [handHint, setHandHint] = React.useState(null)
-  const handHintTimerRef = React.useRef(null)
-  const pendingHandHintRef = React.useRef(null)
+  const isFounder = card.id?.startsWith('EMP_FOUNDER')
   const rarityLabel = RARITY_LABELS[card.rarity] ?? card.rarity
   const DepartmentIcon = getCardDepartmentIcon(card)
   const cardEffects = card.effects ?? []
@@ -40,129 +40,79 @@ export function CardView({
   const primary = hasOutputOverride ? `¥${outputOverride}` : card.type === 'emp' ? `¥${baseOutput}` : getActionPrimaryParts(cardEffects[0])
   const outputChanged = hasOutputOverride && outputOverride !== baseOutput
   const effects = [...cardEffects, ...cardAffixEffects].filter((effect) => !effect.startsWith('COST') && !effect.startsWith('BASE_OUTPUT'))
-  const shortEffectText = effects.slice(0, 2).map(summarizeEffectShort).join(' · ') || '基础行动'
+  const shortEffectText = effects.slice(0, 2).map(summarizeEffectShort).join(' · ') || ''
   const fullEffectText = effects.map(summarizeEffect).join(' / ') || '基础行动'
   const neighborDirection = getNeighborDirection(effects)
   const Component = onClick ? 'button' : 'div'
   const canTilt = (mode === 'hand' && selected) || mode === 'reveal'
-  const usesFloatingHint = mode === 'hand'
+  const usesFloatingHint = mode !== 'flying'
+  const tilt = useCursorTilt({ enabled: canTilt, amplitude: 18, parallax: true, parallaxShift: 0.35, parallaxStrength: 0.35 })
+  const tooltip = useFloatingTooltip({ delay: 150, maxEstimateWidth: 244, maxEstimateHeight: 104 })
 
-  React.useEffect(() => {
-    return () => window.clearTimeout(handHintTimerRef.current)
-  }, [])
+  const tooltipContent = (
+    <div>
+      <div>{fullEffectText}</div>
+      {card.flavor && (
+        <>
+          <div className="tooltip-divider" />
+          <div style={{ fontStyle: 'italic', color: '#fff4bd', opacity: 0.8 }}>"{card.flavor}"</div>
+        </>
+      )}
+    </div>
+  )
 
   function handleStagePointerMove(event) {
     if (!usesFloatingHint) return
-    const offset = 16
-    const hintWidth = 244
-    const hintHeight = 104
-    const nearRight = event.clientX + offset + hintWidth > window.innerWidth
-    const nearBottom = event.clientY + offset + hintHeight > window.innerHeight
-    setHandHint({
-      left: event.clientX + (nearRight ? -offset : offset),
-      top: event.clientY + (nearBottom ? -offset : offset),
-      x: nearRight ? 'left' : 'right',
-      y: nearBottom ? 'top' : 'bottom',
-    })
+    tooltip.showTooltip(tooltipContent, event)
   }
 
   function handleStagePointerLeave() {
     if (!usesFloatingHint) return
-    setHandHint(null)
+    tooltip.hideTooltip()
   }
 
   function handlePointerMove(event) {
-    updateFloatingHint(event)
-    if (!canTilt) return
-    const rect = event.currentTarget.getBoundingClientRect()
-    const x = (event.clientX - rect.left) / rect.width
-    const y = (event.clientY - rect.top) / rect.height
-    const tiltY = (0.5 - x) * 11
-    const tiltX = (y - 0.5) * 8
-    event.currentTarget.style.setProperty('--tilt-x', `${tiltX.toFixed(2)}deg`)
-    event.currentTarget.style.setProperty('--tilt-y', `${tiltY.toFixed(2)}deg`)
-    event.currentTarget.style.setProperty('--portrait-tilt-x', `${tiltX.toFixed(2)}deg`)
-    event.currentTarget.style.setProperty('--portrait-tilt-y', `${tiltY.toFixed(2)}deg`)
-    event.currentTarget.style.setProperty('--person-tilt-x', `${(-tiltX * 1.28).toFixed(2)}deg`)
-    event.currentTarget.style.setProperty('--person-tilt-y', `${(-tiltY * 1.28).toFixed(2)}deg`)
-    event.currentTarget.style.setProperty('--person-shift-x', `${(-tiltY * 0.5).toFixed(2)}px`)
-    event.currentTarget.style.setProperty('--person-shift-y', `${(-tiltX * 0.42).toFixed(2)}px`)
-    event.currentTarget.style.setProperty('--glare-x', `${Math.round(x * 100)}%`)
-    event.currentTarget.style.setProperty('--glare-y', `${Math.round(y * 100)}%`)
+    if (usesFloatingHint) {
+      tooltip.showTooltip(tooltipContent, event)
+    }
+    tilt.onPointerMove(event)
   }
 
   function handlePointerLeave(event) {
-    hideFloatingHint()
-    if (!canTilt) return
-    event.currentTarget.style.setProperty('--tilt-x', '0deg')
-    event.currentTarget.style.setProperty('--tilt-y', '0deg')
-    event.currentTarget.style.setProperty('--portrait-tilt-x', '0deg')
-    event.currentTarget.style.setProperty('--portrait-tilt-y', '0deg')
-    event.currentTarget.style.setProperty('--person-tilt-x', '0deg')
-    event.currentTarget.style.setProperty('--person-tilt-y', '0deg')
-    event.currentTarget.style.setProperty('--person-shift-x', '0px')
-    event.currentTarget.style.setProperty('--person-shift-y', '0px')
-    event.currentTarget.style.setProperty('--glare-x', '50%')
-    event.currentTarget.style.setProperty('--glare-y', '18%')
-  }
-
-  function updateFloatingHint(event) {
-    if (!usesFloatingHint) return
-    const offset = 16
-    const hintWidth = 244
-    const hintHeight = 104
-    const nearRight = event.clientX + offset + hintWidth > window.innerWidth
-    const nearBottom = event.clientY + offset + hintHeight > window.innerHeight
-    const nextHint = {
-      left: event.clientX + (nearRight ? -offset : offset),
-      top: event.clientY + (nearBottom ? -offset : offset),
-      x: nearRight ? 'left' : 'right',
-      y: nearBottom ? 'top' : 'bottom',
+    if (usesFloatingHint) {
+      tooltip.hideTooltip()
     }
-    pendingHandHintRef.current = nextHint
-    if (handHint) {
-      setHandHint(nextHint)
-      return
-    }
-    if (handHintTimerRef.current) return
-    handHintTimerRef.current = window.setTimeout(() => {
-      setHandHint(pendingHandHintRef.current)
-      handHintTimerRef.current = null
-    }, 1000)
-  }
-
-  function hideFloatingHint() {
-    if (!usesFloatingHint) return
-    window.clearTimeout(handHintTimerRef.current)
-    handHintTimerRef.current = null
-    pendingHandHintRef.current = null
-    setHandHint(null)
+    tilt.onPointerLeave(event)
   }
 
   return (
     <>
       <span
-        className={`card-stage ${mode} ${selected ? 'selected' : ''} ${entering ? 'entering' : ''}`}
+        ref={tilt.wrapRef}
+        className={`card-stage ${mode} ${selected ? 'selected' : ''} ${entering ? 'entering' : ''} ${dragging ? 'dragging' : ''} rarity-${card.rarity} ${isFounder ? 'is-founder' : ''}`}
+        data-card-uid={card.uid}
         style={style}
         data-effect-hint={fullEffectText}
         onPointerMove={handleStagePointerMove}
         onPointerLeave={handleStagePointerLeave}
       >
         <span className="card-stage-shadow" aria-hidden="true" />
+        {!isFounder && <span className="card-glow-ring" aria-hidden="true" />}
         <Component
-          className={`card-view ${mode} ${selected ? 'selected' : ''} ${entering ? 'entering' : ''} ${dragging ? 'dragging' : ''} ${neighborDirection ? `neighbor-${neighborDirection}` : ''} rarity-${card.rarity} type-${card.type} dept-${card.dept.toLowerCase()}`}
+          ref={tilt.targetRef}
+          className={`card-view ${mode} ${selected ? 'selected' : ''} ${entering ? 'entering' : ''} ${dragging ? 'dragging' : ''} ${neighborDirection ? `neighbor-${neighborDirection}` : ''} rarity-${card.rarity} type-${card.type} dept-${card.dept.toLowerCase()} ${isFounder ? 'is-founder' : ''}`}
           data-card-id={card.id}
           draggable={draggable}
-        onClick={onClick}
-        onPointerEnter={updateFloatingHint}
-        onPointerMove={handlePointerMove}
-        onPointerLeave={handlePointerLeave}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-        title={usesFloatingHint ? undefined : `${card.name} · ${fullEffectText}`}
-        aria-label={`${card.name} · ${fullEffectText}`}
-        type={onClick ? 'button' : undefined}
-      >
+          onClick={onClick}
+          onPointerEnter={handleStagePointerMove}
+          onPointerMove={handlePointerMove}
+          onPointerLeave={handlePointerLeave}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          aria-label={`${card.name} · ${fullEffectText}`}
+          type={onClick ? 'button' : undefined}
+        >
+          {isFounder && <span className="founder-border-glow" aria-hidden="true" />}
           {neighborDirection && (
             <span className={`neighbor-cue ${neighborDirection}`} aria-hidden="true">
               {(neighborDirection === 'left' || neighborDirection === 'both') && <i className="left" />}
@@ -172,7 +122,7 @@ export function CardView({
           <span className="card-top">
             <i className="card-title-chip">
               <DepartmentIcon className="card-dept-icon" size={12} aria-hidden="true" />
-              <span>{card.name}</span>
+              <span>{isFounder ? '创始人' : card.name}</span>
             </i>
             <em>{rarityLabel}</em>
             <b><Zap className="card-ap-icon" size={12} />{card.ap}</b>
@@ -191,24 +141,10 @@ export function CardView({
               </>
             ) : primary}
           </span>
-          {!isActionCard && <span className="card-effects">{shortEffectText}</span>}
-          {cardAffixes.length > 0 && (
-            <span className="affix-row">
-              {cardAffixes.slice(0, 2).map((affix) => <i key={affix.id}>★{affix.name}</i>)}
-            </span>
-          )}
-          <span className="card-flavor">"{card.flavor}"</span>
+          {!isActionCard && shortEffectText && <span className="card-effects">{shortEffectText}</span>}
         </Component>
       </span>
-      {usesFloatingHint && handHint && createPortal(
-        <div
-          className={`card-effect-floating-hint x-${handHint.x} y-${handHint.y}`}
-          style={{ left: handHint.left, top: handHint.top }}
-        >
-          {fullEffectText}
-        </div>,
-        document.body,
-      )}
+      {usesFloatingHint && tooltip.renderTooltip()}
     </>
   )
 }
@@ -253,6 +189,10 @@ export function summarizeEffect(effect = '') {
   const value = summarizeEffectValue(normalized)
   const strengthen = value ? `加强 ${value}` : '加强'
 
+  if (normalized.includes('FOUNDER_LEAN_MANAGEMENT')) return '精益管理：只要Founder在手里，本轮最大AP+1，打出的话本轮 AP+3'
+  if (normalized.includes('FOUNDER_SALES_HIGH')) return 'Sales High：只要在手里，产出系数*1.2，打出的话本轮产出系数*1.8'
+  if (normalized.includes('FOUNDER_AI_RD')) return 'AI-Driven 研发：只要在手里，每轮抓牌数+1，打出的话本轮抓牌数+3（手牌数不能超过10 张）'
+
   if (normalized.includes('MONTH_NO_MAINTAIN')) return '本月免维持费'
   if (normalized.includes('MONTH_BONUS')) return value ? `本月产能 ${value}` : '本月产能增加'
   if (normalized.includes('MONTH_STAR_RATE')) return value ? `叙事率 ${value}` : '叙事率提高'
@@ -280,6 +220,11 @@ export function summarizeEffect(effect = '') {
 function summarizeEffectShort(effect = '') {
   const normalized = String(effect).replace('TRIGGER: ', '').trim()
   const value = summarizeEffectValue(normalized)
+
+  if (normalized.includes('FOUNDER_LEAN_MANAGEMENT')) return '精益管理'
+  if (normalized.includes('FOUNDER_SALES_HIGH')) return 'Sales High'
+  if (normalized.includes('FOUNDER_AI_RD')) return 'AI研发'
+
   if (normalized.includes('MONTH_NO_MAINTAIN')) return '免维持'
   if (normalized.includes('MONTH_BONUS')) return value ? `本月${value}` : '本月加产'
   if (normalized.includes('MONTH_STAR_RATE')) return value ? `叙事${value}` : '叙事率'
