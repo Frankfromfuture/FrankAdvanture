@@ -7,6 +7,8 @@ import PhaserBattleFX from './PhaserBattleFX.jsx'
 import PhaserMenuFX from './PhaserMenuFX.jsx'
 import { PackBox3D } from './PackBox3D.jsx'
 import { ServiceFunSvg, hasServiceFunSvg } from './ServiceFunSvg.jsx'
+import { createRivalInstance, createBattle, RIVAL_SCHEDULE, RIVAL_ARCHETYPES } from './game/rivals.js'
+import { MarketShareBar } from './components/MarketShareBar.jsx'
 import { ExecutiveSvgPortrait } from './人物/ExecutiveSvgPortrait.jsx'
 import { PixelPersonPortrait } from './人物/PixelPersonPortrait.jsx'
 import {
@@ -28,6 +30,7 @@ import {
   UserPlus,
   Zap,
   AlertTriangle,
+  Skull,
 } from 'lucide-react'
 import {
   AFFIX_POOL,
@@ -70,6 +73,7 @@ import {
   dismissCardInBoardMeeting,
   pickHighlightCard,
   dismissHighlightCard,
+  claimRivalReward,
   unsubscribeBusinessModel,
   computeValuation,
   getAllCards,
@@ -610,6 +614,7 @@ function App() {
   const isInteractionLocked = isSettling || isAnimating
   const [comboOpen, setComboOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+
   const [creditsOpen, setCreditsOpen] = useState(false)
   const [layoutEditMode, setLayoutEditMode] = useState(false)
   const [layoutOverrides, setLayoutOverrides] = useState(_loadLayout)
@@ -646,6 +651,14 @@ function App() {
   const preview = useMemo(() => computeBattlePreview(game), [game])
   const activeLineAp = getLineAp(activeLine?.slots ?? [])
   const apLimit = getEffectiveApLimit(game)
+
+  // 竞争公司系统：胜利时自动收编对手卡组（无模态弹窗，效果通过 log + 战场样式 in-game 呈现）
+  useEffect(() => {
+    if (game.rivalRewardPending && game.rivalRewardPending.length > 0) {
+      const result = claimRivalReward(game)
+      if (result.ok) setGame(result.state)
+    }
+  }, [game.rivalRewardPending])
 
   useEffect(() => {
     if (!import.meta.env.DEV) return
@@ -1174,6 +1187,54 @@ function App() {
     setScreen('profession')
   }
 
+  // 测试入口：直接进入对决期，预置一个活跃 Boss 战
+  function startBossTest(archetypeId = 'price-butcher', tier = 2) {
+    playUiSfx('transition')
+    localStorage.removeItem(GAME_STATE_STORAGE_KEY)
+    const base = createInitialState({ profession: 'scientist' })
+    // 找到对应 tier 的 schedule
+    const scheduleEntry = RIVAL_SCHEDULE.find((s) => s.tier === tier) ?? RIVAL_SCHEDULE[1]
+    // 用指定 archetype 构造对手
+    const archetype = RIVAL_ARCHETYPES.find((a) => a.id === archetypeId) ?? RIVAL_ARCHETYPES[0]
+    const rivalInstance = {
+      archetypeId: archetype.id,
+      archetypeName: archetype.name,
+      archetypeTitle: archetype.title,
+      name: archetype.rivalNames[0],
+      tier,
+      isUltimate: archetypeId === 'ultimate',
+      estimatedMonthlyIncome: 200,
+      weaknessHint: archetype.weaknessHint,
+      flavor: archetype.flavor,
+    }
+    const battle = createBattle(rivalInstance)
+    const testState = {
+      ...base,
+      // 跳到对决月，给足资金
+      cash: 4000,
+      valuation: 1200,
+      highestValuation: 1200,
+      elapsedMonths: scheduleEntry.startElapsedMonth,
+      battle,
+      defeatedRivals: [],
+      log: [`🧪 测试模式：直接进入 ${archetype.name} · ${rivalInstance.name} 对决`, ...base.log],
+    }
+    setGame(testState)
+    setHint('')
+    setDrawer(null)
+    setEnteringHandUids(new Set())
+    setSettlementFx(null)
+    setIsSettling(false)
+    setDraggingCardUid(null)
+    setComboOpen(false)
+    setSettingsOpen(false)
+    setCreditsOpen(false)
+    setTutorialStep(0)
+    setTutorialDone(true)  // 跳过新手引导
+    window.clearTimeout(settlementFxTimerRef.current)
+    setScreen('battle')
+  }
+
   function handleSelectProfession(prof) {
     playUiSfx('transition')
     localStorage.removeItem(GAME_STATE_STORAGE_KEY)
@@ -1398,6 +1459,10 @@ function App() {
     >
       <DriftingCheckerboardBackground direction={game.driftDirection} stageId={game.stage.id} />
 
+      {game.battle?.active && (
+        <MarketShareBar battle={game.battle} intro={(game.battle.monthsElapsed ?? 0) <= 1} />
+      )}
+
       <TopHud
         game={game}
         preview={preview}
@@ -1471,29 +1536,54 @@ function App() {
         </section>
 
         <aside className="battle-panel event-panel">
-          <EditableBlock id="event-heading" label="事件标题">
-            <PanelHeading icon={ClipboardList} title="本月事件" sub={game.event.tone} tone={game.event.tone} textId="event-heading" />
-          </EditableBlock>
-          <EditableBlock id="event-card" label="事件卡片">
-            <div className={`event-card tone-${game.event.tone}`}>
-              <strong>{game.event.name}</strong>
-              <p>{game.event.description}</p>
-              {game.event.effectLines.map((line) => <span key={line}>{line}</span>)}
-            </div>
-          </EditableBlock>
-          <EditableBlock id="event-preview" label="年度大事件">
-            <BossEventPreview
-              majorEvent={game.majorEvent}
-              upcomingMajorEvent={game.upcomingMajorEvent}
-              countdown={game.majorEventCountdown}
-              tooltipCtx={appTooltip}
-            />
-          </EditableBlock>
+          <div className="event-heading-and-card">
+            {game.battle?.active && (
+              <EditableBlock id="event-heading" label="事件标题">
+                <PanelHeading icon={Skull} title="商战阶段" sub={`T${game.battle.tier}${game.battle.isUltimate ? ' · 终极' : ''}`} tone="威胁" />
+              </EditableBlock>
+            )}
+            <EditableBlock id="event-card" label="事件卡片">
+              {game.battle?.active ? (
+                <div className="event-card tone-威胁">
+                  <strong>{game.battle.rivalName}</strong>
+                  <p>{game.battle.weaknessHint}</p>
+                  <span>对手月度营收 +¥{game.battle.lastRivalIncome ?? game.battle.estimatedMonthlyIncome ?? 0}</span>
+                  <span>你方有效收入 ¥{game.battle.lastEffectivePlayerIncome ?? 0}</span>
+                  <span>上月份额变化 {game.battle.lastShareDelta != null ? (game.battle.lastShareDelta >= 0 ? `+${game.battle.lastShareDelta}%` : `${game.battle.lastShareDelta}%`) : '0%'}</span>
+                </div>
+              ) : (
+                <EventCardNewspaper
+                  event={game.event}
+                  majorEvent={game.majorEvent}
+                  upcomingMajorEvent={game.upcomingMajorEvent}
+                  countdown={game.majorEventCountdown}
+                  battle={game.battle}
+                  upcomingRival={game.upcomingRival}
+                  elapsedMonths={game.elapsedMonths}
+                />
+              )}
+            </EditableBlock>
+          </div>
           <div className="event-ap-slot">
-            <EditableBlock id="event-ap" label="行动力 AP">
+            <EditableBlock id="event-ap" label="行动力 AP" editable={false}>
               <ActionPowerHud game={game} activeLineAp={activeLineAp} apLimit={apLimit} />
             </EditableBlock>
           </div>
+          {game.battle?.active && (
+            <EditableBlock id="event-preview" label="年度大事件">
+              <BossEventPreview
+                majorEvent={game.majorEvent}
+                upcomingMajorEvent={game.upcomingMajorEvent}
+                countdown={game.majorEventCountdown}
+                tooltipCtx={appTooltip}
+                battle={game.battle}
+                upcomingRival={game.upcomingRival}
+                elapsedMonths={game.elapsedMonths}
+              />
+            </EditableBlock>
+          )}
+
+
         </aside>
 
       </section>
@@ -1540,7 +1630,7 @@ function App() {
           </div>
         </EditableBlock>
 
-        <EditableBlock id="hand-meta" label="牌堆信息">
+        <EditableBlock id="hand-meta" label="牌堆信息" editable={false}>
           <div className="hand-meta">
             <DeckButton icon={Layers3} label="牌堆" count={game.drawPile.length} onClick={() => setDrawer('deck')} />
             <DeckButton icon={Archive} label="冷却" count={game.coolingPile.length} onClick={() => setDrawer('cooling')} />
@@ -1578,6 +1668,10 @@ function App() {
           onEnterBoardMeeting={handleQuickEnterBoardMeeting}
           onOpenCompendium={handleOpenCompendium}
           onEditLayout={openLayoutEdit}
+          onTestBoss={(archetypeId, tier) => {
+            setSettingsOpen(false)
+            startBossTest(archetypeId, tier)
+          }}
         />
       )}
       {Array.isArray(game.highlightPending) && game.highlightPending.length > 0 && (
@@ -1895,9 +1989,68 @@ function ActionPowerHud({ game, activeLineAp, apLimit }) {
 }
 
 // 紧凑版：放在 event-panel 里，沿用 preview-card hud-item 字体风格
-function BossEventPreview({ majorEvent, upcomingMajorEvent, countdown, tooltipCtx }) {
+// 优先级：对决进行中 > 商战即将开始 > 年度大事件
+function BossEventPreview({ majorEvent, upcomingMajorEvent, countdown, tooltipCtx, battle, upcomingRival, elapsedMonths }) {
   const tierLabels = { 1: '轻度', 2: '中度', 3: '高度', 4: '重度', 5: '毁灭级' }
 
+  // 优先 1：对决进行中 → 显示距离商战结束
+  if (battle && battle.active) {
+    const battleRemaining = Math.max(0, 6 - (battle.monthsElapsed ?? 0))
+    const tier = battle.tier ?? 1
+    return (
+      <div
+        className={`preview-card hud-item boss-preview boss-preview-active boss-tier-${tier}`}
+        onPointerEnter={(e) => tooltipCtx.showTooltip(
+          <div>
+            <div className="tooltip-title">商战 · 进行中</div>
+            <div>对手: {battle.archetypeName} · {battle.rivalName}</div>
+            <div>难度: T{tier}{battle.isUltimate ? ' · 终极' : ''}</div>
+            <div className="tooltip-divider" />
+            <div>剩余月数 {battleRemaining} 月内未把对手压到 ≤20% 即超时撤离</div>
+          </div>, e)}
+        onPointerMove={tooltipCtx.updateTooltip}
+        onPointerLeave={tooltipCtx.hideTooltip}
+      >
+        <span className="boss-preview-label">
+          <Skull size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+          距离商战结束
+        </span>
+        <strong>{battleRemaining} 个月</strong>
+        <em>T{tier} {tierLabels[tier] ?? ''}{battle.isUltimate ? ' · 终极' : ''}</em>
+      </div>
+    )
+  }
+
+  // 优先 2：商战即将开战
+  if (upcomingRival) {
+    const monthsToStart = Math.max(0, (upcomingRival.startElapsedMonth ?? 0) - (elapsedMonths ?? 0))
+    const tier = upcomingRival.tier ?? 1
+    return (
+      <div
+        className={`preview-card hud-item boss-preview boss-preview-warn boss-tier-${tier}`}
+        onPointerEnter={(e) => tooltipCtx.showTooltip(
+          <div>
+            <div className="tooltip-title">商战倒计时</div>
+            <div>对手: {upcomingRival.archetypeName} · {upcomingRival.name}</div>
+            <div>难度: T{tier}{upcomingRival.isUltimate ? ' · 终极' : ''}</div>
+            <div>预估月收入: ¥{upcomingRival.estimatedMonthlyIncome}</div>
+            <div className="tooltip-divider" />
+            <div>💡 {upcomingRival.weaknessHint}</div>
+          </div>, e)}
+        onPointerMove={tooltipCtx.updateTooltip}
+        onPointerLeave={tooltipCtx.hideTooltip}
+      >
+        <span className="boss-preview-label">
+          <AlertTriangle size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+          商战倒计时
+        </span>
+        <strong>{monthsToStart} 个月</strong>
+        <em>T{tier} {tierLabels[tier] ?? ''}{upcomingRival.isUltimate ? ' · 终极' : ''}</em>
+      </div>
+    )
+  }
+
+  // 优先 3：年度大事件（保留原逻辑）
   const buildTooltip = (ev, label) => (
     <div>
       <div className="tooltip-title">{label}</div>
@@ -2744,9 +2897,10 @@ function ComboRulesOverlay({ onClose }) {
   )
 }
 
-function SettingsOverlay({ onClose, onRestart, onClearArchive, onPass, onMain, onEnterBoardMeeting, canEnterBoardMeeting, onOpenCompendium, onEditLayout }) {
+function SettingsOverlay({ onClose, onRestart, onClearArchive, onPass, onMain, onEnterBoardMeeting, canEnterBoardMeeting, onOpenCompendium, onEditLayout, onTestBoss }) {
   const [master, setMaster] = useState(() => AUDIO_VOLUME.master)
   const [sfx, setSfx] = useState(() => AUDIO_VOLUME.sfx)
+  const [bossPickerOpen, setBossPickerOpen] = useState(false)
   const blipTimerRef = useRef(null)
 
   function handleMasterChange(value) {
@@ -2783,7 +2937,75 @@ function SettingsOverlay({ onClose, onRestart, onClearArchive, onPass, onMain, o
         {canEnterBoardMeeting && (
           <button onClick={onEnterBoardMeeting}>直接进入董事会会议</button>
         )}
+        {onTestBoss && <button onClick={() => setBossPickerOpen(true)}>🧪 测试 Boss 战</button>}
         {onMain && <button onClick={onMain}>返回主界面</button>}
+      </section>
+      {bossPickerOpen && onTestBoss && (
+        <BossTestPicker
+          onPick={(archetypeId, tier) => {
+            setBossPickerOpen(false)
+            onTestBoss(archetypeId, tier)
+          }}
+          onCancel={() => setBossPickerOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+function BossTestPicker({ onPick, onCancel }) {
+  const [tier, setTier] = useState(2)
+  return (
+    <div className="modal-backdrop retro-backdrop" style={{ zIndex: 200 }} onMouseDown={onCancel}>
+      <section className="retro-panel settings-panel" style={{ maxWidth: 480 }} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="retro-title">
+          <strong>🧪 选择测试对手</strong>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '8px 0' }}>
+          <span style={{ fontSize: 13, color: '#aab4c8' }}>难度 Tier:</span>
+          {[1, 2, 3, 4, 5].map((t) => (
+            <button
+              key={t}
+              onClick={() => setTier(t)}
+              style={{
+                padding: '4px 12px',
+                background: tier === t ? '#ffd060' : 'transparent',
+                color: tier === t ? '#2a1a00' : '#e6ecf5',
+                border: '1.5px solid #ffd060',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                fontWeight: 'bold',
+              }}
+            >
+              T{t}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: 8 }}>
+          {RIVAL_ARCHETYPES.map((a) => (
+            <button
+              key={a.id}
+              onClick={() => onPick(a.id, a.id === 'ultimate' ? 5 : tier)}
+              style={{
+                padding: '12px 10px',
+                background: 'rgba(20, 30, 50, 0.7)',
+                border: a.id === 'ultimate' ? '2px solid #ffd060' : '2px solid #ff5566',
+                color: '#e6ecf5',
+                fontFamily: 'inherit',
+                cursor: 'pointer',
+                textAlign: 'left',
+                fontSize: 12,
+              }}
+            >
+              <div style={{ fontSize: 14, fontWeight: 'bold', color: a.id === 'ultimate' ? '#ffd060' : '#ff8090', marginBottom: 4 }}>
+                {a.name} {a.id === 'ultimate' && '· 终极'}
+              </div>
+              <div style={{ color: '#aab4c8', fontSize: 11, marginBottom: 4 }}>{a.title}</div>
+              <div style={{ color: '#c8d4e8', fontSize: 10, lineHeight: 1.4 }}>{a.flavor}</div>
+            </button>
+          ))}
+        </div>
+        <button onClick={onCancel}>取消</button>
       </section>
     </div>
   )
@@ -3519,19 +3741,62 @@ function BoardMeetingHub({
     const tiltY = pctX * 4.5  // Max horizontal tilt
     const tiltX = -pctY * 4.0 // Max vertical tilt
 
-    panelRef.current.style.setProperty('--bm-tilt-x', `${tiltX.toFixed(2)}deg`)
-    panelRef.current.style.setProperty('--bm-tilt-y', `${tiltY.toFixed(2)}deg`)
+    panelRef.current.style.setProperty("--bm-tilt-x", `${tiltX.toFixed(2)}deg`)
+    panelRef.current.style.setProperty("--bm-tilt-y", `${tiltY.toFixed(2)}deg`)
   }
 
   function handleMouseLeave() {
     if (!panelRef.current) return
-    panelRef.current.style.setProperty('--bm-tilt-x', '0deg')
-    panelRef.current.style.setProperty('--bm-tilt-y', '0deg')
+    panelRef.current.style.setProperty("--bm-tilt-x", "0deg")
+    panelRef.current.style.setProperty("--bm-tilt-y", "0deg")
   }
+
+  const stationCards = [
+    {
+      id: "strategy",
+      color: "amber",
+      icon: <RecordsStationIcon />,
+      title: "战略指引",
+      tag: "STRATEGY",
+      description: "确定下一阶段的战略调整与董事抉择",
+      status: im.phase === "event" ? "待选择战略" : "战略已确立",
+      metric: im.phase === "event" ? "🚨 待决策" : im.event.title,
+    },
+    {
+      id: "shop",
+      color: "azure",
+      icon: <ShopStationIcon />,
+      title: "投资会议",
+      tag: "INVESTMENT",
+      description: "招募史诗/传奇卡牌与开启人才礼包",
+      status: `现金 ¥${game.cash}`,
+      metric: `${im.purchased.epic ? "EPIC已购" : "EPIC待选"} · ${im.purchased.legendary ? "LEG已购" : "LEG待选"}`,
+    },
+    {
+      id: "hr",
+      color: "rose",
+      icon: <HrStationIcon />,
+      title: "HR会议",
+      tag: "HR MEETING",
+      description: "员工职级升职、附加词缀与裁撤",
+      status: `升职 ${im.hrActionsCount}/1`,
+      metric: `解雇 ${im.fireActionsCount}/5`,
+    },
+    {
+      id: "school",
+      color: "violet",
+      icon: <SchoolStationIcon />,
+      title: "商学院",
+      tag: "BUSINESS SCHOOL",
+      description: "订阅或退订全局商业模式以调整打法",
+      status: `${game.activeBusinessModels.length}/${game.businessModelSlotCap} 槽位`,
+      metric: im.schoolPurchased ? "本期已订阅" : "本期可选课",
+    },
+  ]
 
   return (
     <div className="bm-overlay" onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
-      <section className={`bm-panel ${popActive ? 'pop-active' : ''}`} ref={panelRef}>
+      <section className={`bm-panel ${popActive ? "pop-active" : ""}`} ref={panelRef}>
         <header className="bm-panel-header">
           <div className="bm-cash-chip">
             <span aria-hidden="true">¥</span>
@@ -3546,9 +3811,9 @@ function BoardMeetingHub({
             className="bm-next-button"
             disabled={isEventPhase}
             onClick={() => setConfirmExit(true)}
-            title={isEventPhase ? '请先完成董事访谈' : (im.isPromotion ? '进入下一阶段' : '结束董事会')}
+            title={isEventPhase ? "请先制定本期战略" : (im.isPromotion ? "进入下一阶段" : "结束董事会")}
           >
-            {im.isPromotion ? '进入下一阶段 ▸' : '结束董事会 ▸'}
+            {im.isPromotion ? "进入下一阶段 ▸" : "结束董事会 ▸"}
           </button>
         </header>
 
@@ -3557,16 +3822,10 @@ function BoardMeetingHub({
         )}
 
         <main className="bm-panel-body">
-          {isEventPhase ? (
-            <BoardEventModal
-              event={im.event}
-              budget={game.cash}
-              onSelect={(optId) => onResolveEvent(optId)}
-            />
-          ) : activeStation ? (
+          {activeStation ? (
             <div className="bm-drawer-wrap">
-              <button className="bm-back-btn" onClick={() => setActiveStation(null)}>◂ 返回站点</button>
-              {activeStation === 'shop' && (
+              <button className="bm-back-btn" onClick={() => setActiveStation(null)}>◂ 返回会议</button>
+              {activeStation === "shop" && (
                 <ShopDrawer
                   shopRoll={im.shopRoll}
                   purchased={im.purchased}
@@ -3578,7 +3837,7 @@ function BoardMeetingHub({
                   onClose={() => setActiveStation(null)}
                 />
               )}
-              {activeStation === 'hr' && (
+              {activeStation === "hr" && (
                 <HrDrawer
                   game={game}
                   hrCardUid={hrCardUid}
@@ -3588,7 +3847,7 @@ function BoardMeetingHub({
                   onClose={() => setActiveStation(null)}
                 />
               )}
-              {activeStation === 'school' && (
+              {activeStation === "school" && (
                 <SchoolDrawer
                   game={game}
                   schoolRoll={im.schoolRoll}
@@ -3602,45 +3861,32 @@ function BoardMeetingHub({
                   onClose={() => setActiveStation(null)}
                 />
               )}
-              {activeStation === 'log' && (
-                <LogDrawer logTrail={im.logTrail} onClose={() => setActiveStation(null)} />
+              {activeStation === "strategy" && (
+                <StrategyDrawer game={game} onResolveEvent={onResolveEvent} onClose={() => setActiveStation(null)} />
               )}
             </div>
           ) : (
             <div className="bm-menu-and-finance">
               <div className="bm-stations-grid">
-                <StationCard
-                  color="azure"
-                  icon={<ShopStationIcon />}
-                  title="投资部"
-                  tag="SHOP"
-                  description="2 个三选一卡包 · 概率史诗+单卡"
-                  onClick={() => setActiveStation('shop')}
-                />
-                <StationCard
-                  color="rose"
-                  icon={<HrStationIcon />}
-                  title="人事部"
-                  tag="HR"
-                  description={`升职 / 免费解雇 · 本场操作 ${im.hrActionsCount}`}
-                  onClick={() => setActiveStation('hr')}
-                />
-                <StationCard
-                  color="violet"
-                  icon={<SchoolStationIcon />}
-                  title="商学院"
-                  tag="SCHOOL"
-                  description={`已学 ${game.activeBusinessModels.length}/${game.businessModelSlotCap} 商业模式`}
-                  onClick={() => setActiveStation('school')}
-                />
-                <StationCard
-                  color="amber"
-                  icon={<RecordsStationIcon />}
-                  title="董事访谈"
-                  tag="RECORDS"
-                  description="本场会议日志"
-                  onClick={() => setActiveStation('log')}
-                />
+                {stationCards.map((card) => (
+                  <StationCard
+                    key={card.id}
+                    color={card.color}
+                    icon={card.icon}
+                    title={card.title}
+                    tag={card.tag}
+                    description={card.description}
+                    status={card.status}
+                    metric={card.metric}
+                    onClick={() => {
+                      if (card.id === "strategy" && im.phase === "event") {
+                        setActiveStation("strategy")
+                      } else {
+                        setActiveStation(card.id)
+                      }
+                    }}
+                  />
+                ))}
               </div>
             </div>
           )}
@@ -3661,32 +3907,103 @@ function BoardMeetingHub({
   )
 }
 
-function BoardEventModal({ event, budget, onSelect }) {
-  return (
-    <div className="bm-event-overlay">
-      <section className="bm-event-modal">
-        <header>
-          <span className="event-tag">📰 董事访谈</span>
-          <strong>{event.title}</strong>
-        </header>
-        <p className="event-flavor">{event.flavor}</p>
-        <div className="event-options">
-          {event.options.map((opt) => {
-            const disabled = opt.cost && budget < opt.cost
-            return (
-              <button
-                key={opt.id}
-                className={`event-option ${disabled ? 'disabled' : ''}`}
-                disabled={disabled}
-                onClick={() => onSelect(opt.id)}
-              >
-                <strong>{opt.label}</strong>
-                <span>{disabled ? '¥ 不足' : describeEventEffect(opt)}</span>
-              </button>
-            )
-          })}
+// ─── 报纸背景事件卡 — 外壳用 C6 报纸样式，内容原字体原样式 ────────────────
+// 将文本中 +/- 前缀数字着色：正值绿，负值红
+// 格式示例：'收入 -10%'、'维持费 +15%'、'AP -1'、'+¥200'
+function colorizeEffectLine(text) {
+  if (!text) return text
+  // 捕获：+/- 符号 + 可选¥ + 数字 + 可选小数 + 可选单位(%/百分点/pp)
+  const parts = text.split(/([-+](?:¥)?\d+(?:[.,]\d+)?(?:%|百分点|pp)?)/)
+  return parts.map((part, i) => {
+    if (part.startsWith('+')) return <span key={i} className="newsp-num-pos">{part}</span>
+    if (part.startsWith('-')) return <span key={i} className="newsp-num-neg">{part}</span>
+    return part
+  })
+}
+
+function EventCardNewspaper({ event, majorEvent, upcomingMajorEvent, countdown, upcomingRival, elapsedMonths }) {
+  const tierLabels = { 1: '轻度', 2: '中度', 3: '高度', 4: '重度', 5: '毁灭级' }
+
+  // 决定第二栏内容（优先级：年度大事件进行中 > 预警 > 商战倒计时）
+  let annualSection = null
+  if (majorEvent) {
+    const remaining = majorEvent.remainingMonths ?? 0
+    const tier = majorEvent.tier ?? 1
+    annualSection = (
+      <>
+        <div className="newsp-dateline">
+          <span>年度大事件</span>
+          <span>T{tier} {tierLabels[tier] ?? ''}</span>
         </div>
-      </section>
+        <div className="newsp-single-rule" />
+        <div className="newsp-annual-body">
+          <strong>{majorEvent.name}</strong>
+          <em>进行中 · 剩余 {remaining} 个月</em>
+          {(majorEvent.effectLines ?? []).map((line) => <span key={line}>{colorizeEffectLine(line)}</span>)}
+        </div>
+      </>
+    )
+  } else if (upcomingMajorEvent && countdown > 0 && countdown <= 3) {
+    const tier = upcomingMajorEvent.tier ?? 1
+    annualSection = (
+      <>
+        <div className="newsp-dateline">
+          <span>大事件预警</span>
+          <span>T{tier} {tierLabels[tier] ?? ''}</span>
+        </div>
+        <div className="newsp-single-rule" />
+        <div className="newsp-annual-body">
+          <strong>{upcomingMajorEvent.name}</strong>
+          <em>{countdown} 个月后触发</em>
+          {(upcomingMajorEvent.effectLines ?? []).map((line) => <span key={line}>{colorizeEffectLine(line)}</span>)}
+        </div>
+      </>
+    )
+  } else if (upcomingRival) {
+    const monthsToStart = Math.max(0, (upcomingRival.startElapsedMonth ?? 0) - (elapsedMonths ?? 0))
+    const tier = upcomingRival.tier ?? 1
+    annualSection = (
+      <>
+        <div className="newsp-dateline">
+          <span>商战倒计时</span>
+          <span>T{tier} {tierLabels[tier] ?? ''}</span>
+        </div>
+        <div className="newsp-single-rule" />
+        <div className="newsp-annual-body">
+          <strong>{upcomingRival.archetypeName} · {upcomingRival.name}</strong>
+          <em>{monthsToStart} 个月后开战</em>
+          <span>💡 {upcomingRival.weaknessHint}</span>
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <div className="event-newspaper">
+      {/* masthead：border-bottom 4px double = 双横线 */}
+      <div className="masthead2">The Daily Biz</div>
+      {/* dateline：左"本月事件"，右实际 tone */}
+      <div className="newsp-dateline">
+        <span>本月事件</span>
+        <span>{event.tone}</span>
+      </div>
+      {/* 单横线 */}
+      <div className="newsp-single-rule" />
+      {/* 原 event-card 内容，原字体原样式；若有第二栏则留出两行间距 */}
+      <div className={`event-card tone-${event.tone}${annualSection ? ' newsp-section-gap' : ''}`}>
+        <strong>{event.name}</strong>
+        <p>{event.description}</p>
+        {(event.effectLines ?? []).map((line) => (
+          <span key={line}>{colorizeEffectLine(line)}</span>
+        ))}
+      </div>
+      {/* 第二栏：年度大事件 / 预警 / 商战倒计时 */}
+      {annualSection && (
+        <>
+          <div className="newsp-divider-double" />
+          {annualSection}
+        </>
+      )}
     </div>
   )
 }
@@ -4109,24 +4426,68 @@ function businessModeImageSrc(bm) {
   return bm?.id ? `/assets/business-modes/${bm.id}.png?v=bm-square-1-40` : ''
 }
 
-function LogDrawer({ logTrail, onClose }) {
+function StrategyDrawer({ game, onResolveEvent, onClose }) {
+  const im = game.intermissionState
+  const isEventPhase = im.phase === 'event'
+
   return (
-    <section className="bm-drawer log-drawer">
+    <section className="bm-drawer strategy-drawer">
       <header>
-        <strong>📰 董事访谈 · 日志</strong>
+        <strong>📰 战略指引 · Strategic Guidance</strong>
         <div className="drawer-actions">
           <button className="bm-close-btn" onClick={onClose}>×</button>
         </div>
       </header>
-      <div className="bm-log-list">
-        {logTrail.map((line, i) => (
-          <div key={i} className={i === 0 ? 'bm-log-newest' : ''}>{line}</div>
-        ))}
-      </div>
+
+      {isEventPhase ? (
+        <div className="strategy-event-content">
+          <div className="strategy-event-header">
+            <span className="event-tag">董事决议</span>
+            <h3>{im.event.title}</h3>
+          </div>
+          <p className="event-flavor">{im.event.flavor}</p>
+          <div className="event-options vertical-layout">
+            {im.event.options.map((opt) => {
+              const cashShort = opt.cost && game.cash < opt.cost
+              const pickedList = game.battle?.pickedStrategies ?? []
+              const alreadyPicked = im.event.isBossCounter && !opt.repeatable && pickedList.includes(opt.id)
+              const disabled = cashShort || alreadyPicked
+              return (
+                <button
+                  key={opt.id}
+                  className={`event-option ${disabled ? 'disabled' : ''}${alreadyPicked ? ' already-picked' : ''}`}
+                  disabled={disabled}
+                  onClick={() => onResolveEvent(opt.id)}
+                >
+                  <strong>{opt.label}</strong>
+                  <span>{alreadyPicked ? '本局已采用' : (cashShort ? '¥ 不足' : describeEventEffect(opt))}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="strategy-resolved-content">
+          <div className="strategy-success-banner">
+            <div className="resolved-check">✓ 战略决策已达成</div>
+            <h3>{im.event.title}</h3>
+            {im.resolvedMessage && (
+              <p className="resolved-msg">▶ {im.resolvedMessage}</p>
+            )}
+          </div>
+          <div className="strategy-log-section">
+            <h4>会议记录与历史日志</h4>
+            <div className="bm-log-list">
+              {im.logTrail.map((line, i) => (
+                <div key={i} className={i === 0 ? "bm-log-newest" : ""}>{line}</div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
-
 function ConfirmExitModal({ budget, activeBMs, nextStageName, isPromotion, onConfirm, onCancel }) {
   return (
     <div className="bm-confirm-overlay" onMouseDown={onCancel}>

@@ -9,13 +9,32 @@ const DESIGN_H = 1080
 
 function updateScale() {
   const isPortraitMobile = getOrientationState().isPortraitMobile
-  const scaleX = window.innerWidth / (isPortraitMobile ? DESIGN_H : DESIGN_W)
-  const scaleY = window.innerHeight / (isPortraitMobile ? DESIGN_W : DESIGN_H)
-  const scale = Math.min(scaleX, scaleY)
+  const baseW = isPortraitMobile ? DESIGN_H : DESIGN_W
+  const baseH = isPortraitMobile ? DESIGN_W : DESIGN_H
+
+  const scaleX = window.innerWidth / baseW
+  const scaleY = window.innerHeight / baseH
+  const scale = Math.max(0.001, Math.min(scaleX, scaleY)) || 1
+
+  let designW = DESIGN_W
+  let designH = DESIGN_H
+
+  if (scaleX >= scaleY) {
+    // scale is scaleY, height fits exactly, width has extra space
+    const expandedW = window.innerWidth / scale
+    designW = isPortraitMobile ? DESIGN_W : expandedW
+    designH = isPortraitMobile ? expandedW : DESIGN_H
+  } else {
+    // scale is scaleX, width fits exactly, height has extra space
+    const expandedH = window.innerHeight / scale
+    designW = isPortraitMobile ? expandedH : DESIGN_W
+    designH = isPortraitMobile ? DESIGN_H : expandedH
+  }
+
   document.documentElement.style.setProperty('--app-scale', String(scale))
   document.documentElement.style.setProperty('--app-rotation', isPortraitMobile ? '90deg' : '0deg')
-  document.documentElement.style.setProperty('--design-w', `${DESIGN_W}px`)
-  document.documentElement.style.setProperty('--design-h', `${DESIGN_H}px`)
+  document.documentElement.style.setProperty('--design-w', `${Math.round(designW)}px`)
+  document.documentElement.style.setProperty('--design-h', `${Math.round(designH)}px`)
 }
 
 function Root() {

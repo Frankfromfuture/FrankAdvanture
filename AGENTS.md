@@ -13,6 +13,7 @@
 - **开发**：`cd web-battle && npm run dev` → http://127.0.0.1:5173
 - **构建**：`npm run build`
 - **测试**：`npm run test` (Vitest 单元测试)
+- **数值模拟**：`npm run simulate -- --runs 20 --months 72 --seed 100`
 - Godot 桌面方向已废弃；快照 tag 在 `v1.0-godot-snapshot`。
 
 ## 核心规则（v3.2 关键变化）
@@ -46,12 +47,36 @@
 | `web-battle/src/game/cards.js` | 9 阶段配置、卡牌 Base Burn/Asset 集中参数 | — |
 | `web-battle/src/game/engine.js` | 核心引擎 (估值计算、月份结算、董事会财务提取等) | `npm run test` 必须通过 |
 | `web-battle/src/game/engine.test.js` | Vitest 单元测试套件 | — |
+| `web-battle/src/game/simulation.js` | 无浏览器 AI 经营模拟器，用于数值平衡压测 | 改估值 / burn / 阶段推进后建议跑 |
+
+## 数值模拟 / AI 自测
+
+`web-battle/src/game/simulation.js` 是给 agent 使用的 headless AI simulator，不开浏览器，直接调用真实引擎逻辑。
+
+它会模拟：
+- 自动布置产线：调用 `autoDeployActiveLine`
+- 每月真实抓牌、弃牌、结算、冷却、产线推进
+- 董事会自动决策：事件选项、买卡、开包、订阅 BM、HR 升职、必要时裁掉高 burn 低价值卡
+- 输出每月产值、估值、现金、burn、利润、CCR、AP、抽卡、产线、BM、资产和阶段变化
+
+常用命令：
+```bash
+cd web-battle
+npm run simulate -- --runs 20 --months 72 --seed 100
+npm run simulate -- --runs 1 --months 24 --seed 7 --verbose
+npm run simulate -- --runs 50 --months 72 --seed 42 --json --out /tmp/frank-sim.json
+```
+
+使用原则：
+- 改 `computeValuation`、`computeMonthlyBurn`、`resolveMonth`、阶段门槛、AP、抽牌或董事会经济后，至少跑一次 `npm run test` 和一次 `npm run simulate`。
+- 如果模拟结果出现过快冲阶段、现金长期无压力、burn 压不住收入、估值大幅不同步，优先修引擎公式和测试，再调 UI 展示。
 
 **铁律**：
 1. 任何对结算/估值公式的修改都必须在 `engine.test.js` 中同步修改并保证 `npm run test` 通过。
 2. 董事会中解雇卡牌 (onFire) 改为调用免费的 `dismissCardInBoardMeeting` 逻辑。
 3. 增加卡牌或商业模式时必须按稀有度在 `cards.js` 中定义好 burn 与 assetValue 参数。
 4. 提交前 `npm run build` 必须无 error。
+5. 改数值平衡后用 `simulation.js` 输出至少一组样本，观察平均最终估值、现金、burn、利润、阶段分布。
 
 ## 推送规则
 

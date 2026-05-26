@@ -1,0 +1,1216 @@
+/* ============================================================
+   FRAME LIBRARY · retro · pixel · shadow
+   ============================================================ */
+
+:root {
+  --cream:   #f1e6c9;
+  --cream-2: #e8d9b3;
+  --paper:   #fffbf0;
+  --ink:     #1a1410;
+  --ink-2:   #3a2e22;
+  --rule:    #c4b48a;
+
+  --red:     #e8463a;
+  --red-2:   #b22d24;
+  --amber:   #f5b945;
+  --amber-2: #c89222;
+  --mint:    #5fc9a4;
+  --mint-2:  #2f9a76;
+  --sky:     #5d8fc9;
+  --sky-2:   #345d94;
+  --pink:    #ff6b9d;
+  --pink-2:  #c93f73;
+  --violet:  #8b5fbf;
+  --violet-2:#5e3c8a;
+
+  --gb-bg:   #9bbc0f;
+  --gb-mid:  #8bac0f;
+  --gb-dk:   #306230;
+  --gb-ink:  #0f380f;
+
+  --crt-bg:  #051a0a;
+  --crt-green:#3aff85;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  background:
+    radial-gradient(circle at 20% 0%, #f7eed4 0%, transparent 60%),
+    radial-gradient(circle at 90% 100%, #ead9ad 0%, transparent 55%),
+    var(--cream);
+  color: var(--ink);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  min-height: 100vh;
+  padding: 56px 48px 96px;
+}
+
+/* ---------- Page chrome ---------- */
+.page {
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.masthead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  border-bottom: 3px solid var(--ink);
+  padding-bottom: 20px;
+  margin-bottom: 16px;
+  position: relative;
+}
+.masthead::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0;
+  bottom: -8px;
+  height: 2px;
+  background: var(--ink);
+}
+
+.masthead h1 {
+  font-family: 'Press Start 2P', system-ui, monospace;
+  font-size: 22px;
+  letter-spacing: 1px;
+  margin: 0;
+  line-height: 1.4;
+}
+.masthead h1 span { color: var(--red); }
+
+.masthead .meta {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  text-align: right;
+  line-height: 1.7;
+}
+.masthead .meta b { color: var(--ink); font-weight: 700; }
+
+/* ---------- Section ---------- */
+section.frames {
+  margin-top: 56px;
+}
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  margin-bottom: 32px;
+}
+.section-head .num {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+  background: var(--ink);
+  color: var(--cream);
+  padding: 8px 10px 6px;
+}
+.section-head h2 {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 16px;
+  margin: 0;
+  letter-spacing: 1px;
+}
+.section-head .rule {
+  flex: 1;
+  height: 0;
+  border-top: 2px dashed var(--ink);
+  margin-bottom: 4px;
+}
+.section-head .kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--ink-2);
+}
+
+/* ---------- Grids ---------- */
+.grid-fn {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 36px 32px;
+}
+.grid-card {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 44px 32px;
+}
+@media (max-width: 1200px) {
+  .grid-fn, .grid-card { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 900px) {
+  .grid-fn, .grid-card { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Cell wraps each frame with a label below */
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  min-height: 220px;
+}
+.cell.card-cell { min-height: 340px; }
+
+.cell .label {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  width: 100%;
+}
+.cell .label .num {
+  display: inline-block;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  color: var(--red);
+  margin-right: 8px;
+}
+
+.cell .stage {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 4px;
+}
+
+/* ============================================================
+   FUNCTION FRAMES
+   ============================================================ */
+
+/* 01 — Pixel button (stepped corners + hard shadow) */
+.fn-pixelbtn {
+  --bg: var(--red);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
+  color: #fffbe6;
+  background: var(--bg);
+  padding: 18px 26px 16px;
+  letter-spacing: 1px;
+  position: relative;
+  clip-path: polygon(
+    0 8px, 4px 8px, 4px 4px, 8px 4px, 8px 0,
+    calc(100% - 8px) 0, calc(100% - 8px) 4px, calc(100% - 4px) 4px,
+    calc(100% - 4px) 8px, 100% 8px,
+    100% calc(100% - 8px), calc(100% - 4px) calc(100% - 8px),
+    calc(100% - 4px) calc(100% - 4px), calc(100% - 8px) calc(100% - 4px),
+    calc(100% - 8px) 100%, 8px 100%, 8px calc(100% - 4px),
+    4px calc(100% - 4px), 4px calc(100% - 8px), 0 calc(100% - 8px)
+  );
+  filter: drop-shadow(4px 4px 0 var(--ink));
+  text-shadow: 2px 2px 0 var(--red-2);
+}
+.fn-pixelbtn::before {
+  /* inner highlight */
+  content:"";
+  position: absolute;
+  inset: 4px 4px auto 4px;
+  height: 4px;
+  background: rgba(255,255,255,0.4);
+}
+
+/* 02 — CRT terminal */
+.fn-crt {
+  width: 280px;
+  height: 140px;
+  border-radius: 18px;
+  background:
+    radial-gradient(ellipse at 50% 45%, #07351a 0%, var(--crt-bg) 75%, #000 100%),
+    var(--crt-bg);
+  position: relative;
+  overflow: hidden;
+  border: 4px solid #1a0e08;
+  box-shadow:
+    inset 0 0 24px rgba(0,0,0,0.7),
+    inset 0 0 60px rgba(58,255,133,0.06),
+    6px 6px 0 var(--ink);
+  color: var(--crt-green);
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  padding: 14px 16px;
+  line-height: 1.1;
+  text-shadow: 0 0 4px var(--crt-green), 0 0 10px rgba(58,255,133,0.5);
+}
+.fn-crt::after {
+  /* scanlines */
+  content: "";
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0,0,0,0.35) 0 1px,
+    transparent 1px 3px
+  );
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+.fn-crt .blink {
+  display: inline-block;
+  width: 8px; height: 14px;
+  background: var(--crt-green);
+  vertical-align: -2px;
+  margin-left: 2px;
+  animation: blink 1s steps(2) infinite;
+  box-shadow: 0 0 6px var(--crt-green);
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* 03 — Ticket (perforated with notches) */
+.fn-ticket-wrap {
+  filter: drop-shadow(5px 5px 0 rgba(26,20,16,0.85));
+}
+.fn-ticket {
+  width: 300px;
+  height: 110px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'IBM Plex Mono', monospace;
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* Two semicircle notches at vertical center, left and right */
+  --r: 14px;
+  -webkit-mask:
+    radial-gradient(circle at left center, transparent var(--r), #000 calc(var(--r) + 0.5px)) ,
+    radial-gradient(circle at right center, transparent var(--r), #000 calc(var(--r) + 0.5px));
+  -webkit-mask-composite: source-in;
+          mask-composite: intersect;
+  -webkit-mask-repeat: no-repeat;
+  padding: 0 22px;
+}
+.fn-ticket .stub {
+  border-right: 2px dashed var(--ink-2);
+  padding: 10px 18px 10px 6px;
+  margin-right: 18px;
+}
+.fn-ticket .stub b {
+  display: block;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 18px;
+  letter-spacing: 1px;
+  color: var(--red);
+}
+.fn-ticket .stub small { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; }
+.fn-ticket .body { font-size: 11px; line-height: 1.35; }
+.fn-ticket .body .big {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  display: block;
+  margin-bottom: 4px;
+  letter-spacing: 1px;
+}
+
+/* 04 — Win95 bevel */
+.fn-win95 {
+  width: 260px;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  background: #c3c3c3;
+  border-top: 2px solid #fff;
+  border-left: 2px solid #fff;
+  border-right: 2px solid #404040;
+  border-bottom: 2px solid #404040;
+  box-shadow:
+    inset -1px -1px 0 #818181,
+    inset  1px  1px 0 #dfdfdf,
+    3px 3px 0 var(--ink);
+  padding: 0;
+}
+.fn-win95 .bar {
+  background: linear-gradient(90deg, #000080, #1084d0);
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 3px 6px;
+  display: flex; align-items: center; justify-content: space-between;
+  letter-spacing: 0.5px;
+}
+.fn-win95 .bar .x {
+  width: 16px; height: 14px;
+  background: #c3c3c3; color: #000;
+  border-top: 1px solid #fff;
+  border-left: 1px solid #fff;
+  border-right: 1px solid #404040;
+  border-bottom: 1px solid #404040;
+  display: grid; place-items: center;
+  font-size: 10px; line-height: 1;
+}
+.fn-win95 .body { padding: 14px 12px; font-size: 12px; }
+.fn-win95 .body .row { display: flex; gap: 8px; align-items: center; }
+.fn-win95 .body .ok {
+  margin-top: 14px;
+  background: #c3c3c3;
+  border-top: 1px solid #fff; border-left: 1px solid #fff;
+  border-right: 1px solid #404040; border-bottom: 1px solid #404040;
+  padding: 3px 14px; font-size: 11px;
+}
+
+/* 05 — Game Boy LCD */
+.fn-gb {
+  width: 280px;
+  background: #d4cfb8;
+  padding: 14px 14px 22px;
+  border-radius: 4px 4px 30px 4px;
+  box-shadow: 4px 4px 0 var(--ink);
+  position: relative;
+}
+.fn-gb .strip {
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: 'Silkscreen', monospace; font-size: 9px;
+  color: #555; letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+.fn-gb .strip .led {
+  width: 6px; height: 6px; background: var(--red); border-radius: 50%;
+  box-shadow: 0 0 4px var(--red);
+}
+.fn-gb .screen {
+  background:
+    radial-gradient(circle at 1px 1px, rgba(15,56,15,0.18) 1px, transparent 1.5px) 0 0/4px 4px,
+    var(--gb-bg);
+  border: 4px solid var(--gb-ink);
+  color: var(--gb-ink);
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  padding: 10px 12px;
+  line-height: 1.15;
+  height: 92px;
+  position: relative;
+}
+.fn-gb .screen .hp {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 14px;
+}
+.fn-gb .screen .bar {
+  flex: 1; height: 8px;
+  background: var(--gb-mid);
+  border: 2px solid var(--gb-ink);
+  position: relative;
+}
+.fn-gb .screen .bar::before {
+  content: ""; position: absolute; inset: 0 30% 0 0;
+  background: var(--gb-ink);
+}
+
+/* 06 — Postage stamp (perforated edges via radial mask) */
+.fn-stamp-wrap {
+  filter: drop-shadow(4px 4px 0 var(--ink));
+  display: inline-block;
+}
+.fn-stamp {
+  width: 200px; height: 150px;
+  position: relative;
+  color: var(--ink);
+  font-family: 'IBM Plex Mono', monospace;
+  background: linear-gradient(135deg, #ffd6a8 0%, #ffb37a 100%);
+  --r: 5px;
+  -webkit-mask:
+    radial-gradient(circle at 50% 0,    #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 0   /12px 8px repeat-x,
+    radial-gradient(circle at 50% 100%, #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 100%/12px 8px repeat-x,
+    radial-gradient(circle at 0 50%,    #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 0   /8px 12px repeat-y,
+    radial-gradient(circle at 100% 50%, #0000 var(--r), #000 calc(var(--r) + 0.5px)) 100% 0/8px 12px repeat-y,
+    linear-gradient(#000 0 0) 8px 8px/calc(100% - 16px) calc(100% - 16px) no-repeat;
+          mask:
+    radial-gradient(circle at 50% 0,    #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 0   /12px 8px repeat-x,
+    radial-gradient(circle at 50% 100%, #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 100%/12px 8px repeat-x,
+    radial-gradient(circle at 0 50%,    #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 0   /8px 12px repeat-y,
+    radial-gradient(circle at 100% 50%, #0000 var(--r), #000 calc(var(--r) + 0.5px)) 100% 0/8px 12px repeat-y,
+    linear-gradient(#000 0 0) 8px 8px/calc(100% - 16px) calc(100% - 16px) no-repeat;
+}
+.fn-stamp .inner {
+  position: absolute; inset: 16px;
+  border: 1.5px dashed var(--ink);
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: 8px 10px;
+}
+.fn-stamp .top { display: flex; justify-content: space-between; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; }
+.fn-stamp .price {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 26px;
+  text-align: center;
+  color: var(--red-2);
+  text-shadow: 2px 2px 0 rgba(255,255,255,0.5);
+}
+.fn-stamp .bot {
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* 07 — Hard-shadow price tag */
+.fn-tag {
+  --bg: var(--mint);
+  width: 220px; height: 76px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif;
+  font-weight: 700;
+  display: flex; align-items: center;
+  padding: 0 22px 0 36px;
+  clip-path: polygon(20px 0, 100% 0, 100% 100%, 20px 100%, 0 50%);
+  position: relative;
+  filter: drop-shadow(6px 6px 0 var(--ink));
+}
+.fn-tag::before {
+  content: ""; position: absolute;
+  left: 24px; top: 50%; transform: translateY(-50%);
+  width: 10px; height: 10px;
+  background: var(--cream);
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+}
+.fn-tag .amt {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 18px;
+  letter-spacing: 0.5px;
+}
+.fn-tag .lbl {
+  font-size: 9px; letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-left: auto;
+  opacity: 0.7;
+}
+
+/* 08 — Floppy disk label */
+.fn-floppy {
+  width: 230px;
+  background: #f6f1de;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  box-shadow:
+    inset 0 0 0 1px #c8bd92,
+    4px 4px 0 var(--ink);
+  position: relative;
+}
+.fn-floppy .head {
+  background: var(--sky);
+  color: #fff;
+  padding: 6px 10px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+.fn-floppy .head .gap { display: inline-block; width: 18px; height: 8px; background: var(--ink); }
+.fn-floppy .body { padding: 12px 12px 14px; }
+.fn-floppy .body .ttl {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.fn-floppy .body .lines {
+  border-top: 1px dashed #b9ad7c;
+  padding-top: 6px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+.fn-floppy .stripe { height: 6px; background: var(--amber); }
+
+/* 09 — Pixel speech bubble (two stacked clipped layers for the ink outline) */
+.fn-speech-wrap {
+  position: relative;
+  display: inline-block;
+  width: 250px;
+  filter: drop-shadow(4px 4px 0 rgba(26,20,16,0.5));
+}
+.fn-speech,
+.fn-speech-wrap .outline {
+  width: 250px;
+  clip-path: polygon(
+    0 6px, 3px 6px, 3px 3px, 6px 3px, 6px 0,
+    calc(100% - 6px) 0, calc(100% - 6px) 3px, calc(100% - 3px) 3px,
+    calc(100% - 3px) 6px, 100% 6px,
+    100% calc(100% - 26px), calc(100% - 3px) calc(100% - 26px),
+    calc(100% - 3px) calc(100% - 23px),
+    calc(100% - 30px) calc(100% - 23px),
+    calc(100% - 30px) calc(100% - 12px),
+    calc(100% - 42px) calc(100% - 12px),
+    calc(100% - 42px) calc(100% - 23px),
+    6px calc(100% - 23px),
+    6px calc(100% - 20px),
+    3px calc(100% - 20px), 3px calc(100% - 23px),
+    0 calc(100% - 23px)
+  );
+}
+.fn-speech-wrap .outline {
+  position: absolute;
+  top: -3px; left: -3px;
+  width: calc(100% + 6px);
+  height: calc(100% + 6px);
+  background: var(--ink);
+  clip-path: polygon(
+    0 5px, 2px 5px, 2px 2px, 5px 2px, 5px 0,
+    calc(100% - 5px) 0, calc(100% - 5px) 2px, calc(100% - 2px) 2px,
+    calc(100% - 2px) 5px, 100% 5px,
+    100% calc(100% - 31px), calc(100% - 2px) calc(100% - 31px),
+    calc(100% - 2px) calc(100% - 28px),
+    calc(100% - 30px) calc(100% - 28px),
+    calc(100% - 30px) calc(100% - 12px),
+    calc(100% - 47px) calc(100% - 12px),
+    calc(100% - 47px) calc(100% - 28px),
+    5px calc(100% - 28px),
+    5px calc(100% - 25px),
+    2px calc(100% - 25px), 2px calc(100% - 28px),
+    0 calc(100% - 28px)
+  );
+}
+.fn-speech {
+  position: relative;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  color: var(--ink);
+  letter-spacing: 0.5px;
+  line-height: 1.6;
+  background: var(--paper);
+  padding: 18px 20px 30px;
+}
+.fn-speech b { color: var(--red); }
+
+/* 10 — Notched sci-fi panel */
+.fn-scifi {
+  width: 280px;
+  background: #0e1518;
+  color: #b6f8ff;
+  font-family: 'Space Mono', 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  padding: 14px 18px;
+  letter-spacing: 0.5px;
+  clip-path: polygon(
+    14px 0, 100% 0, 100% calc(100% - 14px),
+    calc(100% - 14px) 100%, 0 100%, 0 14px
+  );
+  position: relative;
+  box-shadow:
+    inset 0 0 0 2px #1d3036,
+    inset 0 0 0 3px #00d4ff,
+    inset 0 0 24px rgba(0,212,255,0.18);
+}
+.fn-scifi::before, .fn-scifi::after {
+  content: "";
+  position: absolute;
+  width: 16px; height: 2px;
+  background: #00d4ff;
+}
+.fn-scifi::before { top: 6px; left: -3px; transform: rotate(-45deg); transform-origin: center; }
+.fn-scifi::after  { bottom: 6px; right: -3px; transform: rotate(-45deg); transform-origin: center; }
+.fn-scifi .row {
+  display: flex; justify-content: space-between;
+  border-bottom: 1px dashed rgba(0,212,255,0.3);
+  padding: 2px 0;
+}
+.fn-scifi .row:last-child { border-bottom: 0; }
+.fn-scifi .row span:last-child { color: #ffd34d; }
+.fn-scifi .ttl {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px; color: #00d4ff;
+  letter-spacing: 1.5px;
+  margin-bottom: 8px;
+  text-shadow: 0 0 6px rgba(0,212,255,0.6);
+}
+
+/* ============================================================
+   CARD FRAMES
+   ============================================================ */
+
+/* C1 — 8-bit RPG menu */
+.cd-rpg {
+  width: 320px;
+  background: var(--ink);
+  color: #fff;
+  padding: 18px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  position: relative;
+  box-shadow:
+    /* double pixel border via box-shadows */
+    inset 0 0 0 4px var(--ink),
+    inset 0 0 0 6px #fff,
+    inset 0 0 0 10px var(--ink),
+    6px 6px 0 var(--red);
+  letter-spacing: 1px;
+  line-height: 1.5;
+}
+.cd-rpg .ttl {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 14px;
+  font-size: 12px;
+}
+.cd-rpg .ttl::before { content: "▶"; color: var(--amber); }
+.cd-rpg ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.cd-rpg li { display: flex; justify-content: space-between; padding-left: 14px; position: relative; }
+.cd-rpg li.active::before {
+  content: "●";
+  position: absolute; left: 0; color: var(--amber);
+  animation: blink 0.8s steps(2) infinite;
+}
+.cd-rpg li .qty { color: var(--mint); }
+
+/* C2 — Polaroid */
+.cd-polaroid {
+  width: 270px;
+  background: var(--paper);
+  padding: 14px 14px 56px;
+  transform: rotate(-2deg);
+  box-shadow:
+    0 1px 0 rgba(0,0,0,0.06),
+    8px 12px 0 -2px rgba(26,20,16,0.18),
+    12px 18px 28px -8px rgba(26,20,16,0.35);
+  position: relative;
+  font-family: 'Caveat', 'Patrick Hand', cursive;
+}
+.cd-polaroid .photo {
+  height: 220px;
+  background:
+    radial-gradient(circle at 70% 30%, #ffd56b 0%, transparent 40%),
+    linear-gradient(160deg, #f17a4a 0%, #c43e5b 50%, #4d2e6b 100%);
+  position: relative;
+  overflow: hidden;
+}
+.cd-polaroid .photo::after {
+  content: "☼";
+  position: absolute; top: 16px; right: 22px;
+  font-size: 28px; color: #fff6c8;
+}
+.cd-polaroid .photo .horizon {
+  position: absolute; left: 0; right: 0; bottom: 40%;
+  height: 1px; background: rgba(0,0,0,0.2);
+}
+.cd-polaroid .photo .palms {
+  position: absolute; left: 12%; bottom: 38%;
+  font-size: 36px;
+  letter-spacing: 6px;
+  color: #2a1538;
+}
+.cd-polaroid .cap {
+  position: absolute;
+  left: 0; right: 0; bottom: 14px;
+  text-align: center;
+  font-size: 22px;
+  color: var(--ink);
+  transform: rotate(-1deg);
+}
+.cd-polaroid .stamp {
+  position: absolute; right: 10px; bottom: 8px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px; color: #b22d24;
+  border: 1.5px solid #b22d24;
+  padding: 2px 4px;
+  transform: rotate(6deg);
+  letter-spacing: 0.1em;
+}
+
+/* C3 — Trading card */
+.cd-trade {
+  width: 240px;
+  padding: 6px;
+  background: linear-gradient(135deg, #ffd34d 0%, #ff6b9d 35%, #8b5fbf 70%, #5d8fc9 100%);
+  position: relative;
+  box-shadow:
+    inset 0 0 0 2px #fff8d6,
+    8px 8px 0 var(--ink);
+  font-family: 'Space Grotesk', sans-serif;
+}
+.cd-trade::before {
+  content: "";
+  position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(45deg,
+      rgba(255,255,255,0.16) 0 4px,
+      transparent 4px 12px);
+  pointer-events: none;
+  mix-blend-mode: overlay;
+}
+.cd-trade .inner {
+  background: var(--paper);
+  padding: 10px 12px 14px;
+  position: relative;
+  z-index: 1;
+}
+.cd-trade .name {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 6px;
+  letter-spacing: 0.5px;
+}
+.cd-trade .name .hp { color: var(--red); font-size: 9px; }
+.cd-trade .art {
+  margin: 10px 0;
+  height: 130px;
+  background:
+    radial-gradient(circle at 50% 60%, #ffe6a8 0%, transparent 55%),
+    linear-gradient(180deg, #1a3a6e 0%, #2d6bb8 60%, #6fd1c7 100%);
+  border: 2px solid var(--ink);
+  position: relative;
+  overflow: hidden;
+}
+.cd-trade .art .mon {
+  position: absolute; left: 50%; bottom: 8px;
+  transform: translateX(-50%);
+  font-size: 60px;
+}
+.cd-trade .stats {
+  font-size: 11px;
+  display: grid;
+  gap: 2px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+.cd-trade .stats .row { display: flex; justify-content: space-between; }
+.cd-trade .stats b { color: var(--red-2); }
+.cd-trade .foot {
+  margin-top: 8px;
+  display: flex; justify-content: space-between;
+  font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-2);
+  border-top: 1px dashed var(--ink-2);
+  padding-top: 6px;
+}
+.cd-trade .rarity {
+  position: absolute; top: 14px; right: 14px;
+  width: 18px; height: 18px;
+  background: linear-gradient(135deg, #ffd34d, #ff6b9d);
+  transform: rotate(45deg);
+  border: 2px solid var(--ink);
+  z-index: 2;
+}
+
+/* C4 — VHS cover */
+.cd-vhs {
+  width: 280px;
+  background: var(--ink);
+  color: #fff;
+  font-family: 'Space Grotesk', sans-serif;
+  box-shadow: 6px 6px 0 var(--red);
+  position: relative;
+}
+.cd-vhs .top {
+  background:
+    repeating-linear-gradient(90deg,
+      var(--red) 0 28px, var(--amber) 28px 56px,
+      var(--mint) 56px 84px, var(--sky) 84px 112px);
+  height: 12px;
+}
+.cd-vhs .label {
+  background: #f3e6c8;
+  color: var(--ink);
+  margin: 14px 16px;
+  border: 1.5px solid var(--ink);
+  padding: 10px 12px;
+}
+.cd-vhs .label .vol {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--red-2);
+  margin-bottom: 4px;
+}
+.cd-vhs .label h3 {
+  font-family: 'Bungee', 'Press Start 2P', monospace;
+  margin: 0;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.cd-vhs .label .runtime {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  margin-top: 6px;
+  display: flex; justify-content: space-between;
+  border-top: 1px dashed var(--ink);
+  padding-top: 4px;
+}
+.cd-vhs .strip {
+  background: linear-gradient(180deg, #6a574a, #3a2e22);
+  height: 36px;
+  margin: 0 16px 16px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  border-top: 2px solid #8a6f5c;
+}
+.cd-vhs .strip::before, .cd-vhs .strip::after {
+  content: ""; width: 18px; height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff 0 2px, #aaa 3px, #444 60%);
+  border: 2px solid var(--ink);
+}
+.cd-vhs .strip::before { margin-right: 60px; }
+.cd-vhs .barcode {
+  font-family: 'Libre Barcode 39', sans-serif;
+  font-size: 28px;
+  color: #fff;
+  padding: 0 16px 12px;
+  letter-spacing: 1px;
+}
+
+/* C5 — Cassette label */
+.cd-cass {
+  width: 320px;
+  background: #fff0c8;
+  border: 2px solid var(--ink);
+  font-family: 'Space Grotesk', sans-serif;
+  box-shadow: 6px 6px 0 var(--ink);
+  position: relative;
+  overflow: hidden;
+}
+.cd-cass .stripes {
+  height: 14px;
+  background:
+    repeating-linear-gradient(90deg,
+      var(--red) 0 14px, var(--ink) 14px 16px,
+      var(--amber) 16px 30px, var(--ink) 30px 32px);
+}
+.cd-cass .head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px 6px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
+  border-bottom: 1.5px solid var(--ink);
+}
+.cd-cass .head .side {
+  background: var(--ink); color: var(--amber);
+  padding: 4px 8px;
+}
+.cd-cass .reels {
+  display: flex; justify-content: space-around;
+  padding: 14px 24px;
+  position: relative;
+}
+.cd-cass .reels::before {
+  content: ""; position: absolute;
+  top: 50%; left: 14%; right: 14%;
+  height: 2px; background: var(--ink);
+}
+.cd-cass .reel {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, transparent 0 7px, var(--ink) 7px 9px, #fff 9px 11px, var(--ink) 11px);
+  position: relative;
+  z-index: 1;
+}
+.cd-cass .reel::after {
+  content: "";
+  position: absolute; inset: 13px;
+  background: var(--ink);
+  clip-path: polygon(50% 0, 60% 50%, 50% 100%, 40% 50%);
+}
+.cd-cass .tracks {
+  list-style: none;
+  margin: 0; padding: 10px 16px 14px;
+  font-size: 12px;
+  display: grid; gap: 4px;
+  font-family: 'IBM Plex Mono', monospace;
+  border-top: 1.5px solid var(--ink);
+}
+.cd-cass .tracks li { display: flex; justify-content: space-between; }
+.cd-cass .tracks li b { font-family: 'Press Start 2P', monospace; font-size: 9px; color: var(--red); }
+
+/* C6 — Newspaper / zine */
+.cd-news {
+  width: 320px;
+  background: #f6efd9;
+  padding: 16px 18px 22px;
+  font-family: 'IBM Plex Serif', Georgia, serif;
+  color: var(--ink);
+  position: relative;
+  box-shadow:
+    0 1px 0 #ddc,
+    6px 6px 0 var(--ink);
+  background-image:
+    radial-gradient(rgba(0,0,0,0.04) 1px, transparent 1.2px);
+  background-size: 3px 3px;
+  background-color: #f6efd9;
+}
+.cd-news::after {
+  /* slight darker offset behind page for depth */
+  display: none;
+}
+.cd-news .masthead2 {
+  font-family: 'UnifrakturCook', 'Press Start 2P', serif;
+  font-size: 30px;
+  text-align: center;
+  letter-spacing: 1px;
+  line-height: 1;
+  border-bottom: 4px double var(--ink);
+  border-top: 2px solid var(--ink);
+  padding: 6px 0;
+  font-weight: 700;
+}
+.cd-news .dateline {
+  display: flex; justify-content: space-between;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--ink);
+  margin-bottom: 8px;
+}
+.cd-news h4 {
+  font-size: 16px;
+  margin: 4px 0 6px;
+  line-height: 1.15;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+.cd-news h4 small { display: block; font-size: 10px; letter-spacing: 0.18em; font-weight: 400; margin-top: 4px; }
+.cd-news .cols {
+  column-count: 2;
+  column-gap: 12px;
+  column-rule: 1px solid var(--ink-2);
+  font-size: 10px;
+  line-height: 1.4;
+  text-align: justify;
+}
+.cd-news .cols p { margin: 0 0 6px; }
+.cd-news .cols p::first-letter {
+  font-family: 'UnifrakturCook', serif;
+  font-size: 22px;
+  float: left;
+  line-height: 0.9;
+  margin-right: 3px;
+}
+
+/* C7 — Passport stamp card */
+.cd-pass {
+  width: 320px;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,0.5), transparent 50%),
+    #c89f6e;
+  color: #2a1a0d;
+  font-family: 'IBM Plex Mono', monospace;
+  padding: 18px 16px;
+  box-shadow:
+    inset 0 0 0 2px #2a1a0d,
+    inset 0 0 0 5px #c89f6e,
+    inset 0 0 0 6px #2a1a0d,
+    6px 6px 0 var(--ink);
+  position: relative;
+  overflow: hidden;
+}
+.cd-pass::before {
+  /* paper grain */
+  content: "";
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(rgba(0,0,0,0.06) 1px, transparent 1.2px) 0 0/3px 3px;
+  pointer-events: none;
+}
+.cd-pass .title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-align: center;
+  border-bottom: 1px dashed #2a1a0d;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+.cd-pass .stamps {
+  position: relative;
+  height: 200px;
+}
+.cd-pass .stmp {
+  position: absolute;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  color: #8a2a2a;
+  border: 2.5px solid #8a2a2a;
+  padding: 8px 10px;
+  text-align: center;
+  background: rgba(255,253,240,0.2);
+  letter-spacing: 1px;
+  line-height: 1.4;
+}
+.cd-pass .stmp.r1 { top: 10px; left: 14px; transform: rotate(-8deg); }
+.cd-pass .stmp.r2 { top: 80px; right: 14px; transform: rotate(6deg);
+  color: #1f4a8a; border-color: #1f4a8a; }
+.cd-pass .stmp.r3 { bottom: 6px; left: 60px; transform: rotate(-3deg);
+  color: #2e6e3a; border-color: #2e6e3a; }
+.cd-pass .stmp small { display: block; font-size: 7px; margin-top: 3px; opacity: 0.7; }
+
+/* C8 — Neo-brutalist card */
+.cd-brut {
+  width: 300px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Space Grotesk', sans-serif;
+  border: 3px solid var(--ink);
+  box-shadow: 12px 12px 0 var(--violet), 12px 12px 0 4px var(--ink);
+  padding: 22px 20px;
+  position: relative;
+}
+.cd-brut .badge {
+  display: inline-block;
+  background: var(--violet);
+  color: #fff;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  padding: 5px 8px 4px;
+  letter-spacing: 1px;
+  margin-bottom: 14px;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.cd-brut h3 {
+  margin: 0 0 12px;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.5px;
+  text-transform: uppercase;
+}
+.cd-brut h3 u {
+  background: var(--amber);
+  text-decoration: none;
+  padding: 0 4px;
+  box-decoration-break: clone;
+}
+.cd-brut p { margin: 0 0 16px; font-size: 13px; line-height: 1.45; }
+.cd-brut .cta {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--ink); color: #fff;
+  padding: 8px 12px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+.cd-brut .cta::after { content: "→"; font-family: sans-serif; }
+
+/* C9 — Receipt / dot matrix */
+.cd-rcpt-wrap { filter: drop-shadow(5px 7px 0 rgba(26,20,16,0.85)); }
+.cd-rcpt {
+  width: 260px;
+  background: #fcf7e6;
+  color: var(--ink);
+  font-family: 'VT323', 'IBM Plex Mono', monospace;
+  font-size: 16px;
+  line-height: 1.2;
+  padding: 22px 18px;
+  position: relative;
+  /* zigzag bites at top + bottom — radial cuts, then a center solid fill */
+  --r: 5px;
+  -webkit-mask:
+    radial-gradient(circle at 50% 0,    #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 0/12px 10px repeat-x,
+    radial-gradient(circle at 50% 100%, #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 100%/12px 10px repeat-x,
+    linear-gradient(#000 0 0) 0 10px/100% calc(100% - 20px) no-repeat;
+          mask:
+    radial-gradient(circle at 50% 0,    #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 0/12px 10px repeat-x,
+    radial-gradient(circle at 50% 100%, #0000 var(--r), #000 calc(var(--r) + 0.5px)) 0 100%/12px 10px repeat-x,
+    linear-gradient(#000 0 0) 0 10px/100% calc(100% - 20px) no-repeat;
+}
+.cd-rcpt .head {
+  text-align: center;
+  border-bottom: 1px dashed var(--ink);
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+.cd-rcpt .head .biz {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+.cd-rcpt .head small { font-size: 12px; }
+.cd-rcpt ul {
+  list-style: none; margin: 0; padding: 0;
+}
+.cd-rcpt ul li {
+  display: flex; justify-content: space-between;
+  border-bottom: 1px dotted var(--ink-2);
+  padding: 1px 0;
+}
+.cd-rcpt .tot {
+  display: flex; justify-content: space-between;
+  margin-top: 8px;
+  border-top: 2px solid var(--ink);
+  padding-top: 6px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+.cd-rcpt .foot {
+  text-align: center;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+/* C10 — Die-cut sticker */
+.cd-stk {
+  width: 280px;
+  background: var(--paper);
+  padding: 14px;
+  border-radius: 18px;
+  box-shadow:
+    0 0 0 4px var(--paper),
+    0 0 0 6px var(--ink),
+    14px 18px 0 -8px rgba(26,20,16,0.25),
+    18px 26px 40px -10px rgba(26,20,16,0.35);
+  position: relative;
+  font-family: 'Space Grotesk', sans-serif;
+  transform: rotate(-3deg);
+}
+.cd-stk .badge {
+  background: var(--pink);
+  color: #fff;
+  border: 4px solid var(--ink);
+  border-radius: 14px;
+  padding: 22px 16px;
+  text-align: center;
+  position: relative;
+  box-shadow: inset 0 -6px 0 rgba(0,0,0,0.18);
+}
+.cd-stk .badge .tag {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  background: var(--ink);
+  color: var(--amber);
+  display: inline-block;
+  padding: 4px 8px;
+  margin-bottom: 10px;
+}
+.cd-stk .badge h3 {
+  margin: 0;
+  font-family: 'Bungee', 'Press Start 2P', monospace;
+  font-size: 30px;
+  line-height: 0.95;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-shadow:
+    2px 2px 0 var(--ink),
+    4px 4px 0 var(--amber);
+}
+.cd-stk .badge p {
+  margin: 12px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.cd-stk .pin {
+  position: absolute;
+  top: -8px; left: 50%; transform: translateX(-50%);
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #fff 0 2px, var(--red) 3px 60%, var(--red-2) 100%);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.3);
+}
+
+/* Footer */
+.page footer {
+  margin-top: 80px;
+  border-top: 3px solid var(--ink);
+  padding-top: 18px;
+  display: flex; justify-content: space-between;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}

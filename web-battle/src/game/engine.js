@@ -28,6 +28,25 @@ import {
   getDeptL1Effects,
   rollRandomFunctions,
 } from './cards.js'
+import {
+  RIVAL_SCHEDULE,
+  RIVAL_WIN_THRESHOLD,
+  RIVAL_LOSE_THRESHOLD,
+  RIVAL_INITIAL_SHARE,
+  RIVAL_BATTLE_MAX_MONTHS,
+  RIVAL_PREVIEW_MONTHS,
+  createRivalInstance,
+  createBattle,
+  computeRivalIncome,
+  computeShareDelta,
+  computeArchetypeMonthlyMods,
+  advanceArchetypeStacks,
+  computeTollFee,
+  pickRewardCardTemplates,
+  getArchetype,
+  getCompetitiveAction,
+  buildBossCounterEvent,
+} from './rivals.js'
 
 export const GAME_CONFIG = {
   baseAp: 5,
@@ -160,6 +179,12 @@ export function createInitialState({ profession = 'scientist', rng = Math.random
       unlockedEpicDepts: [],
       pendingCards: [],
     },
+    // 竞争公司系统（boss.md）
+    battle: null,                // 当前对决状态 { active, archetypeId, playerShare, rivalShare, monthsElapsed, ... }
+    upcomingRival: null,         // 预告中的对手 { archetypeId, name, tier, estimatedMonthlyIncome, weaknessHint, ... }
+    defeatedRivals: [],          // 已击败的 archetypeId 列表（用于元解锁与避免重复）
+    rivalRewardPending: null,    // 胜利后待领取的 3 张卡 [card instance]
+    rivalRewardLog: null,        // 收购弹窗显示用的 { rivalName, archetypeName, cards }
     log: [
       `第 1 月开始: ${event.name}`,
       `进入阶段: ${stage.name} (${stage.theme})`,
@@ -871,6 +896,158 @@ export function dismissRecruitReveal(state) {
   return accept({ ...state, revealedRecruitCard: null })
 }
 
+/**
+ * 竞争公司系统：每月对决推进
+ * 在 resolveMonth 后半段调用，处理：
+ *   1. 预告月（elapsedMonths === 9/21/33/45/57）：抽 upcomingRival
+ *   2. 开战月（elapsedMonths === 13/25/37/49/61）：把 upcomingRival 转成 battle
+ *   3. 对决进行中：份额结算、archetype 数值效果、胜/负/超时
+ *
+ * 入参 ctx：
+ *   prevBattle, prevUpcomingRival, prevDefeated（来自 state）
+ *   elapsedMonths（本月已 +1）
+ *   stageId, eventIncome, monthlyBurn  ← 当前月已计算的玩家数值
+ *   playerCash（已扣完正常 burn 与 opCost 的 finalCash，用于划道费判定）
+ *   rng
+ *
+ * 出参：{
+ *   nextBattle, nextUpcomingRival, nextDefeatedRivals,
+ *   rewardPending, rewardLog,    // 胜利时下发的 3 张卡 instance + 弹窗 payload
+ *   extraBurn,                   // archetype.burnMult 多扣的 burn
+ *   apPenalty, recruitPenalty,   // 下月生效
+ *   tollFee, tollFailed,         // 输掉 → 划道费 / 现金不够 → game over
+ *   logs,                        // 追加到 state.log
+ * }
+ */
+function tickBattle(ctx) {
+  const { prevBattle, prevUpcomingRival, prevDefeated = [], elapsedMonths, stageId, eventIncome, monthlyBurn, playerCash, rng } = ctx
+  const logs = []
+  let nextBattle = prevBattle
+  let nextUpcomingRival = prevUpcomingRival
+  let nextDefeatedRivals = prevDefeated
+  let rewardPending = null
+  let rewardLog = null
+  let extraBurn = 0
+  let apPenalty = 0
+  let recruitPenalty = 0
+  let tollFee = null
+  let tollFailed = false
+
+  // 1. 预告月：抽 upcomingRival
+  const previewEntry = RIVAL_SCHEDULE.find((s) => s.previewElapsedMonth === elapsedMonths)
+  if (previewEntry && !prevBattle && !prevUpcomingRival) {
+    const rival = createRivalInstance(previewEntry, stageId, prevDefeated, rng)
+    nextUpcomingRival = { ...rival, startElapsedMonth: previewEntry.startElapsedMonth }
+    logs.push(`⚔️ 对手档案公布：${rival.archetypeName}·${rival.name}（${RIVAL_PREVIEW_MONTHS} 月后开战，弱点：${rival.weaknessHint}）`)
+  }
+
+  // 2. 开战月：把 upcomingRival 转 battle
+  const startEntry = RIVAL_SCHEDULE.find((s) => s.startElapsedMonth === elapsedMonths)
+  if (startEntry && !prevBattle && prevUpcomingRival) {
+    nextBattle = createBattle(prevUpcomingRival)
+    nextUpcomingRival = null
+    logs.push(`🔥 对决开始：${nextBattle.archetypeName}·${nextBattle.rivalName}（${RIVAL_INITIAL_SHARE}/${RIVAL_INITIAL_SHARE}）`)
+  }
+
+  // 3. 对决进行中：份额结算
+  if (nextBattle && nextBattle.active) {
+    const archetype = getArchetype(nextBattle.archetypeId)
+    // 本月竞争行动 payload（玩家在月初通过 setCompetitiveAction 选择）
+    const actionPayload = nextBattle.pendingAction
+      ? (getCompetitiveAction(nextBattle.pendingAction)?.payload ?? {})
+      : {}
+
+    // 挖人技能屏蔽：完全跳过 archetype 月度效果
+    const mods = actionPayload.skillBlocked
+      ? { incomeMult: 1, burnMult: 1, recruitDelta: 0, apDelta: 0, bmTopEffectMult: 1, sDeptMult: 1 }
+      : computeArchetypeMonthlyMods(nextBattle)
+
+    if (mods.burnMult > 1) {
+      extraBurn = Math.round(monthlyBurn * (mods.burnMult - 1))
+    }
+    apPenalty += -(mods.apDelta ?? 0)
+    recruitPenalty += -(mods.recruitDelta ?? 0)
+
+    // 玩家在份额结算上的"有效收入"
+    const effectivePlayerIncome = Math.max(0, Math.round(eventIncome * (mods.sDeptMult ?? 1) * (mods.bmTopEffectMult ?? 1)))
+    let rivalIncome = computeRivalIncome(stageId, nextBattle.tier, archetype.archetypeMul, rng)
+    // 品牌投放：本月对手收入 ×0.8
+    if (actionPayload.rivalIncomeMult != null) {
+      rivalIncome = Math.round(rivalIncome * actionPayload.rivalIncomeMult)
+    }
+    const boostK = actionPayload.boostK ?? 0
+    const delta = computeShareDelta(effectivePlayerIncome, rivalIncome, { boostK })
+
+    const newPlayerShare = Math.max(0, Math.min(100, nextBattle.playerShare + delta))
+    const newRivalShare = 100 - newPlayerShare
+    const newMonthsElapsed = (nextBattle.monthsElapsed ?? 0) + 1
+    const stacks = advanceArchetypeStacks(nextBattle)
+
+    nextBattle = {
+      ...nextBattle,
+      playerShare: newPlayerShare,
+      rivalShare: newRivalShare,
+      monthsElapsed: newMonthsElapsed,
+      sDeptStacks: stacks.sDeptStacks,
+      copycatTickCount: stacks.copycatTickCount,
+      lastShareDelta: Math.round(delta * 10) / 10,
+      lastRivalIncome: rivalIncome,
+      lastEffectivePlayerIncome: effectivePlayerIncome,
+      pendingAction: null,           // 本月行动已应用，清空
+      pendingActionCost: null,
+    }
+    const deltaText = delta >= 0 ? `+${delta.toFixed(1)}%` : `${delta.toFixed(1)}%`
+    logs.push(`市场份额 ${deltaText} → 你 ${newPlayerShare.toFixed(0)}% / ${nextBattle.archetypeName} ${newRivalShare.toFixed(0)}%`)
+
+    // 4. 胜利判定（达成 ≥ 80% 即结算）
+    if (newPlayerShare >= RIVAL_WIN_THRESHOLD) {
+      const rewardIds = pickRewardCardTemplates(nextBattle.archetypeId, 3, rng)
+      const rewardCards = rewardIds.map((id) => createCardInstance(id, 'deck', rng))
+      rewardPending = rewardCards
+      rewardLog = {
+        rivalName: nextBattle.rivalName,
+        archetypeName: nextBattle.archetypeName,
+        archetypeId: nextBattle.archetypeId,
+        cards: rewardCards,
+      }
+      nextDefeatedRivals = [...prevDefeated, nextBattle.archetypeId]
+      logs.push(`🏆 胜利！收购 ${nextBattle.archetypeName}·${nextBattle.rivalName}，获得 ${rewardCards.length} 张卡`)
+      nextBattle = null
+    }
+    // 5. 输掉：玩家份额 ≤ 0
+    else if (newPlayerShare <= RIVAL_LOSE_THRESHOLD) {
+      tollFee = computeTollFee(stageId)
+      const cashAfterToll = playerCash - extraBurn - tollFee
+      if (cashAfterToll < 0) {
+        tollFailed = true
+        logs.push(`💀 市场份额归零，划道费 ¥${tollFee} 也付不起，公司被收购`)
+      } else {
+        logs.push(`⚠️ 市场份额归零，透支划道费 ¥${tollFee} 继续游戏，估值受损`)
+      }
+      nextBattle = null
+    }
+    // 6. 超时：6 月对决期内未胜未负
+    else if (newMonthsElapsed >= RIVAL_BATTLE_MAX_MONTHS) {
+      logs.push(`⏱️ 对决 6 月超时，${nextBattle.archetypeName} 撤离，无奖励无惩罚`)
+      nextBattle = null
+    }
+  }
+
+  return {
+    nextBattle,
+    nextUpcomingRival,
+    nextDefeatedRivals,
+    rewardPending,
+    rewardLog,
+    extraBurn,
+    apPenalty,
+    recruitPenalty,
+    tollFee,
+    tollFailed,
+    logs,
+  }
+}
+
 export function resolveMonth(state, rng = Math.random) {
   if (state.result) return reject(state, '本关已结算')
   if (state.discardRequired > 0) return reject(state, `需要先弃 ${state.discardRequired} 张手牌`)
@@ -912,6 +1089,12 @@ export function resolveMonth(state, rng = Math.random) {
     const eventMaintMult = Math.max(0.7, Math.min(1.6, monthEvent.maintenanceMultiplier ?? 1))
     monthlyBurn = Math.round(monthlyBurn * eventMaintMult)
     monthlyBurn = Math.max(0, Math.round(monthlyBurn * (1 - bmStats.maintenanceDiscount)))
+  }
+
+  // 竞争公司系统：对决期 archetype 月度数值修正（burnMult 在此处生效）
+  const battleMonthlyMods = state.battle?.active ? computeArchetypeMonthlyMods(state.battle) : null
+  if (battleMonthlyMods && battleMonthlyMods.burnMult > 1 && !maintenanceWaived) {
+    monthlyBurn = Math.round(monthlyBurn * battleMonthlyMods.burnMult)
   }
 
   // Consume waiveMaintenance if used
@@ -1025,6 +1208,61 @@ export function resolveMonth(state, rng = Math.random) {
   const elapsedMonths = (state.elapsedMonths ?? 0) + 1
   const isQuarterlyBoard = elapsedMonths > 0 && elapsedMonths % 3 === 0
 
+  // 竞争公司系统：每月对决推进（预告 / 开战 / 份额结算 / 胜负判定）
+  // 注：burnMult 在 monthlyBurn 计算时已经先扣过；tickBattle 只处理生命周期 + 份额 + 划道费
+  const battleTick = tickBattle({
+    prevBattle: state.battle,
+    prevUpcomingRival: state.upcomingRival,
+    prevDefeated: state.defeatedRivals ?? [],
+    elapsedMonths,
+    stageId: state.stage.id,
+    eventIncome,
+    monthlyBurn,
+    playerCash: finalCash,
+    rng,
+  })
+
+  // 划道费：从 finalCash 扣减；若不足则 game over
+  let cashAfterBattle = finalCash
+  if (battleTick.tollFee != null) {
+    cashAfterBattle -= battleTick.tollFee
+  }
+  if (battleTick.tollFailed) {
+    return accept({
+      ...rescuedState,
+      cash: cashAfterBattle,
+      battle: null,
+      upcomingRival: battleTick.nextUpcomingRival,
+      defeatedRivals: battleTick.nextDefeatedRivals,
+      valuation: computeValuation({ ...rescuedState, cash: cashAfterBattle }),
+      highestValuation: nextHighestValuation,
+      result: {
+        passed: false,
+        gameOver: true,
+        reason: '市场份额归零，无力支付划道费',
+        bestMonth: Math.max(eventIncome, state.lastSettlement?.income ?? 0),
+      },
+      lastSettlement: buildSettlementReport({
+        month: state.month,
+        eventIncome,
+        rawIncome,
+        maintenance: monthlyBurn,
+        lineReports,
+        apCarry: 0,
+        usedAp: hasNewLine ? getLineAp(activeLine.slots, bmStats) : 0,
+      }),
+      log: [
+        ...battleTick.logs,
+        ...state.log,
+      ].slice(0, 7),
+    })
+  }
+  // 输掉但能付划道费：估值 ×0.7、下个对手延后 6 月（暂记 log，调度逻辑由 schedule 自动避免重复）
+  let postTollValuationMult = 1
+  if (battleTick.tollFee != null && !battleTick.tollFailed) {
+    postTollValuationMult = 0.7
+  }
+
   const nextConsecutiveAboveThreshold = nextStage && nextV >= nextStage.threshold ? (state.consecutiveAboveThreshold ?? 0) + 1 : 0
   const isStagePromoted = !!(isQuarterlyBoard && nextStage && nextV >= nextStage.threshold)
 
@@ -1059,16 +1297,23 @@ export function resolveMonth(state, rng = Math.random) {
   }
 
   if (result) {
+    const adjustedValuation = Math.round(nextV * postTollValuationMult)
     return accept({
       ...rescuedState,
-      valuation: nextV,
-      highestValuation: nextHighestValuation,
+      cash: cashAfterBattle,
+      valuation: adjustedValuation,
+      highestValuation: Math.max(state.highestValuation ?? 0, adjustedValuation),
       apCarry,
       lines: afterWork.lines,
       coolingPile: [...stillCooling, ...afterWork.newCooling],
       drawPile: drawPool,
       selectedCardUid: null,
       consecutiveAboveThreshold: 0,
+      battle: battleTick.nextBattle,
+      upcomingRival: battleTick.nextUpcomingRival,
+      defeatedRivals: battleTick.nextDefeatedRivals,
+      rivalRewardPending: battleTick.rewardPending,
+      rivalRewardLog: battleTick.rewardLog,
       lastSettlement: buildSettlementReport({
         month: state.month,
         eventIncome,
@@ -1082,6 +1327,7 @@ export function resolveMonth(state, rng = Math.random) {
       log: [
         result.gameWon ? `行业第一！终极胜利达成！` : (result.stagePromotion ? `达成阶段晋升: ${nextStage.name}` : '季度董事会召开'),
         `第 ${state.month} 月利润 ¥${profit} (CCR ${Math.round(ccr * 100)}% → +¥${cashGain}), 运营 -¥${monthlyOpCost}`,
+        ...battleTick.logs,
         ...state.log,
       ].slice(0, 7),
     })
@@ -1105,7 +1351,8 @@ export function resolveMonth(state, rng = Math.random) {
 
   // v4 流派质变 O 流派下月 AP 加成 + combo 高管会议下月 AP +3
   const nextEventContext = nextMajorEvent ? getCombinedEvent({ ...rescuedState, event: nextEvent, majorEvent: nextMajorEvent }) : nextEvent
-  const nextApAvailable = Math.max(1, GAME_CONFIG.baseAp + apCarry + (nextEventContext.apDelta ?? 0) + apHandRich + deptMassO + comboApBonus)
+  // 竞争公司系统：archetype 的 apPenalty（如终极对手 -1 AP）减下月 apAvailable
+  const nextApAvailable = Math.max(1, GAME_CONFIG.baseAp + apCarry + (nextEventContext.apDelta ?? 0) + apHandRich + deptMassO + comboApBonus - (battleTick.apPenalty ?? 0))
 
   const isFounderRInHand = rescuedState.hand.some(c => c.id === 'EMP_FOUNDER_R')
   const isFounderRInSlots = activeLine && activeLine.slots.some(c => c && c.id === 'EMP_FOUNDER_R')
@@ -1137,7 +1384,8 @@ export function resolveMonth(state, rng = Math.random) {
   ))
 
   // 应用下月事件的 cashDelta（外部资金注入，不走 CCR）
-  const finalCashWithEvent = finalCash + (nextEvent.cashDelta ?? 0)
+  // 注：cashAfterBattle 已扣过划道费（若有）
+  const finalCashWithEvent = cashAfterBattle + (nextEvent.cashDelta ?? 0)
 
   // 即使利润为正，下月事件 cashDelta 为大负数也可能导致破产
   if (finalCashWithEvent < 0) {
@@ -1184,13 +1432,14 @@ export function resolveMonth(state, rng = Math.random) {
     highlightLog = `🎉 高光时刻 ${nextHighlightCount}/1：本月利润 ¥${profit} ≥ ${Math.ceil(nextStageForHighlight.threshold * 0.45)}，请从 3 张候选中挑选 1 张免费加入牌堆`
   }
 
+  const adjustedValuationNormal = Math.round(nextV * postTollValuationMult)
   const finalState = {
     ...rescuedState,
     year: nextYear,
     month: nextMonth,
     elapsedMonths,
-    valuation: nextV,
-    highestValuation: nextHighestValuation,
+    valuation: adjustedValuationNormal,
+    highestValuation: Math.max(state.highestValuation ?? 0, adjustedValuationNormal),
     event: nextEvent,
     majorEvent: nextMajorEvent,
     upcomingMajorEvent: nextUpcomingMajorEvent,
@@ -1209,6 +1458,13 @@ export function resolveMonth(state, rng = Math.random) {
     consecutiveAboveThreshold: nextConsecutiveAboveThreshold,
     highlightCount: nextHighlightCount,
     highlightPending: nextHighlightPending,
+    // 竞争公司系统
+    battle: battleTick.nextBattle,
+    upcomingRival: battleTick.nextUpcomingRival,
+    defeatedRivals: battleTick.nextDefeatedRivals,
+    rivalRewardPending: battleTick.rewardPending,
+    rivalRewardLog: battleTick.rewardLog,
+    rivalRecruitPenalty: battleTick.recruitPenalty ?? 0,
     lastSettlement: buildSettlementReport({
       month: state.month,
       eventIncome,
@@ -1224,6 +1480,7 @@ export function resolveMonth(state, rng = Math.random) {
       returned.length ? `${returned.length} 张卡冷却结束回到牌堆` : '无冷却回归',
       `第 ${nextMonth} 月事件: ${nextEvent.name}`,
       nextMajorEvent ? `⚠️ 年度大事件开始: ${nextMajorEvent.name}（持续 3 个月）` : (nextUpcomingMajorEvent ? `⚠️ ${monthsUntilMajor} 个月后大事件: ${nextUpcomingMajorEvent.name}` : (monthsUntilMajor <= 6 ? `年度大事件倒计时: ${monthsUntilMajor} 个月` : '')),
+      ...battleTick.logs,
       ...state.log,
     ].filter(Boolean).slice(0, 7),
   }
@@ -1266,6 +1523,52 @@ export function pickHighlightCard(state, candidateIndex) {
     drawPile: [...state.drawPile, { ...picked, location: 'deck' }],
     highlightPending: null,
     log: [`🎉 高光奖励 → ${picked.name} 加入牌堆`, ...state.log].slice(0, 7),
+  })
+}
+
+/**
+ * 竞争公司系统：玩家选择本月竞争行动（对决期 4 选 1）
+ * 立即扣减 cash/AP，并把 actionId 暂存到 state.battle.pendingAction，月末 tickBattle 时应用其 payload
+ */
+export function setCompetitiveAction(state, actionId) {
+  if (!state.battle?.active) return reject(state, '不在对决期')
+  if (state.battle.pendingAction) return reject(state, '本月已选行动')
+  const action = getCompetitiveAction(actionId)
+  if (!action) return reject(state, `未知行动 ${actionId}`)
+
+  // 计算实际成本（price-war 按当月预估利润的 X% 扣 cash）
+  const preview = computeBattlePreview(state)
+  let cashCost = action.cashCost ?? 0
+  if (action.cashAsPercentProfit) {
+    const proj = Math.max(0, preview.profit ?? 0)
+    cashCost += Math.round(proj * action.cashAsPercentProfit)
+  }
+  if (state.cash < cashCost) return reject(state, `现金不足（需 ¥${cashCost}）`)
+  if (action.apCost && state.apAvailable < action.apCost) return reject(state, `AP 不足（需 ${action.apCost}）`)
+
+  return accept({
+    ...state,
+    cash: state.cash - cashCost,
+    apAvailable: state.apAvailable - (action.apCost ?? 0),
+    battle: { ...state.battle, pendingAction: actionId, pendingActionCost: cashCost },
+    log: [`⚡ 竞争行动: ${action.name} (¥${cashCost}${action.apCost ? ` / -${action.apCost}AP` : ''})`, ...state.log].slice(0, 7),
+  })
+}
+
+/**
+ * 竞争公司系统：玩家点击"收购完成"确认领取奖励，把待领取的 3 张卡塞进 drawPile
+ */
+export function claimRivalReward(state) {
+  if (!state.rivalRewardPending || !state.rivalRewardPending.length) {
+    return accept(state)
+  }
+  const cards = state.rivalRewardPending.map((card) => ({ ...card, location: 'deck' }))
+  return accept({
+    ...state,
+    drawPile: [...state.drawPile, ...cards],
+    rivalRewardPending: null,
+    rivalRewardLog: null,
+    log: [`📦 收购完成：${cards.length} 张卡加入牌堆 (${cards.map((c) => c.name).join('、')})`, ...state.log].slice(0, 7),
   })
 }
 
@@ -1931,7 +2234,9 @@ export function enterIntermission(state, rng = Math.random) {
     ? Math.round(nextStage.entryGrant * (1 + (bmStats.levelEndBudgetBonus ?? 0)))
     : 0
   const rewardCardId = isPromotion ? pickPromotionRewardCard(nextStage.id, rng) : null
-  const event = randomItem(BOARD_EVENTS, rng)
+  // boss 战中触发的董事会，"战略指引"替换为对应 archetype 的应对策略事件
+  const bossCounterEvent = state.battle?.active ? buildBossCounterEvent(state.battle) : null
+  const event = bossCounterEvent ?? randomItem(BOARD_EVENTS, rng)
   const shopRoll = rollShopRoll(nextStage.id, state.legendaryRollStreak, rng)
   const schoolRoll = rollSchoolRoll(nextStage.id, state.activeBusinessModels, rng)
   const nextMods = rewardCardId
@@ -1981,6 +2286,11 @@ export function resolveEvent(state, optionId, rng = Math.random) {
   const option = im.event.options.find((o) => o.id === optionId)
   if (!option) return reject(state, '选项无效')
   if (option.cost && state.cash < option.cost) return reject(state, '¥ 现金不足')
+  // boss 应对策略：非 repeatable 项已选过则拒绝
+  if (im.event.isBossCounter && !option.repeatable) {
+    const picked = state.battle?.pickedStrategies ?? []
+    if (picked.includes(option.id)) return reject(state, '该应对策略本局已采用')
+  }
 
   let nextState = { ...state }
   if (option.cost) {
@@ -2031,8 +2341,18 @@ export function resolveEvent(state, optionId, rng = Math.random) {
   // Update option label format in logTrail
   const cleanedLabel = option.label.replace(/💰/g, '¥')
 
+  // boss 应对策略：记录已采用项（"放弃不用"等 repeatable 不记录）
+  let nextBattle = nextState.battle
+  if (im.event.isBossCounter && nextBattle?.active && !option.repeatable) {
+    const picked = nextBattle.pickedStrategies ?? []
+    if (!picked.includes(option.id)) {
+      nextBattle = { ...nextBattle, pickedStrategies: [...picked, option.id] }
+    }
+  }
+
   return accept({
     ...nextState,
+    battle: nextBattle,
     nextLevelModifiers: nextMods,
     intermissionState: {
       ...im,
