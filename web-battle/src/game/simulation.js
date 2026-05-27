@@ -33,6 +33,7 @@ import {
   getLineAp,
   openPack,
   pickHighlightCard,
+  playFunctionCard,
   purchaseBusinessModel,
   purchaseShopItem,
   resolveEvent,
@@ -352,6 +353,35 @@ function chooseCompetitiveAction(state, rng) {
   }, 2)?.action ?? COMPETITIVE_ACTION_BY_ID.skip
 }
 
+function functionOptionScore(state, card, option) {
+  const effectText = JSON.stringify(option.effect ?? {})
+  const preview = computeBattlePreview(state)
+  let score = cardScore(card) * 0.08
+  const cost = option.cost ?? option.effect?.cost ?? 0
+  if (state.cash < cost) return -Infinity
+  score -= cost * 0.18
+  if (/rivalDebuff|skillBlocked/.test(effectText)) score += state.battle?.active ? 55 : state.upcomingRival ? 18 : -8
+  if (/delayBoss/.test(effectText)) score += state.upcomingRival ? 50 : state.battle?.active ? 28 : 4
+  if (/cashToRunway/.test(effectText)) score += preview.cashDelta < 0 ? 42 : computeMonthlyBurn(state) > state.cash * 0.18 ? 24 : 2
+  if (/emergencyBoard/.test(effectText)) score += !state.emergencyBoardMeetingPending && computeValuation(state) > (state.stage?.threshold ?? 0) * 1.15 ? 22 : -10
+  if (/peBuff/.test(effectText)) score += preview.profit > 0 ? 26 : 6
+  if (/drawSelect/.test(effectText)) score += state.hand.length <= 5 ? 18 : 7
+  return score
+}
+
+function chooseFunctionCardAction(state, rng) {
+  if (state.discardRequired > 0) return null
+  const candidates = state.hand
+    .filter((card) => card.type === 'fun' && (card.actionOptions?.length ?? 0) > 0)
+    .flatMap((card) => card.actionOptions.map((option) => ({ card, option })))
+  if (!candidates.length) return null
+  const picked = randomTop(rng, candidates, ({ card, option }) => functionOptionScore(state, card, option), 2)
+  if (!picked) return null
+  const score = functionOptionScore(state, picked.card, picked.option)
+  if (score < 18 && rng() > 0.18) return null
+  return picked
+}
+
 function worstBusinessModelIndex(state) {
   let worstIndex = 0
   let worstScore = Infinity
@@ -503,6 +533,17 @@ function playOneMonth(state, rng, monthIndex) {
     if (!discarded.ok) break
     decisions.push({ type: 'discard', card: toss.name })
     state = discarded.state
+  }
+
+  const functionAction = chooseFunctionCardAction(state, rng)
+  if (functionAction) {
+    const played = playFunctionCard(state, functionAction.card.uid, functionAction.option.id, rng)
+    if (played.ok) {
+      state = played.state
+      decisions.push({ type: 'functionCard', card: functionAction.card.name, option: functionAction.option.label })
+    } else {
+      decisions.push({ type: 'functionCardFailed', card: functionAction.card.name, reason: played.message })
+    }
   }
 
   const activeLine = getActiveLine(state)

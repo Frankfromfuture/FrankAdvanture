@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createInitialState,
   resolveMonth,
+  computeMonthlyBurn,
   computeValuation,
   computeMonthlyScalePressure,
   enterIntermission,
@@ -18,6 +19,8 @@ import {
   upgradeCard,
   autoDeployActiveLine,
   claimRivalReward,
+  createCardInstance,
+  playFunctionCard,
 } from './engine.js'
 import {
   RIVAL_ARCHETYPES,
@@ -30,6 +33,7 @@ import {
   computeArchetypeMonthlyMods,
   createBattle,
   createRivalInstance,
+  pickArchetypeForSchedule,
   pickRewardCardTemplates,
   computeTollFee,
 } from './rivals.js'
@@ -58,9 +62,9 @@ function fixedRng() {
 }
 
 describe('v4 Engine Core Tests · 新估值 / CCR / Game Over', () => {
-  it('creates initial state with cash 60, no retainedEarnings, lastMonthProfit 0', () => {
+  it('creates initial state with cash 100, no retainedEarnings, lastMonthProfit 0', () => {
     const state = createInitialState({ rng: fixedRng })
-    expect(state.cash).toBe(60)
+    expect(state.cash).toBe(100)
     expect(state.retainedEarnings).toBeUndefined()
     expect(state.lastMonthProfit).toBe(0)
     expect(state.stage.id).toBe(1)
@@ -111,31 +115,28 @@ describe('v4 Engine Core Tests · 新估值 / CCR / Game Over', () => {
   })
 
   it('exposes CCR per stage matching roguelike pressure curve', () => {
-    expect(getCashConversionRate(1)).toBe(0.60)
-    expect(getCashConversionRate(3)).toBe(0.55)
-    expect(getCashConversionRate(4)).toBe(0.52)
-    expect(getCashConversionRate(6)).toBe(0.45)
-    expect(getCashConversionRate(7)).toBe(0.40)
-    expect(getCashConversionRate(9)).toBe(0.32)
+    expect(getCashConversionRate(1)).toBe(0.72)
+    expect(getCashConversionRate(3)).toBe(0.66)
+    expect(getCashConversionRate(4)).toBe(0.62)
+    expect(getCashConversionRate(6)).toBe(0.53)
+    expect(getCashConversionRate(7)).toBe(0.48)
+    expect(getCashConversionRate(9)).toBe(0.40)
     // CCR bonus from BMs adds, capped at 1.0
-    expect(getCashConversionRate(1, 0.15)).toBeCloseTo(0.75, 5)
+    expect(getCashConversionRate(1, 0.15)).toBeCloseTo(0.87, 5)
     expect(getCashConversionRate(1, 0.5)).toBe(1.0)
   })
 
   it('exposes monthly operation cost per stage', () => {
-    expect(getMonthlyOperationCost(1)).toBe(24)
-    expect(getMonthlyOperationCost(2)).toBe(36)
-    expect(getMonthlyOperationCost(5)).toBe(108)
-    expect(getMonthlyOperationCost(9)).toBe(288)
+    expect(getMonthlyOperationCost(1)).toBe(19)
+    expect(getMonthlyOperationCost(2)).toBe(26)
+    expect(getMonthlyOperationCost(5)).toBe(69)
+    expect(getMonthlyOperationCost(9)).toBe(171)
   })
 
   it('applies CCR to positive profit, full deduction to negative profit, then subtracts opCost', () => {
     // Construct a state with a known cash & no production lines (raw income 0; burn = sum of all cards' baseBurn)
     const state = createInitialState({ rng: fixedRng })
-    const allCardCount = state.hand.length + state.drawPile.length
-    // Each common card baseBurn = 1, founder R is epic = 4. Compute expected burn.
-    const burnApprox = state.hand.reduce((s, c) => s + (c.baseBurn ?? 0), 0)
-      + state.drawPile.reduce((s, c) => s + (c.baseBurn ?? 0), 0)
+    const burnApprox = computeMonthlyBurn(state)
     // raw income = 0 (no working lines), so profit = -burnApprox → cash deducted fully + opCost deducted
     const startCash = 500  // give buffer to avoid game over
     const ctrlState = { ...state, cash: startCash, event: calmEvent }
@@ -145,19 +146,19 @@ describe('v4 Engine Core Tests · 新估值 / CCR / Game Over', () => {
     expect(res.cash).toBe(expectedCashRange)
   })
 
-  it('valuation uses formula V = cash×0.35 + (cardAsset + bmAsset)×1.4 + recent avg positive profit×5', () => {
+  it('valuation uses profession-aware formula with AI asset premium', () => {
     const state = createInitialState({ rng: fixedRng })
     const ctrlState = {
       ...state,
       cash: 100,
-      profitHistory: [10, 50, 90], // avg positive profit 50 → contributes 50 * 5 = 250
-      activeBusinessModels: [{ id: 'BM_01', charged: true }], // BM_01 (common) assetValue 8 → 8 * 1.4 = 11
+      profitHistory: [10, 50, 90], // avg positive profit 50 → contributes 50 * 7.5 = 375
+      activeBusinessModels: [{ id: 'BM_01', charged: true }], // AI track asset premium: 10 * 1.85 = 18.5
       hand: [],
       drawPile: [],
       coolingPile: [],
     }
-    // cash(100*0.35 = 35) + asset(round(8*1.4) = 11) + profit(50*5 = 250) = 296
-    expect(computeValuation(ctrlState)).toBe(296)
+    // cash(100*0.38 = 38) + asset(10*1.85 = 18.5) + profit(50*7.5 = 375) = 431.5
+    expect(computeValuation(ctrlState)).toBe(432)
   })
 
   it('negative lastMonthProfit does NOT subtract from V (clamped to 0)', () => {
@@ -166,8 +167,8 @@ describe('v4 Engine Core Tests · 新估值 / CCR / Game Over', () => {
       ...state, cash: 50, lastMonthProfit: -200,
       activeBusinessModels: [], hand: [], drawPile: [], coolingPile: [],
     }
-    // cash(round(50*0.35)) + asset(0) + profit(0) = 18
-    expect(computeValuation(ctrlState)).toBe(18)
+    // cash(50*0.38) + asset(0) + profit(0) = 19
+    expect(computeValuation(ctrlState)).toBe(19)
   })
 
   it('triggers GAME OVER when cash < 0 at month end', () => {
@@ -211,11 +212,11 @@ describe('v4 Engine Core Tests · 新估值 / CCR / Game Over', () => {
     const intermission = enterIntermission(stateWithPromotion, fixedRng)
     expect(intermission.ok).toBe(true)
     const imState = intermission.state
-    // Stage 2 entryGrant is 40 in the roguelike balance pass
-    expect(imState.cash).toBe(state.cash + 40)
+    // Stage 2 entryGrant 70 × AI track grant 1.6 = 112
+    expect(imState.cash).toBe(state.cash + 112)
     // No 'withdrawn' field anymore
     expect(imState.intermissionState.withdrawn).toBeUndefined()
-    expect(imState.intermissionState.grantedBudget).toBe(40)
+    expect(imState.intermissionState.grantedBudget).toBe(112)
 
     let finalImState = imState
     if (imState.intermissionState.phase === 'event') {
@@ -633,9 +634,9 @@ describe('v4 PR3: 接通死 BM payload', () => {
       },
     }
     const im = enterIntermission(stateWithPromo, fixedRng).state
-    // 40 * 1.25 = 50
-    expect(im.cash).toBe(state.cash + 50)
-    expect(im.intermissionState.grantedBudget).toBe(50)
+    // 70 * AI track 1.6 * BM bonus 1.25 = 140
+    expect(im.cash).toBe(state.cash + 140)
+    expect(im.intermissionState.grantedBudget).toBe(140)
   })
 })
 
@@ -718,12 +719,12 @@ describe('Rival Battle System · 竞争公司对决', () => {
   it('computeShareDelta: yourIncome > rivalIncome → positive delta, capped at K', () => {
     // 完全压制：delta 接近 +K
     const delta1 = computeShareDelta(1000, 1)
-    expect(delta1).toBeGreaterThan(9)
-    expect(delta1).toBeLessThanOrEqual(10)
+    expect(delta1).toBeGreaterThan(11)
+    expect(delta1).toBeLessThanOrEqual(12)
     // 完全被压制：delta 接近 -K
     const delta2 = computeShareDelta(1, 1000)
-    expect(delta2).toBeLessThan(-9)
-    expect(delta2).toBeGreaterThanOrEqual(-10)
+    expect(delta2).toBeLessThan(-11)
+    expect(delta2).toBeGreaterThanOrEqual(-12)
     // 完全相等：delta = 0
     expect(computeShareDelta(500, 500)).toBe(0)
     // boostK 加成
@@ -787,9 +788,9 @@ describe('Rival Battle System · 竞争公司对决', () => {
     expect(result.state.upcomingRival).toBeNull()
   })
 
-  it('rival timeout: 6 months elapsed without win/lose → battle cleared, no reward', () => {
+  it('rival timeout: max battle months elapsed without win/lose → battle cleared, no reward', () => {
     let state = createInitialState({ rng: () => 0.5 })
-    // 模拟一个已经打到第 5 月、势均力敌的对决
+    // 模拟一个已经打到倒数第 1 月、势均力敌的对决
     state = {
       ...state,
       elapsedMonths: 17,
@@ -807,7 +808,7 @@ describe('Rival Battle System · 竞争公司对决', () => {
         flavor: '',
         playerShare: 50,
         rivalShare: 50,
-        monthsElapsed: 5,
+        monthsElapsed: RIVAL_BATTLE_MAX_MONTHS - 1,
         sDeptStacks: 0,
         copycatTickCount: 0,
         lastShareDelta: 0,
@@ -815,7 +816,7 @@ describe('Rival Battle System · 竞争公司对决', () => {
     }
     const result = resolveMonth(state, () => 0.5)
     expect(result.ok).toBe(true)
-    // monthsElapsed +1 = 6 → 超时撤离
+    // monthsElapsed +1 = max → 超时撤离
     expect(result.state.battle).toBeNull()
     expect(result.state.rivalRewardPending).toBeNull()
     expect(result.state.log.some((l) => l.includes('超时'))).toBe(true)
@@ -886,6 +887,84 @@ describe('Rival Battle System · 竞争公司对决', () => {
     expect(result.state.drawPile.length).toBe(beforeCount + 3)
     expect(result.state.rivalRewardPending).toBeNull()
     expect(result.state.rivalRewardLog).toBeNull()
+  })
+
+  it('common employee cards can roll a basic random function', () => {
+    const lucky = createCardInstance('EMP_R_01', 'deck', () => 0.01)
+    const plain = createCardInstance('EMP_R_01', 'deck', () => 0.99)
+    expect(lucky.randomFunctions?.length ?? 0).toBeGreaterThanOrEqual(1)
+    expect(lucky.effects.length).toBeGreaterThan(plain.effects.length)
+    expect(plain.randomFunctions?.length ?? 0).toBe(0)
+  })
+
+  it('playFunctionCard: uses hand option, enters one-month cooling, then returns to draw pile', () => {
+    const fun = makeFixedCard('FUN_01', { uid: 'fun-test-1', location: 'hand' })
+    let state = {
+      ...createInitialState({ rng: () => 0.5 }),
+      hand: [fun],
+      drawPile: [],
+      coolingPile: [],
+      cash: 300,
+      selectedCardUid: fun.uid,
+    }
+    const played = playFunctionCard(state, fun.uid, 'scan_market', () => 0.5)
+    expect(played.ok).toBe(true)
+    state = played.state
+    expect(state.hand.some((card) => card.uid === fun.uid)).toBe(false)
+    expect(state.coolingPile.find((card) => card.uid === fun.uid)?.coolingRemaining).toBe(1)
+
+    const settled = resolveMonth({ ...state, cash: 5000, event: calmEvent }, () => 0.5)
+    expect(settled.ok).toBe(true)
+    expect([...settled.state.drawPile, ...settled.state.hand].some((card) => card.uid === fun.uid)).toBe(true)
+  })
+
+  it('function effects support PE windows, emergency board and boss delay', () => {
+    const peCard = makeFixedCard('FUN_02', { uid: 'fun-pe-test', location: 'hand' })
+    let state = {
+      ...createInitialState({ rng: () => 0.5 }),
+      hand: [peCard],
+      drawPile: [],
+      coolingPile: [],
+      cash: 500,
+      profitHistory: [100, 100, 100],
+      lastMonthProfit: 100,
+      upcomingRival: {
+        archetypeId: 'ai-open-source-free-riders',
+        archetypeName: '开源白嫖派',
+        name: '开源白嫖派',
+        startElapsedMonth: 13,
+        tier: 1,
+      },
+    }
+    const beforeV = computeValuation(state)
+    const used = playFunctionCard(state, peCard.uid, 'launch_demo', () => 0.5)
+    expect(used.ok).toBe(true)
+    state = used.state
+    expect(state.cash).toBe(420)
+    expect(state.peBuffs[0].value).toBeCloseTo(0.18)
+    expect(state.upcomingRival.startElapsedMonth).toBe(13)
+    expect(computeValuation(state)).toBeGreaterThan(beforeV)
+
+    const delayCard = makeFixedCard('FUN_10', { uid: 'fun-delay-test', location: 'hand' })
+    const delayed = playFunctionCard({ ...state, hand: [delayCard], coolingPile: [] }, delayCard.uid, 'brand_moat', () => 0.5)
+    expect(delayed.ok).toBe(true)
+    expect(delayed.state.upcomingRival.startElapsedMonth).toBe(16)
+    expect(delayed.state.rivalScheduleDelayMonths).toBe(3)
+
+    const boardCard = makeFixedCard('FUN_03', { uid: 'fun-board-test', location: 'hand' })
+    const board = playFunctionCard({ ...state, hand: [boardCard], coolingPile: [] }, boardCard.uid, 'war_room', () => 0.5)
+    expect(board.ok).toBe(true)
+    expect(board.state.emergencyBoardMeetingPending).toBe(true)
+    const result = resolveMonth({ ...board.state, event: calmEvent, cash: 5000 }, () => 0.5)
+    expect(result.ok).toBe(true)
+    expect(result.state.result?.reason).toBe('紧急董事会')
+  })
+
+  it('profession-specific boss lines do not cross tracks', () => {
+    expect(pickArchetypeForSchedule(RIVAL_SCHEDULE[0], [], () => 0.5, 'ai').id).toBe('ai-open-source-free-riders')
+    expect(pickArchetypeForSchedule(RIVAL_SCHEDULE[0], [], () => 0.5, 'growth').id).toBe('growth-99-subsidy-army')
+    expect(pickArchetypeForSchedule(RIVAL_SCHEDULE[0], [], () => 0.5, 'ops').id).toBe('ops-outsourcing-lowcost')
+    expect(createRivalInstance(RIVAL_SCHEDULE[4], 6, [], () => 0.5, 'growth').archetypeId).toBe('growth-endgame-ltd')
   })
 
   it('initial state has battle=null, defeatedRivals=[], no rivalRewardPending', () => {

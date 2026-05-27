@@ -24,7 +24,7 @@ const TABS = [
   { id: 'fun', label: '功能卡', subtitle: '产品/团队/流程' },
   { id: 'leg', label: '传奇卡', subtitle: 'CXO 级' },
   { id: 'bm', label: '商业模式', subtitle: '全局 buff' },
-  { id: 'event', label: '月度事件', subtitle: '局内随机' },
+  { id: 'event', label: '季度新闻', subtitle: '宏观风向' },
   { id: 'board', label: '董事访谈', subtitle: '关间事件' },
   { id: 'combo', label: 'Combo 规则', subtitle: '5 个产线组合' },
   { id: 'rarity', label: '稀有度参数', subtitle: 'Burn/资产/Roll' },
@@ -579,7 +579,7 @@ function BmEditModal({ bm, onSave, onCancel }) {
 }
 
 // ============================================================================
-// 编辑 Modal · 月度事件
+// 编辑 Modal · 季度新闻
 // ============================================================================
 
 function EventEditModal({ event, onSave, onCancel }) {
@@ -614,8 +614,8 @@ function EventEditModal({ event, onSave, onCancel }) {
     <div className="edit-backdrop" onMouseDown={onCancel}>
       <section className="edit-modal" onMouseDown={(e) => e.stopPropagation()}>
         <header>
-          <strong>编辑月度事件 · {event.id}</strong>
-          <span>每月 Phase 2 随机翻牌时可能触发</span>
+          <strong>编辑季度新闻 · {event.id}</strong>
+          <span>每季度刷新，影响本季度经营</span>
         </header>
 
         <div className="edit-grid">

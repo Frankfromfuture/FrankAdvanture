@@ -189,6 +189,7 @@ export function summarizeEffect(effect = '') {
   const value = summarizeEffectValue(normalized)
   const strengthen = value ? `加强 ${value}` : '加强'
 
+  if (normalized.startsWith('ACTION:')) return normalized.replace(/^ACTION:\s*/, '')
   if (normalized.includes('FOUNDER_LEAN_MANAGEMENT')) return '精益管理：只要Founder在手里，本轮最大AP+1，打出的话本轮 AP+3'
   if (normalized.includes('FOUNDER_SALES_HIGH')) return 'Sales High：只要在手里，产出系数*1.2，打出的话本轮产出系数*1.8'
   if (normalized.includes('FOUNDER_AI_RD')) return 'AI-Driven 研发：只要在手里，每轮抓牌数+1，打出的话本轮抓牌数+3（手牌数不能超过10 张）'
@@ -221,6 +222,7 @@ function summarizeEffectShort(effect = '') {
   const normalized = String(effect).replace('TRIGGER: ', '').trim()
   const value = summarizeEffectValue(normalized)
 
+  if (normalized.startsWith('ACTION:')) return normalized.replace(/^ACTION:\s*/, '')
   if (normalized.includes('FOUNDER_LEAN_MANAGEMENT')) return '精益管理'
   if (normalized.includes('FOUNDER_SALES_HIGH')) return 'Sales High'
   if (normalized.includes('FOUNDER_AI_RD')) return 'AI研发'

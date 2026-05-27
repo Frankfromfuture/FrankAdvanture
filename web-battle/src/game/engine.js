@@ -27,6 +27,7 @@ import {
   usesStandardEmpSchema,
   getDeptL1Effects,
   rollRandomFunctions,
+  getProfessionTrack,
 } from './cards.js'
 import {
   RIVAL_SCHEDULE,
@@ -106,8 +107,9 @@ export function createInitialState({ profession = 'scientist', rng = Math.random
   const month = now.getMonth() + 1
   
   const driftDirection = pickRandomDriftDirection(rng)
+  const professionTrack = getProfessionTrack(profession)
 
-  let dept = 'R'
+  let dept = professionTrack.coreDept
   let founderId = 'EMP_FOUNDER_R'
   if (profession === 'sales') {
     dept = 'S'
@@ -123,20 +125,30 @@ export function createInitialState({ profession = 'scientist', rng = Math.random
     founderCard
   ])
 
+  const supportDept = professionTrack.supportDept
   const commonPool = CARD_TEMPLATES.filter((c) => c.type === 'emp' && c.dept === dept && c.rarity === 'common')
   const managerPool = CARD_TEMPLATES.filter((c) => c.type === 'emp' && c.dept === dept && (c.rarity === 'rare' || c.rarity === 'elite'))
+  const supportPool = CARD_TEMPLATES.filter((c) => c.type === 'emp' && c.dept === supportDept && c.rarity === 'common')
   
   const commonCardId = commonPool.length ? commonPool[Math.floor(rng() * commonPool.length)].id : `EMP_${dept}_01`
   const managerCardId = managerPool.length ? managerPool[Math.floor(rng() * managerPool.length)].id : `EMP_${dept}_02`
+  const supportCardId = supportPool.length ? supportPool[Math.floor(rng() * supportPool.length)].id : `EMP_${supportDept}_01`
 
-  const starterDeckIds = [...expandDeck(STARTER_DECK), commonCardId, managerCardId]
+  const starterDeckIds = [
+    ...expandDeck(STARTER_DECK),
+    commonCardId,
+    managerCardId,
+    supportCardId,
+  ]
   const drawPile = shuffle(starterDeckIds.map((id) => createCardInstance(id, 'deck', rng)), rng)
   const stage = STAGES[0]
-  const event = pickEventForStage(stage.id, rng, 0)
+  const event = pickEventForStage(stage.id, rng, 0, professionTrack.id)
   const apAvailable = Math.max(1, GAME_CONFIG.baseAp + (event.apDelta ?? 0))
 
   const initialState = {
     stage,
+    profession,
+    professionTrack: professionTrack.id,
     year,
     month,
     elapsedMonths: 0,
@@ -144,7 +156,7 @@ export function createInitialState({ profession = 'scientist', rng = Math.random
     majorEvent: null,
     upcomingMajorEvent: null,
     majorEventCountdown: 12,
-    cash: 60 + Math.max(0, event.cashDelta ?? 0),
+    cash: 100 + (professionTrack.id === 'ops' ? 80 : 0) + Math.max(0, event.cashDelta ?? 0),
     valuation: 0,
     highestValuation: 0,
     profitHistory: [],
@@ -179,6 +191,11 @@ export function createInitialState({ profession = 'scientist', rng = Math.random
       unlockedEpicDepts: [],
       pendingCards: [],
     },
+    peBuffs: [],
+    runwayBurnDiscount: null,
+    rivalDebuff: null,
+    emergencyBoardMeetingPending: false,
+    rivalScheduleDelayMonths: 0,
     // 竞争公司系统（boss.md）
     battle: null,                // 当前对决状态 { active, archetypeId, playerShare, rivalShare, monthsElapsed, ... }
     upcomingRival: null,         // 预告中的对手 { archetypeId, name, tier, estimatedMonthlyIncome, weaknessHint, ... }
@@ -267,6 +284,9 @@ export function computeMonthlyBurn(state) {
     }
   }
 
+  const trackId = state.professionTrack ?? getProfessionTrack(state.profession).id
+  if (trackId === 'ops') return Math.round(burnSum * 0.88)
+  if (trackId === 'ai') return Math.round(burnSum * 0.82)
   return burnSum
 }
 
@@ -274,14 +294,11 @@ export function computeMonthlyScalePressure(state) {
   const month = (state.elapsedMonths ?? 0) + 1
   const cardCount = getAllCards(state).length
   const stageId = state.stage?.id ?? 1
-  const cappedMonths = (start, end = Infinity) => Math.max(0, Math.min(month, end) - start)
-  const ventureClock =
-    cappedMonths(3, 6) * 3 +
-    cappedMonths(6, 12) * 6 +
-    cappedMonths(12, 24) * 9 +
-    cappedMonths(24) * 9
-  const portfolioDrag = Math.max(0, cardCount - 27) * 5
-  const stageDrag = Math.max(0, stageId - 3) * 8
+  const quarterTicks = Math.max(0, Math.floor((month - 1) / 3))
+  const annualCrises = Math.max(0, Math.floor((month - 1) / 12))
+  const ventureClock = quarterTicks * 5 + annualCrises * 18
+  const portfolioDrag = Math.max(0, cardCount - 32) * 3
+  const stageDrag = Math.max(0, stageId - 3) * 6
   return Math.round(ventureClock + portfolioDrag + stageDrag)
 }
 
@@ -439,16 +456,17 @@ function getCombinedEvent(state) {
 
 /**
  * 估值公式 (v4 roguelike balance)
- *   V = cash × 0.35
- *     + (cardAssetSum + bmAssetSum) × 1.4
- *     + 最近 3 月平均正利润 × 5
+ *   V = cash × 0.38/0.44(运营线)
+ *     + (cardAssetSum + bmAssetSum) × 1.55/1.85(AI线)
+ *     + 最近 3 月平均正利润 × 7.5/7.9(增长线)
  *
  * - 现金权重大: 玩家有动力守现金
- * - 资产权重 2 倍: 让卡牌构筑在中后期仍有意义
- * - 最近 3 月平均利润 ×4: 保留增长奖励，但避免单月爆发直接打穿多个阶段
+ * - 资产权重适中: 让卡牌构筑在中后期仍有意义
+ * - 最近 3 月平均利润: 保留增长奖励，但避免单月爆发直接打穿多个阶段
  */
 export function computeValuation(state) {
-  const cashValue = Math.max(0, state.cash) * 0.35
+  const trackId = state.professionTrack ?? getProfessionTrack(state.profession).id
+  const cashValue = Math.max(0, state.cash) * (trackId === 'ops' ? 0.44 : 0.38)
 
   // Card asset value
   const allCards = getAllCards(state)
@@ -468,15 +486,18 @@ export function computeValuation(state) {
     }
   }
 
-  const assetValue = (cardAssetSum + bmAssetSum) * 1.4
+  const assetValue = (cardAssetSum + bmAssetSum) * (trackId === 'ai' ? 1.85 : 1.55)
   const profitSamples = (state.profitHistory?.length ? state.profitHistory.slice(-3) : [state.lastMonthProfit ?? 0])
     .map((profit) => Math.max(0, profit ?? 0))
   const avgProfit = profitSamples.length
     ? profitSamples.reduce((sum, profit) => sum + profit, 0) / profitSamples.length
     : 0
-  const profitValue = avgProfit * 5
+  const profitValue = avgProfit * (trackId === 'growth' ? 7.9 : 7.5)
+  const peMultiplier = (state.peBuffs ?? [])
+    .filter((buff) => (buff.months ?? 0) > 0)
+    .reduce((product, buff) => product * (1 + (buff.value ?? 0)), 1)
 
-  return Math.round(cashValue + assetValue + profitValue)
+  return Math.round((cashValue + assetValue + profitValue) * peMultiplier)
 }
 
 
@@ -750,6 +771,7 @@ export function placeCardInSlot(state, cardUid, slotIndex) {
   if (handIndex < 0) return reject(state, '请选择一张手牌')
 
   const card = state.hand[handIndex]
+  if (card.type === 'fun') return reject(state, '功能牌请从手牌点击直接打出')
   const newSlots = activeLine.slots.map((slot, index) => (index === slotIndex ? card : slot))
   const replacedCard = activeLine.slots[slotIndex]
   const bmStats = computeBusinessModelStats(state)
@@ -810,7 +832,8 @@ export function autoDeployActiveLine(state) {
   if (!activeLine || activeLine.status !== 'planning') return reject(state, '当前没有可布置产线')
 
   // Pool of all available cards: hand + slots of the active line
-  const C = [...state.hand, ...activeLine.slots.filter(Boolean)].map(card => ({ ...card, location: 'hand' }))
+  const functionCards = state.hand.filter((card) => card.type === 'fun').map((card) => ({ ...card, location: 'hand' }))
+  const C = [...state.hand.filter((card) => card.type !== 'fun'), ...activeLine.slots.filter(Boolean)].map(card => ({ ...card, location: 'hand' }))
   if (C.length === 0) return accept(state)
 
   const bmStats = computeBusinessModelStats(state)
@@ -857,7 +880,7 @@ export function autoDeployActiveLine(state) {
   const bestSlots = best.slots
 
   // Next hand consists of cards in C that were NOT chosen for the slots
-  const nextHand = C.filter(card => !bestSlots.some(s => s && s.uid === card.uid))
+  const nextHand = [...functionCards, ...C.filter(card => !bestSlots.some(s => s && s.uid === card.uid))]
   const nextLines = replaceLine(state.lines, activeLine.id, {
     ...activeLine,
     slots: bestSlots.map((slot) => (slot ? { ...slot, location: 'line' } : null)),
@@ -920,7 +943,7 @@ export function dismissRecruitReveal(state) {
  * }
  */
 function tickBattle(ctx) {
-  const { prevBattle, prevUpcomingRival, prevDefeated = [], elapsedMonths, stageId, eventIncome, monthlyBurn, playerCash, rng } = ctx
+  const { prevBattle, prevUpcomingRival, prevDefeated = [], elapsedMonths, stageId, eventIncome, monthlyBurn, playerCash, professionTrack, scheduleDelayMonths = 0, rivalDebuff, rng } = ctx
   const logs = []
   let nextBattle = prevBattle
   let nextUpcomingRival = prevUpcomingRival
@@ -934,15 +957,15 @@ function tickBattle(ctx) {
   let tollFailed = false
 
   // 1. 预告月：抽 upcomingRival
-  const previewEntry = RIVAL_SCHEDULE.find((s) => s.previewElapsedMonth === elapsedMonths)
+  const previewEntry = RIVAL_SCHEDULE.find((s) => s.previewElapsedMonth + scheduleDelayMonths === elapsedMonths)
   if (previewEntry && !prevBattle && !prevUpcomingRival) {
-    const rival = createRivalInstance(previewEntry, stageId, prevDefeated, rng)
-    nextUpcomingRival = { ...rival, startElapsedMonth: previewEntry.startElapsedMonth }
+    const rival = createRivalInstance(previewEntry, stageId, prevDefeated, rng, professionTrack)
+    nextUpcomingRival = { ...rival, startElapsedMonth: previewEntry.startElapsedMonth + scheduleDelayMonths }
     logs.push(`⚔️ 对手档案公布：${rival.archetypeName}·${rival.name}（${RIVAL_PREVIEW_MONTHS} 月后开战，弱点：${rival.weaknessHint}）`)
   }
 
   // 2. 开战月：把 upcomingRival 转 battle
-  const startEntry = RIVAL_SCHEDULE.find((s) => s.startElapsedMonth === elapsedMonths)
+  const startEntry = RIVAL_SCHEDULE.find((s) => s.startElapsedMonth + scheduleDelayMonths === elapsedMonths)
   if (startEntry && !prevBattle && prevUpcomingRival) {
     nextBattle = createBattle(prevUpcomingRival)
     nextUpcomingRival = null
@@ -958,7 +981,7 @@ function tickBattle(ctx) {
       : {}
 
     // 挖人技能屏蔽：完全跳过 archetype 月度效果
-    const mods = actionPayload.skillBlocked
+    const mods = actionPayload.skillBlocked || rivalDebuff?.skillBlocked
       ? { incomeMult: 1, burnMult: 1, recruitDelta: 0, apDelta: 0, bmTopEffectMult: 1, sDeptMult: 1 }
       : computeArchetypeMonthlyMods(nextBattle)
 
@@ -974,6 +997,9 @@ function tickBattle(ctx) {
     // 品牌投放：本月对手收入 ×0.8
     if (actionPayload.rivalIncomeMult != null) {
       rivalIncome = Math.round(rivalIncome * actionPayload.rivalIncomeMult)
+    }
+    if (rivalDebuff?.months > 0 && rivalDebuff.rivalIncomeMult != null) {
+      rivalIncome = Math.round(rivalIncome * rivalDebuff.rivalIncomeMult)
     }
     const boostK = actionPayload.boostK ?? 0
     const delta = computeShareDelta(effectivePlayerIncome, rivalIncome, { boostK })
@@ -1001,7 +1027,7 @@ function tickBattle(ctx) {
 
     // 4. 胜利判定（达成 ≥ 80% 即结算）
     if (newPlayerShare >= RIVAL_WIN_THRESHOLD) {
-      const rewardIds = pickRewardCardTemplates(nextBattle.archetypeId, 3, rng)
+      const rewardIds = pickRewardCardTemplates(nextBattle.archetypeId, 3, rng, professionTrack)
       const rewardCards = rewardIds.map((id) => createCardInstance(id, 'deck', rng))
       rewardPending = rewardCards
       rewardLog = {
@@ -1027,7 +1053,7 @@ function tickBattle(ctx) {
       nextBattle = null
     }
     // 6. 超时：6 月对决期内未胜未负
-    else if (newMonthsElapsed >= RIVAL_BATTLE_MAX_MONTHS) {
+    else if (newMonthsElapsed >= RIVAL_BATTLE_MAX_MONTHS + (nextBattle.maxMonthsBonus ?? 0)) {
       logs.push(`⏱️ 对决 6 月超时，${nextBattle.archetypeName} 撤离，无奖励无惩罚`)
       nextBattle = null
     }
@@ -1096,6 +1122,9 @@ export function resolveMonth(state, rng = Math.random) {
   if (battleMonthlyMods && battleMonthlyMods.burnMult > 1 && !maintenanceWaived) {
     monthlyBurn = Math.round(monthlyBurn * battleMonthlyMods.burnMult)
   }
+  if (state.runwayBurnDiscount?.months > 0 && state.runwayBurnDiscount.discount > 0 && !maintenanceWaived) {
+    monthlyBurn = Math.max(0, Math.round(monthlyBurn * (1 - state.runwayBurnDiscount.discount)))
+  }
 
   // Consume waiveMaintenance if used
   let nextActiveBusinessModels = state.activeBusinessModels
@@ -1149,6 +1178,7 @@ export function resolveMonth(state, rng = Math.random) {
         rawIncome,
         maintenance: monthlyBurn,
         lineReports,
+        activeLineId: state.activeLineId,
         apCarry: 0,
         usedAp: hasNewLine ? getLineAp(activeLine.slots, bmStats) : 0,
       }),
@@ -1207,6 +1237,8 @@ export function resolveMonth(state, rng = Math.random) {
   }
   const elapsedMonths = (state.elapsedMonths ?? 0) + 1
   const isQuarterlyBoard = elapsedMonths > 0 && elapsedMonths % 3 === 0
+  const isEmergencyBoard = !!state.emergencyBoardMeetingPending
+  const tempModifiersAfterMonth = tickTemporaryModifiers(state)
 
   // 竞争公司系统：每月对决推进（预告 / 开战 / 份额结算 / 胜负判定）
   // 注：burnMult 在 monthlyBurn 计算时已经先扣过；tickBattle 只处理生命周期 + 份额 + 划道费
@@ -1219,6 +1251,9 @@ export function resolveMonth(state, rng = Math.random) {
     eventIncome,
     monthlyBurn,
     playerCash: finalCash,
+    professionTrack: state.professionTrack,
+    scheduleDelayMonths: state.rivalScheduleDelayMonths ?? 0,
+    rivalDebuff: state.rivalDebuff,
     rng,
   })
 
@@ -1248,6 +1283,7 @@ export function resolveMonth(state, rng = Math.random) {
         rawIncome,
         maintenance: monthlyBurn,
         lineReports,
+        activeLineId: state.activeLineId,
         apCarry: 0,
         usedAp: hasNewLine ? getLineAp(activeLine.slots, bmStats) : 0,
       }),
@@ -1285,12 +1321,13 @@ export function resolveMonth(state, rng = Math.random) {
         bestMonth: Math.max(eventIncome, state.lastSettlement?.income ?? 0),
       }
     }
-  } else if (isQuarterlyBoard) {
+  } else if (isQuarterlyBoard || isEmergencyBoard) {
     result = {
       passed: true,
       boardMeeting: true,
-      quarterlyReview: true,
-      reason: '季度董事会',
+      quarterlyReview: isQuarterlyBoard,
+      emergencyReview: isEmergencyBoard && !isQuarterlyBoard,
+      reason: isEmergencyBoard && !isQuarterlyBoard ? '紧急董事会' : '季度董事会',
       nextStage: state.stage,
       bestMonth: Math.max(eventIncome, state.lastSettlement?.income ?? 0),
     }
@@ -1314,12 +1351,15 @@ export function resolveMonth(state, rng = Math.random) {
       defeatedRivals: battleTick.nextDefeatedRivals,
       rivalRewardPending: battleTick.rewardPending,
       rivalRewardLog: battleTick.rewardLog,
+      ...tempModifiersAfterMonth,
+      emergencyBoardMeetingPending: false,
       lastSettlement: buildSettlementReport({
         month: state.month,
         eventIncome,
         rawIncome,
         maintenance: monthlyBurn,
         lineReports,
+        activeLineId: state.activeLineId,
         apCarry,
         usedAp,
       }),
@@ -1336,7 +1376,7 @@ export function resolveMonth(state, rng = Math.random) {
   // Standard month transition
   const isNewQuarter = (nextMonth - 1) % 3 === 0
   const { nextMajorEvent, nextUpcomingMajorEvent, monthsUntilMajor } = computeNextMajorEvent(state, elapsedMonths, rng)
-  const nextEvent = isNewQuarter ? pickEventForStage(state.stage.id, rng, elapsedMonths) : state.event
+  const nextEvent = isNewQuarter ? pickEventForStage(state.stage.id, rng, elapsedMonths, state.professionTrack) : state.event
   const nextDriftDirection = isNewQuarter ? pickRandomDriftDirection(rng) : (state.driftDirection || 'right-up')
   const apHandRich = bmStats.apIfHandRichEnabled && rescuedState.hand.length >= 6 ? 1 : 0
 
@@ -1407,6 +1447,7 @@ export function resolveMonth(state, rng = Math.random) {
         rawIncome,
         maintenance: monthlyBurn,
         lineReports,
+        activeLineId: state.activeLineId,
         apCarry: 0,
         usedAp,
       }),
@@ -1465,12 +1506,15 @@ export function resolveMonth(state, rng = Math.random) {
     rivalRewardPending: battleTick.rewardPending,
     rivalRewardLog: battleTick.rewardLog,
     rivalRecruitPenalty: battleTick.recruitPenalty ?? 0,
+    ...tempModifiersAfterMonth,
+    emergencyBoardMeetingPending: false,
     lastSettlement: buildSettlementReport({
       month: state.month,
       eventIncome,
       rawIncome,
       maintenance: monthlyBurn,
       lineReports,
+      activeLineId: state.activeLineId,
       apCarry,
       usedAp,
     }),
@@ -1552,6 +1596,109 @@ export function setCompetitiveAction(state, actionId) {
     apAvailable: state.apAvailable - (action.apCost ?? 0),
     battle: { ...state.battle, pendingAction: actionId, pendingActionCost: cashCost },
     log: [`⚡ 竞争行动: ${action.name} (¥${cashCost}${action.apCost ? ` / -${action.apCost}AP` : ''})`, ...state.log].slice(0, 7),
+  })
+}
+
+function applyFunctionEffect(state, effect, rng) {
+  if (!effect) return state
+  if (effect.type === 'composite') {
+    return (effect.effects ?? []).reduce((current, item) => applyFunctionEffect(current, item, rng), state)
+  }
+  if (effect.type === 'delayBoss') {
+    if (state.battle?.active) {
+      return {
+        ...state,
+        battle: {
+          ...state.battle,
+          maxMonthsBonus: (state.battle.maxMonthsBonus ?? 0) + 1,
+        },
+      }
+    }
+    return {
+      ...state,
+      upcomingRival: state.upcomingRival
+        ? { ...state.upcomingRival, startElapsedMonth: (state.upcomingRival.startElapsedMonth ?? 0) + (effect.months ?? 3) }
+        : state.upcomingRival,
+      rivalScheduleDelayMonths: (state.rivalScheduleDelayMonths ?? 0) + (effect.months ?? 3),
+    }
+  }
+  if (effect.type === 'emergencyBoard') {
+    return state.emergencyBoardMeetingPending
+      ? state
+      : { ...state, emergencyBoardMeetingPending: true }
+  }
+  if (effect.type === 'peBuff') {
+    return {
+      ...state,
+      peBuffs: [
+        ...(state.peBuffs ?? []),
+        { id: `fun-pe-${effect.value ?? 0}-${effect.months ?? 1}`, value: effect.value ?? 0, months: effect.months ?? 1 },
+      ],
+    }
+  }
+  if (effect.type === 'cashToRunway') {
+    return {
+      ...state,
+      runwayBurnDiscount: {
+        discount: Math.max(state.runwayBurnDiscount?.discount ?? 0, effect.discount ?? 0.15),
+        months: Math.max(state.runwayBurnDiscount?.months ?? 0, effect.months ?? 1),
+      },
+    }
+  }
+  if (effect.type === 'rivalDebuff') {
+    return {
+      ...state,
+      rivalDebuff: {
+        rivalIncomeMult: effect.rivalIncomeMult ?? state.rivalDebuff?.rivalIncomeMult ?? 1,
+        skillBlocked: !!(effect.skillBlocked || state.rivalDebuff?.skillBlocked),
+        months: Math.max(state.rivalDebuff?.months ?? 0, effect.months ?? 1),
+      },
+    }
+  }
+  if (effect.type === 'drawSelect') {
+    const drawCount = Math.max(0, effect.draw ?? 0)
+    const keepCount = Math.max(0, effect.keep ?? drawCount)
+    const drawn = drawCards(Math.min(drawCount, state.drawPile.length), state.drawPile)
+    const kept = drawn.drawn.slice(0, keepCount).map((card) => ({ ...card, location: 'hand' }))
+    const returned = drawn.drawn.slice(keepCount).map((card) => ({ ...card, location: 'deck' }))
+    return {
+      ...state,
+      hand: sortHandDefault([...state.hand, ...kept]),
+      drawPile: shuffle([...returned, ...drawn.drawPile], rng),
+    }
+  }
+  return state
+}
+
+export function playFunctionCard(state, cardUid, optionId, rng = Math.random) {
+  if (state.result) return reject(state, '本关已结算')
+  if (state.discardRequired > 0) return reject(state, `需要先弃 ${state.discardRequired} 张手牌`)
+  const card = state.hand.find((item) => item.uid === cardUid)
+  if (!card || card.type !== 'fun') return reject(state, '请选择一张功能牌')
+  const options = card.actionOptions ?? []
+  const option = options.find((item) => item.id === optionId) ?? options[0]
+  if (!option) return reject(state, '功能牌没有可执行选项')
+  const cost = option.cost ?? option.effect?.cost ?? 0
+  if (state.cash < cost) return reject(state, `现金不足（需 ¥${cost}）`)
+
+  const handWithoutCard = state.hand.filter((item) => item.uid !== cardUid)
+  let nextState = {
+    ...state,
+    cash: state.cash - cost,
+    hand: handWithoutCard,
+    selectedCardUid: null,
+  }
+  nextState = applyFunctionEffect(nextState, option.effect, rng)
+  const coolingCard = {
+    ...card,
+    location: 'cooling',
+    coolingRemaining: card.cooldownAfterUse ?? 1,
+  }
+  return accept({
+    ...nextState,
+    coolingPile: [...nextState.coolingPile, coolingCard],
+    discardRequired: Math.max(0, nextState.hand.length - GAME_CONFIG.handLimit),
+    log: [`⚡ 功能牌: ${card.name} · ${option.label}`, ...state.log].slice(0, 7),
   })
 }
 
@@ -1862,6 +2009,23 @@ function drawCards(count, drawPile) {
     drawPile: drawPile.slice(count),
   }
 }
+
+function tickTemporaryModifiers(state) {
+  const peBuffs = (state.peBuffs ?? [])
+    .map((buff) => ({ ...buff, months: (buff.months ?? 0) - 1 }))
+    .filter((buff) => buff.months > 0)
+  const runwayBurnDiscount = state.runwayBurnDiscount
+    ? { ...state.runwayBurnDiscount, months: (state.runwayBurnDiscount.months ?? 0) - 1 }
+    : null
+  const rivalDebuff = state.rivalDebuff
+    ? { ...state.rivalDebuff, months: (state.rivalDebuff.months ?? 0) - 1 }
+    : null
+  return {
+    peBuffs,
+    runwayBurnDiscount: runwayBurnDiscount?.months > 0 ? runwayBurnDiscount : null,
+    rivalDebuff: rivalDebuff?.months > 0 ? rivalDebuff : null,
+  }
+}
 function pickEvent(rng) {
   return randomItem(EVENTS, rng)
 }
@@ -1871,8 +2035,21 @@ const MID_RISK_IDS = new Set(['cash-crunch', 'cashflow-tight', 'black-swan'])
 const LATE_RISK_IDS = new Set(['media-crisis'])
 const SOFT_UPSIDE_IDS = new Set(['customer-consulting', 'hiring-season', 'industry-tailwind', 'media-spotlight', 'campus-season', 'remote-work', 'team-building', 'customer-referral', 'process-automation', 'product-review', 'channel-rebate'])
 const BIG_UPSIDE_IDS = new Set(['gov-subsidy', 'big-client', 'rd-bonanza', 'competitor-collapse', 'industry-award', 'vc-tailwind', 'internal-startup', 'investor-visit', 'overtime-season', 'year-end-bonus', 'industry-conference', 'kol-fire', 'angel-capital'])
+const TRACK_EVENT_IDS = {
+  ai: new Set(['rd-bonanza', 'cloud-bill-spike', 'product-review', 'industry-conference', 'internal-startup', 'policy-tighten']),
+  growth: new Set(['customer-consulting', 'industry-tailwind', 'media-spotlight', 'kol-fire', 'channel-rebate', 'price-war', 'customer-churn']),
+  ops: new Set(['process-automation', 'team-building', 'remote-work', 'receivable-delay', 'hiring-misfire', 'team-conflict', 'cashflow-tight']),
+}
 
-function getStageEventWeight(event, stageId, elapsedMonths = 0) {
+function getTrackEventWeight(event, professionTrack = 'ai') {
+  if (event.trackWeights?.[professionTrack]) return event.trackWeights[professionTrack]
+  const trackSet = TRACK_EVENT_IDS[professionTrack]
+  if (trackSet?.has(event.id)) return 1.7
+  const anyTrackSpecific = Object.values(TRACK_EVENT_IDS).some((set) => set.has(event.id))
+  return anyTrackSpecific ? 0.75 : 1
+}
+
+function getStageEventWeight(event, stageId, elapsedMonths = 0, professionTrack = 'ai') {
   const isRisk = event.tone === '风险'
   const isUpside = event.tone === '增益' || event.tone === '机会'
   let timeWeight = 1
@@ -1890,27 +2067,27 @@ function getStageEventWeight(event, stageId, elapsedMonths = 0) {
   }
 
   if (event.tone === '风险') {
-    if (GENTLE_RISK_IDS.has(event.id)) return (stageId <= 2 ? 0.55 : stageId <= 4 ? 1.15 : 1.35) * timeWeight
-    if (MID_RISK_IDS.has(event.id)) return (stageId <= 2 ? 0.12 : stageId <= 4 ? 0.75 : 1.25) * timeWeight
-    if (LATE_RISK_IDS.has(event.id)) return (stageId <= 3 ? 0.04 : stageId <= 5 ? 0.55 : 1.3) * timeWeight
-    return (stageId <= 2 ? 0.35 : 1) * timeWeight
+    if (GENTLE_RISK_IDS.has(event.id)) return (stageId <= 2 ? 0.55 : stageId <= 4 ? 1.15 : 1.35) * timeWeight * getTrackEventWeight(event, professionTrack)
+    if (MID_RISK_IDS.has(event.id)) return (stageId <= 2 ? 0.12 : stageId <= 4 ? 0.75 : 1.25) * timeWeight * getTrackEventWeight(event, professionTrack)
+    if (LATE_RISK_IDS.has(event.id)) return (stageId <= 3 ? 0.04 : stageId <= 5 ? 0.55 : 1.3) * timeWeight * getTrackEventWeight(event, professionTrack)
+    return (stageId <= 2 ? 0.35 : 1) * timeWeight * getTrackEventWeight(event, professionTrack)
   }
   if (event.tone === '增益') {
-    if (SOFT_UPSIDE_IDS.has(event.id)) return (stageId <= 2 ? 1.6 : stageId <= 5 ? 1.15 : 0.85) * timeWeight
-    if (BIG_UPSIDE_IDS.has(event.id)) return (stageId <= 2 ? 0.75 : stageId <= 5 ? 1.1 : 0.9) * timeWeight
-    return timeWeight
+    if (SOFT_UPSIDE_IDS.has(event.id)) return (stageId <= 2 ? 1.6 : stageId <= 5 ? 1.15 : 0.85) * timeWeight * getTrackEventWeight(event, professionTrack)
+    if (BIG_UPSIDE_IDS.has(event.id)) return (stageId <= 2 ? 0.75 : stageId <= 5 ? 1.1 : 0.9) * timeWeight * getTrackEventWeight(event, professionTrack)
+    return timeWeight * getTrackEventWeight(event, professionTrack)
   }
   if (event.tone === '机会') {
-    if (stageId <= 2) return 1.25 * timeWeight
-    if (stageId <= 5) return 1.05 * timeWeight
-    return 0.85 * timeWeight
+    if (stageId <= 2) return 1.25 * timeWeight * getTrackEventWeight(event, professionTrack)
+    if (stageId <= 5) return 1.05 * timeWeight * getTrackEventWeight(event, professionTrack)
+    return 0.85 * timeWeight * getTrackEventWeight(event, professionTrack)
   }
-  return 1
+  return getTrackEventWeight(event, professionTrack)
 }
 
-function pickEventForStage(stageId, rng, elapsedMonths = 0) {
+function pickEventForStage(stageId, rng, elapsedMonths = 0, professionTrack = 'ai') {
   const weighted = EVENTS
-    .map((event) => ({ event, weight: getStageEventWeight(event, stageId, elapsedMonths) }))
+    .map((event) => ({ event, weight: getStageEventWeight(event, stageId, elapsedMonths, professionTrack) }))
     .filter((entry) => entry.weight > 0)
   const total = weighted.reduce((sum, entry) => sum + entry.weight, 0)
   let roll = rng() * total
@@ -2090,13 +2267,14 @@ function getDeltaPct(value, median) {
   return Math.round(((value - median) / median) * 100)
 }
 
-function buildSettlementReport({ month, eventIncome, rawIncome, maintenance, lineReports, apCarry, usedAp }) {
+function buildSettlementReport({ month, eventIncome, rawIncome, maintenance, lineReports, activeLineId, apCarry, usedAp }) {
   return {
     month,
     income: eventIncome,
     rawIncome,
     maintenance,
     lineReports,
+    activeLineId,
     apCarry,
     usedAp,
   }
@@ -2122,6 +2300,37 @@ function weightedPick(weights, rng) {
 
 function randomItem(items, rng) {
   return items[Math.floor(rng() * items.length)]
+}
+
+function pickTrackWeighted(items, stateLike, rng, classify = (item) => item.dept) {
+  if (!items.length) return null
+  const track = Object.values({
+    scientist: getProfessionTrack('scientist'),
+    sales: getProfessionTrack('sales'),
+    cxo: getProfessionTrack('cxo'),
+  }).find((item) => item.id === stateLike?.professionTrack) ?? getProfessionTrack(stateLike?.profession)
+  const roll = rng()
+  let target = 'generic'
+  if (roll < track.coreWeight) target = 'core'
+  else if (roll < track.coreWeight + track.supportWeight) target = 'support'
+  const filtered = items.filter((item) => {
+    const dept = classify(item)
+    if (target === 'core') return dept === track.coreDept
+    if (target === 'support') return dept === track.supportDept
+    return dept === 'NONE' || dept == null || item.type === 'fun' || item.type === 'srv' || item.track === track.id || item.generic === true
+  })
+  return randomItem(filtered.length ? filtered : items, rng)
+}
+
+function classifyBusinessModelTrack(bm) {
+  if (!bm) return 'NONE'
+  if (bm.trackDept) return bm.trackDept
+  if (bm.payload?.dept) return bm.payload.dept
+  const text = `${bm.id ?? ''} ${bm.name ?? ''} ${bm.description ?? ''} ${bm.flavor ?? ''}`
+  if (/研发|工程|技术|模型|AI|Deap|数据|创新/.test(text)) return 'R'
+  if (/销售|增长|客户|渠道|品牌|PR|公关|北极星|飞轮/.test(text)) return 'S'
+  if (/运营|中台|流程|PMO|降本|效率|组织|管理|会议|All Hands|使命/.test(text)) return 'O'
+  return 'NONE'
 }
 
 function shuffle(items, rng) {
@@ -2230,15 +2439,16 @@ export function enterIntermission(state, rng = Math.random) {
 
   // v4: BM levelEndBudgetBonus 提升 entryGrant (BM_12/34/35/36 = 10-15%, BM_38 = 25%, BM_39 = 30%)
   const bmStats = computeBusinessModelStats(state)
+  const grantTrackMult = state.professionTrack === 'ai' ? 1.6 : state.professionTrack === 'ops' ? 1.2 : 1
   const grantedBudget = isPromotion
-    ? Math.round(nextStage.entryGrant * (1 + (bmStats.levelEndBudgetBonus ?? 0)))
+    ? Math.round(nextStage.entryGrant * grantTrackMult * (1 + (bmStats.levelEndBudgetBonus ?? 0)))
     : 0
   const rewardCardId = isPromotion ? pickPromotionRewardCard(nextStage.id, rng) : null
   // boss 战中触发的董事会，"战略指引"替换为对应 archetype 的应对策略事件
   const bossCounterEvent = state.battle?.active ? buildBossCounterEvent(state.battle) : null
   const event = bossCounterEvent ?? randomItem(BOARD_EVENTS, rng)
-  const shopRoll = rollShopRoll(nextStage.id, state.legendaryRollStreak, rng)
-  const schoolRoll = rollSchoolRoll(nextStage.id, state.activeBusinessModels, rng)
+  const shopRoll = rollShopRoll(nextStage.id, state.legendaryRollStreak, rng, state)
+  const schoolRoll = rollSchoolRoll(nextStage.id, state.activeBusinessModels, rng, state)
   const nextMods = rewardCardId
     ? {
         ...state.nextLevelModifiers,
@@ -2369,7 +2579,7 @@ export function rollShop(state, rng = Math.random) {
   if (!im) return reject(state, '不在董事会会议中')
   if (state.cash < 5) return reject(state, '¥ 不足以刷新（需 5）')
   const nextStageId = im.nextStageId
-  const newRoll = rollShopRoll(nextStageId, state.legendaryRollStreak, rng)
+  const newRoll = rollShopRoll(nextStageId, state.legendaryRollStreak, rng, state)
   return accept({
     ...state,
     cash: state.cash - 5,
@@ -2590,7 +2800,7 @@ export function rollSchool(state, rng = Math.random) {
   if (!im) return reject(state, '不在董事会会议中')
   if (state.cash < 4) return reject(state, '¥ 不足以刷新（需 4）')
   const nextStageId = im.nextStageId
-  const newRoll = rollSchoolRoll(nextStageId, state.activeBusinessModels, rng)
+  const newRoll = rollSchoolRoll(nextStageId, state.activeBusinessModels, rng, state)
   return accept({
     ...state,
     cash: state.cash - 4,
@@ -2680,7 +2890,7 @@ export function exitIntermission(state, rng = Math.random) {
 
   const isNewQuarter = (nextMonth - 1) % 3 === 0
   const { nextMajorEvent, nextUpcomingMajorEvent, monthsUntilMajor } = computeNextMajorEvent(state, elapsedMonths, rng)
-  const nextEvent = isNewQuarter ? pickEventForStage(nextStage.id, rng, elapsedMonths) : state.event
+  const nextEvent = isNewQuarter ? pickEventForStage(nextStage.id, rng, elapsedMonths, state.professionTrack) : state.event
   const nextEventContext = nextMajorEvent ? getCombinedEvent({ ...state, event: nextEvent, majorEvent: nextMajorEvent }) : nextEvent
   const nextDriftDirection = isNewQuarter ? pickRandomDriftDirection(rng) : (state.driftDirection || 'right-up')
   // Temporarily apply next active BMs to state to compute correct BM stats for draw count/AP
@@ -2782,7 +2992,7 @@ function removeCardAcrossPiles(state, uid) {
 
 // ----- 商店 / 商学院刷新 -----
 
-function rollShopRoll(nextLevelId, legendaryStreak, rng) {
+function rollShopRoll(nextLevelId, legendaryStreak, rng, stateLike = {}) {
   const premiumProb = legendaryStreak >= LEGENDARY_PITY_THRESHOLD
     ? 0.7
     : Math.min(0.68, SHOP_PROBS.premiumCard + nextLevelId * 0.035)
@@ -2794,7 +3004,7 @@ function rollShopRoll(nextLevelId, legendaryStreak, rng) {
       ? CARD_TEMPLATES.filter((c) => c.rarity === 'legendary' && c.type === 'emp' && c.inRecruitPool === false && c.id.startsWith('LEG_'))
       : CARD_TEMPLATES.filter((c) => c.rarity === 'epic' && c.type === 'emp' && c.inRecruitPool !== false && c.unlockLevel <= nextLevelId)
     if (pool.length) {
-      epicCard = createCardInstance(randomItem(pool, rng).id, 'shop', rng)
+      epicCard = createCardInstance(pickTrackWeighted(pool, stateLike, rng).id, 'shop', rng)
       epicCost = epicCard.rarity === 'legendary'
         ? nextLevelId * 10 + 42
         : nextLevelId * 6 + 20
@@ -2827,16 +3037,16 @@ function rollShopRoll(nextLevelId, legendaryStreak, rng) {
       }
     }
     usedTypes.add(pack.id)
-    packs.push({ packDef: pack, cost: pack.cost, contents: rollPackContents(pack, nextLevelId, rng) })
+    packs.push({ packDef: pack, cost: pack.cost, contents: rollPackContents(pack, nextLevelId, rng, stateLike) })
   }
 
   return { epicCard, epicCost, legendaryCard, legendaryCost, packs }
 }
 
-function rollPackContents(pack, nextLevelId, rng) {
+function rollPackContents(pack, nextLevelId, rng, stateLike = {}) {
   const items = []
   for (let i = 0; i < pack.fromN; i++) {
-    const raw = pickPackItem(pack.poolType, nextLevelId, rng, items)
+    const raw = pickPackItem(pack.poolType, nextLevelId, rng, items, stateLike)
     if (raw && raw.isBusinessModel) {
       items.push(raw)
     } else if (raw) {
@@ -2846,19 +3056,19 @@ function rollPackContents(pack, nextLevelId, rng) {
   return items
 }
 
-function pickPackItem(poolType, nextLevelId, rng, existing) {
+function pickPackItem(poolType, nextLevelId, rng, existing, stateLike = {}) {
   const usedIds = new Set(existing.map((it) => it.id || it.bmId))
   const filterUnique = (pool) => pool.filter((c) => !usedIds.has(c.id))
   const recruitable = (c) => c.inRecruitPool !== false && c.tier !== '创始人'
 
   if (poolType === 'employee_common') {
     const pool = filterUnique(CARD_TEMPLATES.filter((c) => c.type === 'emp' && c.rarity === 'common' && c.unlockLevel <= nextLevelId && recruitable(c)))
-    return pool.length ? randomItem(pool, rng) : CARD_TEMPLATES[0]
+    return pool.length ? pickTrackWeighted(pool, stateLike, rng) : CARD_TEMPLATES[0]
   }
   if (poolType === 'employee_elite') {
     const pool = filterUnique(CARD_TEMPLATES.filter((c) => c.type === 'emp' && c.rarity === 'elite' && c.unlockLevel <= nextLevelId && recruitable(c)))
     const fallback = CARD_TEMPLATES.filter((c) => c.type === 'emp' && c.rarity === 'rare' && c.unlockLevel <= nextLevelId && recruitable(c))
-    return pool.length ? randomItem(pool, rng) : randomItem(fallback, rng)
+    return pool.length ? pickTrackWeighted(pool, stateLike, rng) : pickTrackWeighted(fallback, stateLike, rng)
   }
   if (poolType === 'service') {
     const pool = filterUnique(CARD_TEMPLATES.filter((c) => c.type === 'srv' && c.unlockLevel <= nextLevelId && c.inRecruitPool !== false))
@@ -2870,7 +3080,7 @@ function pickPackItem(poolType, nextLevelId, rng, existing) {
   }
   if (poolType === 'business_model') {
     const pool = BUSINESS_MODELS.filter((b) => b.unlockLevel <= nextLevelId && !usedIds.has(b.id))
-    const bm = pool.length ? randomItem(pool, rng) : BUSINESS_MODELS[0]
+    const bm = pool.length ? pickTrackWeighted(pool, stateLike, rng, classifyBusinessModelTrack) : BUSINESS_MODELS[0]
     return { isBusinessModel: true, bmId: bm.id, bmName: bm.name, bmDescription: bm.description, bmRarity: bm.rarity }
   }
   if (poolType === 'mystery') {
@@ -2882,12 +3092,12 @@ function pickPackItem(poolType, nextLevelId, rng, existing) {
     else if (r < 0.55) pool = CARD_TEMPLATES.filter((c) => c.rarity === 'elite' && c.unlockLevel <= nextLevelId && recruitable(c))
     else pool = CARD_TEMPLATES.filter((c) => c.rarity === 'rare' && c.unlockLevel <= nextLevelId && recruitable(c))
     pool = filterUnique(pool)
-    return pool.length ? randomItem(pool, rng) : CARD_TEMPLATES[0]
+    return pool.length ? pickTrackWeighted(pool, stateLike, rng) : CARD_TEMPLATES[0]
   }
   return CARD_TEMPLATES[0]
 }
 
-function rollSchoolRoll(nextLevelId, activeBMs, rng) {
+function rollSchoolRoll(nextLevelId, activeBMs, rng, stateLike = {}) {
   const ownedIds = new Set(activeBMs.map((b) => b.id))
   const pool = BUSINESS_MODELS.filter((b) => b.unlockLevel <= nextLevelId && !ownedIds.has(b.id))
   const result = []
@@ -2895,7 +3105,7 @@ function rollSchoolRoll(nextLevelId, activeBMs, rng) {
   while (result.length < 3 && pool.length > usedHere.size) {
     const candidates = pool.filter((b) => !usedHere.has(b.id))
     if (!candidates.length) break
-    const picked = randomItem(candidates, rng)
+    const picked = pickTrackWeighted(candidates, stateLike, rng, classifyBusinessModelTrack)
     result.push(picked.id)
     usedHere.add(picked.id)
   }

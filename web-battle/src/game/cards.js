@@ -30,6 +30,40 @@ export const DEPT_META = {
   NONE: { label: '通用', short: '通用', color: 'neutral', icon: '*' },
 }
 
+export const PROFESSION_TRACKS = {
+  scientist: {
+    id: 'ai',
+    label: 'AI / 研发赛道',
+    coreDept: 'R',
+    supportDept: 'O',
+    genericWeight: 0.3,
+    coreWeight: 0.5,
+    supportWeight: 0.2,
+  },
+  sales: {
+    id: 'growth',
+    label: '增长 / 销售赛道',
+    coreDept: 'S',
+    supportDept: 'R',
+    genericWeight: 0.3,
+    coreWeight: 0.5,
+    supportWeight: 0.2,
+  },
+  cxo: {
+    id: 'ops',
+    label: '运营 / 平台赛道',
+    coreDept: 'O',
+    supportDept: 'S',
+    genericWeight: 0.3,
+    coreWeight: 0.5,
+    supportWeight: 0.2,
+  },
+}
+
+export function getProfessionTrack(profession = 'scientist') {
+  return PROFESSION_TRACKS[profession] ?? PROFESSION_TRACKS.scientist
+}
+
 /** @deprecated Use STAGES instead */
 export const LEVELS = [
   { id: 1, milestone: 'A 轮融资', theme: '起步打 PMF', target: 1200, startCash: 45, startBudget: 60, maintenance: 8 },
@@ -38,24 +72,24 @@ export const LEVELS = [
 ]
 
 export const STAGES = [
-  { id: 1, key: 'angel',   name: '天使轮', threshold: 0,     entryGrant: 18,  theme: '起步' },
-  { id: 2, key: 'seed',    name: '种子轮', threshold: 900,   entryGrant: 40,   theme: '产品验证' },
-  { id: 3, key: 'seriesA', name: 'A 轮',   threshold: 1800,  entryGrant: 90,   theme: '规模化' },
-  { id: 4, key: 'seriesB', name: 'B 轮',   threshold: 3400,  entryGrant: 180,  theme: '增长' },
-  { id: 5, key: 'seriesC', name: 'C 轮',   threshold: 6800,  entryGrant: 320,  theme: '扩张' },
-  { id: 6, key: 'seriesD', name: 'D 轮',   threshold: 11200, entryGrant: 520,  theme: '深耕' },
-  { id: 7, key: 'ipo',     name: 'IPO',     threshold: 18000, entryGrant: 800,  theme: '上市' },
-  { id: 8, key: 'giant',   name: '千亿',    threshold: 30000, entryGrant: 1200, theme: '巨头' },
-  { id: 9, key: 'first',   name: '行业第一', threshold: 48000, entryGrant: 1800, theme: '终极' },
+  { id: 1, key: 'angel',   name: '天使轮', threshold: 0,     entryGrant: 30,   theme: '起步' },
+  { id: 2, key: 'seed',    name: '种子轮', threshold: 900,   entryGrant: 70,   theme: '产品验证' },
+  { id: 3, key: 'seriesA', name: 'A 轮',   threshold: 1800,  entryGrant: 140,  theme: '规模化' },
+  { id: 4, key: 'seriesB', name: 'B 轮',   threshold: 3400,  entryGrant: 260,  theme: '增长' },
+  { id: 5, key: 'seriesC', name: 'C 轮',   threshold: 6200,  entryGrant: 440,  theme: '扩张' },
+  { id: 6, key: 'seriesD', name: 'D 轮',   threshold: 9800,  entryGrant: 700,  theme: '深耕' },
+  { id: 7, key: 'ipo',     name: 'IPO',     threshold: 12500, entryGrant: 1050, theme: '上市' },
+  { id: 8, key: 'giant',   name: '千亿',    threshold: 15500, entryGrant: 1500, theme: '巨头' },
+  { id: 9, key: 'first',   name: '行业第一', threshold: 19000, entryGrant: 2200, theme: '终极' },
 ]
 
 // 现金转化率（CCR · Cash Conversion Rate）
 // 月利润 × CCR → 实际入账现金；其余作为"未变现的账面价值"（叙事用，不影响机制）
 // 仅作用于正利润；负利润 100% 从 cash 扣减
 export const CASH_CONVERSION_RATES = {
-  1: 0.60, 2: 0.58, 3: 0.55,
-  4: 0.52, 5: 0.49, 6: 0.45,
-  7: 0.40, 8: 0.36, 9: 0.32,
+  1: 0.72, 2: 0.70, 3: 0.66,
+  4: 0.62, 5: 0.58, 6: 0.53,
+  7: 0.48, 8: 0.44, 9: 0.40,
 }
 
 export function getCashConversionRate(stageId, bmCcrBonus = 0) {
@@ -66,7 +100,7 @@ export function getCashConversionRate(stageId, bmCcrBonus = 0) {
 // 月度固定运营成本（每月末从 cash 扣减）
 export function getMonthlyOperationCost(stageId) {
   const stage = Math.max(1, stageId ?? 1)
-  return Math.round(18 + stage * stage * 3 + stage * 3)
+  return Math.round(14 + stage * stage * 1.6 + stage * 3)
 }
 
 // ============================================================================
@@ -125,6 +159,10 @@ export const RANDOM_FUNCTION_POOL = {
     { id: 'F1_08', name: '桥梁',     effects: ['DIFF_DEPT_ADJ_EXTRA: +8%'] },
     { id: 'F1_09', name: '微调',     effects: ['SELF: +10%'] },
     { id: 'F1_10', name: '调和',     effects: ['BOTH: +5%'] },
+    { id: 'F1_R_01', name: '技术嗅觉', effects: ['DRAW_NEXT_MONTH: +1'] },
+    { id: 'F1_S_01', name: '成交雷达', effects: ['MONTH_BONUS: +¥5'] },
+    { id: 'F1_O_01', name: '流程手感', effects: ['MONTH_AP: +1'] },
+    { id: 'F1_G_01', name: '风险垫片', effects: ['LINE_ALL: +6%'] },
   ],
   lv2: [
     { id: 'F2_01', name: '左援',     effects: ['LEFT: +15%'] },
@@ -135,6 +173,10 @@ export const RANDOM_FUNCTION_POOL = {
     { id: 'F2_06', name: '工具人',   effects: ['SELF_IF_ADJ_FUN: +20%'] },
     { id: 'F2_07', name: '小金库',   effects: ['MONTH_BONUS: +¥8'] },
     { id: 'F2_08', name: '加班狂+', effects: ['SELF: +25%'] },
+    { id: 'F2_R_01', name: '技术资产化', effects: ['LINE_ALL_R: +12%'] },
+    { id: 'F2_S_01', name: '渠道嗅觉', effects: ['LINE_ALL_S: +12%'] },
+    { id: 'F2_O_01', name: '省钱本能', effects: ['MONTH_NO_MAINTAIN'] },
+    { id: 'F2_G_01', name: '组合意识', effects: ['IF_ALL_THREE_DEPT_IN_LINE: x1.15'] },
   ],
   lv3: [
     { id: 'F3_01', name: '部门核心', effects: ['SAME_DEPT_ADJ: +25%'] },
@@ -143,6 +185,9 @@ export const RANDOM_FUNCTION_POOL = {
     { id: 'F3_04', name: '强力右援', effects: ['RIGHT: +30%'] },
     { id: 'F3_05', name: '化学反应', effects: ['SAME_DEPT_ADJ: +35%'] },
     { id: 'F3_06', name: '大佬光环', effects: ['LINE_ALL: +15%'] },
+    { id: 'F3_R_01', name: '模型护城河', effects: ['LINE_ALL_R: +20%', 'MONTH_STAR_RATE: +4%'] },
+    { id: 'F3_S_01', name: '品牌飞轮', effects: ['LINE_ALL_S: +20%', 'MONTH_BONUS: +¥10'] },
+    { id: 'F3_O_01', name: '组织韧性', effects: ['LINE_ALL_O: +20%', 'MONTH_AP: +1'] },
   ],
   lv4: [
     { id: 'F4_01', name: '研发线领袖', effects: ['LINE_ALL_R: +25%'] },
@@ -158,7 +203,7 @@ export const RANDOM_FUNCTION_POOL = {
  *  注意：与 plan §4.5 一致
  */
 export const RARITY_RANDOM_SPEC = {
-  common:    { fnCount: 0, lvRange: [],         secondFnChance: 0    },
+  common:    { fnCount: 0, lvRange: ['lv1'],    secondFnChance: 0.35 },
   rare:      { fnCount: 1, lvRange: ['lv1', 'lv2'], secondFnChance: 0 },
   elite:     { fnCount: 1, lvRange: ['lv1', 'lv2', 'lv3'], secondFnChance: 0.3 },
   epic:      { fnCount: 2, lvRange: ['lv2', 'lv3'], secondFnChance: 0 },
@@ -202,6 +247,13 @@ export function rollRandomFunctions(rarity, rng = Math.random) {
   const spec = RARITY_RANDOM_SPEC[rarity] ?? RARITY_RANDOM_SPEC.common
   const results = []
   const used = new Set()
+  if (spec.fnCount === 0 && spec.secondFnChance > 0) {
+    if (rng() < spec.secondFnChance) {
+      const fn = pickRandomFunction(spec.lvRange, used, rng)
+      if (fn) results.push(fn)
+    }
+    return results
+  }
   for (let i = 0; i < spec.fnCount; i++) {
     const fn = pickRandomFunction(spec.lvRange, used, rng)
     if (fn) { results.push(fn); used.add(fn.id) }
@@ -215,11 +267,11 @@ export function rollRandomFunctions(rarity, rng = Math.random) {
 }
 
 export const RARITY_TABLE = {
-  common:    { baseBurn: 4,  extraBurn: 2,  assetValue: 5,   bmMonthlyCost: 7,  bmAssetValue: 8   },
-  rare:      { baseBurn: 8,  extraBurn: 5,  assetValue: 15,  bmMonthlyCost: 13, bmAssetValue: 25  },
-  elite:     { baseBurn: 15, extraBurn: 10, assetValue: 30,  bmMonthlyCost: 22, bmAssetValue: 50  },
-  epic:      { baseBurn: 26, extraBurn: 18, assetValue: 50,  bmMonthlyCost: 36, bmAssetValue: 80  },
-  legendary: { baseBurn: 44, extraBurn: 30, assetValue: 150, bmMonthlyCost: 62, bmAssetValue: 240 },
+  common:    { baseBurn: 3,  extraBurn: 2,  assetValue: 6,   bmMonthlyCost: 5,  bmAssetValue: 10  },
+  rare:      { baseBurn: 6,  extraBurn: 4,  assetValue: 18,  bmMonthlyCost: 10, bmAssetValue: 32  },
+  elite:     { baseBurn: 11, extraBurn: 8,  assetValue: 40,  bmMonthlyCost: 17, bmAssetValue: 65  },
+  epic:      { baseBurn: 18, extraBurn: 13, assetValue: 75,  bmMonthlyCost: 28, bmAssetValue: 110 },
+  legendary: { baseBurn: 32, extraBurn: 22, assetValue: 170, bmMonthlyCost: 46, bmAssetValue: 280 },
 }
 
 export const TIER_BURN_BONUS = {
@@ -229,6 +281,51 @@ export const TIER_BURN_BONUS = {
   VP: 7,
   CXO: 12,
   创始人: 8,
+}
+
+export const FUNCTION_CARD_ACTIONS = {
+  FUN_01: [
+    { id: 'scan_market', label: '抽 4 选 2', description: '立刻抽 4 张，留下前 2 张，其余洗回牌堆', effect: { type: 'drawSelect', draw: 4, keep: 2 } },
+    { id: 'pe_memo', label: 'PE 叙事 +12%（2 月）', description: '未来 2 个月估值叙事放大', effect: { type: 'peBuff', value: 0.12, months: 2 } },
+  ],
+  FUN_02: [
+    { id: 'launch_demo', label: '技术发布会', description: '未来 2 个月 PE +18%，但现金 -80', cost: 80, effect: { type: 'peBuff', value: 0.18, months: 2 } },
+    { id: 'delay_boss_ai', label: '开源烟雾弹', description: '未开战 boss 延后 3 个月；已开战则战期 +1 月', effect: { type: 'delayBoss', months: 3 } },
+  ],
+  FUN_03: [
+    { id: 'war_room', label: '紧急董事会', description: '下个月强制召开一次董事会', effect: { type: 'emergencyBoard' } },
+    { id: 'runway', label: '现金跑道', description: '花 ¥120，未来 2 个月 burn -20%', cost: 120, effect: { type: 'cashToRunway', months: 2, discount: 0.2 } },
+  ],
+  FUN_04: [
+    { id: 'brand_blitz', label: '品牌闪击', description: '下月 boss 对手收入 -25%', effect: { type: 'rivalDebuff', months: 1, rivalIncomeMult: 0.75 } },
+    { id: 'promo_pe', label: '增长故事 +15%（2 月）', description: '未来 2 个月 PE +15%', effect: { type: 'peBuff', value: 0.15, months: 2 } },
+  ],
+  FUN_05: [
+    { id: 'data_room', label: '数据作战室', description: '抽 5 选 2，强化本季度决策', effect: { type: 'drawSelect', draw: 5, keep: 2 } },
+    { id: 'boss_read', label: '对手画像', description: '下月 boss 技能屏蔽并收入 -10%', effect: { type: 'rivalDebuff', months: 1, rivalIncomeMult: 0.9, skillBlocked: true } },
+  ],
+  FUN_06: [
+    { id: 'ops_sweep', label: '流程扫除', description: '未来 2 个月 burn -15%', effect: { type: 'cashToRunway', months: 2, discount: 0.15, cost: 0 } },
+    { id: 'board_packet', label: '临时议程', description: '下个月紧急召开董事会', effect: { type: 'emergencyBoard' } },
+  ],
+  FUN_07: [
+    { id: 'alliance', label: '跨部门联盟', description: '抽 3 选 2；下月 boss 收入 -15%', effect: { type: 'composite', effects: [{ type: 'drawSelect', draw: 3, keep: 2 }, { type: 'rivalDebuff', months: 1, rivalIncomeMult: 0.85 }] } },
+  ],
+  FUN_08: [
+    { id: 'okr_reset', label: 'OKR 重置', description: '未来 3 个月 PE +10%，下个月董事会提前召开', effect: { type: 'composite', effects: [{ type: 'peBuff', value: 0.1, months: 3 }, { type: 'emergencyBoard' }] } },
+  ],
+  FUN_09: [
+    { id: 'crunch', label: '冲刺窗口', description: '未来 1 个月 PE +25%，之后照常还债', effect: { type: 'peBuff', value: 0.25, months: 1 } },
+  ],
+  FUN_10: [
+    { id: 'brand_moat', label: '品牌护城河', description: '未开战 boss 延后 3 个月，未来 2 月 PE +8%', effect: { type: 'composite', effects: [{ type: 'delayBoss', months: 3 }, { type: 'peBuff', value: 0.08, months: 2 }] } },
+  ],
+  FUN_11: [
+    { id: 'user_festival', label: '用户节', description: '现金 -120，下月 boss 收入 -30%', cost: 120, effect: { type: 'rivalDebuff', months: 1, rivalIncomeMult: 0.7 } },
+  ],
+  FUN_12: [
+    { id: 'debt_cleanup', label: '技术债大扫除', description: '未来 2 个月 burn -25%，抽 2 张', effect: { type: 'composite', effects: [{ type: 'cashToRunway', months: 2, discount: 0.25 }, { type: 'drawSelect', draw: 2, keep: 2 }] } },
+  ],
 }
 
 export const EVENTS = [
@@ -618,6 +715,67 @@ export const EVENTS = [
     deptBoost: { S: 0.8 },
   },
 ]
+
+const QUARTERLY_EVENT_COPY = {
+  'angel-capital': ['天使投资人群聊忽然很热', '凌晨三点，投资人突然转来三篇行业报告，并表示“这个季度可以冲”。'],
+  'customer-consulting': ['甲方预算季提前到来', '采购系统刚打开，销售同学的微信就开始连续震动。'],
+  'hiring-season': ['大厂组织调整，人才市场开闸', '简历像雪片一样飞来，其中一半写着“负责过核心模块”。'],
+  'team-conflict': ['远程会议软件成为主要战场', '大家都在说“我补充一点”，但没人知道原议题是什么。'],
+  'industry-tailwind': ['赛道突然被写进十篇深度研报', '投资人突然都懂了这个行业，虽然昨天还念错名字。'],
+  'cash-crunch': ['账期收紧，财务开始盯咖啡豆', '供应商说理解创业不易，所以先付钱再理解。'],
+  'media-spotlight': ['行业榜单一夜刷屏', '一篇榜单让客户、候选人和竞争对手同时找上门。'],
+  'rd-bonanza': ['大模型发布会 17 连发', '投资人突然都懂 AGI，研发同学突然都不够用了。'],
+  'year-end-bonus': ['降本增效春风吹满地', '办公室咖啡先被优化，报表倒是好看了一点。'],
+  'gov-subsidy': ['补贴窗口打开三小时', '表格很多，章很多，但钱也确实有一点。'],
+  'competitor-collapse': ['友商 All Hands 开成告别会', '客户经理的电话第一次比闹钟还准。'],
+  'big-client': ['大客户年度预算重排', 'Logo 很香，需求文档也很厚。'],
+  'kol-fire': ['全网都在复刻同一个标题', '增长团队说这不是玄学，这是“内容势能”。'],
+  'industry-award': ['年度颁奖夜灯光很贵', '奖杯不重，但拿着它招聘会好谈不少。'],
+  'black-swan': ['宏观天气预报改成暴雨', '大家都在找伞，结果发现伞也涨价了。'],
+  'key-employee-quit': ['核心同学朋友圈更新“新的开始”', 'HR 点了赞，CEO 沉默了三秒。'],
+  'media-crisis': ['热搜词条开始自己繁殖', '公关稿还没写完，评论区已经写完了。'],
+  'cashflow-tight': ['回款群里只剩自动回复', '业务很好，现金很远，财务很安静。'],
+  'team-burnout': ['工位区出现连续哈欠传染链', '大家都很努力，只是努力的方向变成了找假期。'],
+  'rd-winter': ['技术路线被资本市场临时降温', '昨天叫壁垒，今天叫研发费用。'],
+  'customer-churn': ['客户群里开始讨论“平替”', '销售说关系还在，合同说先等等。'],
+  'policy-tighten': ['监管文件更新到第八版', '法务说不急，只是所有按钮都要改文案。'],
+  'industry-conference': ['行业大会酒店房价翻倍', '所有人都说来学习，所有人都带了销售材料。'],
+  'vc-tailwind': ['资本市场再次相信故事', '只要 PPT 里有飞轮，会议室就有咖啡。'],
+  'campus-season': ['校招季带来新鲜肝度', '应届生问的问题很真诚，也很难回答。'],
+  'internal-startup': ['内部创业擂台赛开锣', '每个团队都说自己是第二增长曲线。'],
+  'investor-visit': ['投资人突击参观办公室', '所有白板都临时写上了战略。'],
+  'team-building': ['季度团建预算没被砍完', '大家在草坪上建立信任，回来继续改需求。'],
+  'overtime-season': ['季度 OKR 进入最后冲刺', '会议室灯亮到很晚，咖啡机也开始怀疑人生。'],
+  'remote-work': ['远程办公再次流行', '效率提升了，找人也更像开盲盒了。'],
+  'customer-referral': ['老客户突然愿意介绍朋友', '这可能是口碑，也可能是他们终于有人一起吐槽。'],
+  'process-automation': ['流程机器人上线第一周', '它不会抱怨，也不会忘记催你填表。'],
+  'product-review': ['季度产品评审拉满日历', '路线图终于像路线图，不像许愿池。'],
+  'channel-rebate': ['渠道返利到账但附带小字', '钱是真的，下一季度 KPI 也是真的。'],
+  'receivable-delay': ['验收流程进入“快了”阶段', '客户说本周一定走完流程，没说是哪一周。'],
+  'cloud-bill-spike': ['云账单像产品增长一样增长', '增长同学很开心，财务同学不太开心。'],
+  'hiring-misfire': ['试用期复盘会气氛友好', '友好到大家都不好意思说真话。'],
+  'price-war': ['平台爸爸改算法，补贴开始满天飞', '昨天的增长秘籍今天成违规，竞品还顺手降价。'],
+}
+
+const EVENT_TRACK_WEIGHTS = {
+  ai: ['rd-bonanza', 'cloud-bill-spike', 'product-review', 'industry-conference', 'internal-startup', 'policy-tighten'],
+  growth: ['customer-consulting', 'industry-tailwind', 'media-spotlight', 'kol-fire', 'channel-rebate', 'price-war', 'customer-churn'],
+  ops: ['process-automation', 'team-building', 'remote-work', 'receivable-delay', 'hiring-misfire', 'team-conflict', 'cashflow-tight'],
+}
+
+EVENTS.forEach((event) => {
+  const copy = QUARTERLY_EVENT_COPY[event.id]
+  if (copy) {
+    event.name = copy[0]
+    event.description = copy[1]
+  }
+  event.effectLines = (event.effectLines ?? []).map((line) => line.replace(/本月/g, '本季度'))
+  event.trackWeights = {
+    ai: EVENT_TRACK_WEIGHTS.ai.includes(event.id) ? 1.7 : 1,
+    growth: EVENT_TRACK_WEIGHTS.growth.includes(event.id) ? 1.7 : 1,
+    ops: EVENT_TRACK_WEIGHTS.ops.includes(event.id) ? 1.7 : 1,
+  }
+})
 
 export const BOSS_EVENTS = [
   {
@@ -1984,6 +2142,10 @@ export const DEFAULT_DRAW_WEIGHTS = {
 for (const card of CARD_TEMPLATES) {
   if (card.type === 'fun') {
     card.ap = 0
+    card.actionOptions = card.actionOptions ?? FUNCTION_CARD_ACTIONS[card.id] ?? [
+      { id: 'default_draw', label: '临场判断', description: '抽 2 张牌', effect: { type: 'drawSelect', draw: 2, keep: 2 } },
+    ]
+    card.effects = card.actionOptions.map((option) => `ACTION: ${option.label}`)
   }
   if (card.drawWeight == null) {
     card.drawWeight = DEFAULT_DRAW_WEIGHTS[card.rarity] ?? 10

@@ -79,6 +79,7 @@ import {
   getAllCards,
   sortHandDefault,
   autoDeployActiveLine,
+  playFunctionCard,
 } from './game/engine.js'
 
 const TUTORIAL_STEPS = [
@@ -611,6 +612,7 @@ function App() {
   const [isAnimating, setIsAnimating] = useState(false)
   const [flyingCards, setFlyingCards] = useState([])
   const [draggingCardUid, setDraggingCardUid] = useState(null)
+  const [functionCardUid, setFunctionCardUid] = useState(null)
   const isInteractionLocked = isSettling || isAnimating
   const [comboOpen, setComboOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -648,6 +650,7 @@ function App() {
 
   const activeLine = getActiveLine(game)
   const selectedCard = game.hand.find((card) => card.uid === game.selectedCardUid)
+  const functionCard = game.hand.find((card) => card.uid === functionCardUid)
   const preview = useMemo(() => computeBattlePreview(game), [game])
   const activeLineAp = getLineAp(activeLine?.slots ?? [])
   const apLimit = getEffectiveApLimit(game)
@@ -1098,6 +1101,7 @@ function App() {
 
   function canPlaceCardInSlot(line, slotIndex, card) {
     if (isInteractionLocked || !card) return false
+    if (card.type === 'fun') return false
     if (line.id !== game.activeLineId || line.status !== 'planning') return false
     if (line.slots[slotIndex]) return false
     const projectedSlots = line.slots.map((slot, index) => (index === slotIndex ? card : slot))
@@ -1115,6 +1119,13 @@ function App() {
   function handleSettle() {
     if (isInteractionLocked) return
     commit(resolveMonth(game), { fx: true, animateNewHand: true })
+  }
+
+  function handleFunctionCardOption(optionId) {
+    if (!functionCardUid) return
+    const result = playFunctionCard(game, functionCardUid, optionId)
+    if (result.ok) setFunctionCardUid(null)
+    commit(result, { sfx: 'card' })
   }
 
   function sortHandByAp() {
@@ -1497,6 +1508,7 @@ function App() {
           <div className="arena-floor">
             <div className="floor-grid" />
             <PhaserBattleFX fxEvent={phaserFxEvent} />
+            <SettlementCenterFx fx={settlementFx} />
 
             <EditableBlock id="lineBoard-A" label="产线 A" editable={false}>
               <LineBoard
@@ -1542,7 +1554,7 @@ function App() {
                 <PanelHeading icon={Skull} title="商战阶段" sub={`T${game.battle.tier}${game.battle.isUltimate ? ' · 终极' : ''}`} tone="威胁" />
               </EditableBlock>
             )}
-            <EditableBlock id="event-card" label="事件卡片">
+            <EditableBlock id="event-card" label="事件卡片" editable={false}>
               {game.battle?.active ? (
                 <div className="event-card tone-威胁">
                   <strong>{game.battle.rivalName}</strong>
@@ -1552,15 +1564,17 @@ function App() {
                   <span>上月份额变化 {game.battle.lastShareDelta != null ? (game.battle.lastShareDelta >= 0 ? `+${game.battle.lastShareDelta}%` : `${game.battle.lastShareDelta}%`) : '0%'}</span>
                 </div>
               ) : (
-                <EventCardNewspaper
-                  event={game.event}
-                  majorEvent={game.majorEvent}
-                  upcomingMajorEvent={game.upcomingMajorEvent}
-                  countdown={game.majorEventCountdown}
-                  battle={game.battle}
-                  upcomingRival={game.upcomingRival}
-                  elapsedMonths={game.elapsedMonths}
-                />
+                <div className="event-newspaper-wrapper">
+                  <EventCardNewspaper
+                    event={game.event}
+                    majorEvent={game.majorEvent}
+                    upcomingMajorEvent={game.upcomingMajorEvent}
+                    countdown={game.majorEventCountdown}
+                    battle={game.battle}
+                    upcomingRival={game.upcomingRival}
+                    elapsedMonths={game.elapsedMonths}
+                  />
+                </div>
               )}
             </EditableBlock>
           </div>
@@ -1601,8 +1615,9 @@ function App() {
                   selected={game.selectedCardUid === card.uid}
                   dragging={draggingCardUid === card.uid}
                   mode="hand"
-                  draggable={game.discardRequired === 0 && !isInteractionLocked}
+                  draggable={game.discardRequired === 0 && !isInteractionLocked && card.type !== 'fun'}
                   onDragStart={(event) => {
+                    if (card.type === 'fun') return
                     event.dataTransfer.effectAllowed = 'move'
                     event.dataTransfer.setData('text/plain', card.uid)
                     setDraggingCardUid(card.uid)
@@ -1617,6 +1632,11 @@ function App() {
                     if (isInteractionLocked) return
                     if (game.discardRequired > 0) {
                       handleDiscard(card.uid)
+                      return
+                    }
+                    if (card.type === 'fun') {
+                      setFunctionCardUid(card.uid)
+                      setGame((current) => ({ ...current, selectedCardUid: null }))
                       return
                     }
                     setGame((current) => ({
@@ -1655,6 +1675,14 @@ function App() {
       )}
       {game.revealedRecruitCard && (
         <RecruitPackReveal card={game.revealedRecruitCard} onClose={handleDismissReveal} />
+      )}
+      {functionCard && (
+        <FunctionCardOverlay
+          card={functionCard}
+          cash={game.cash}
+          onPick={handleFunctionCardOption}
+          onClose={() => setFunctionCardUid(null)}
+        />
       )}
       {comboOpen && <ComboRulesOverlay onClose={() => setComboOpen(false)} />}
       {settingsOpen && (
@@ -2372,6 +2400,7 @@ function LineBoard({
   const statusLabel = getLineStatus(line, isActive)
   const tooltipCtx = React.useContext(FloatingTooltipCtx)
   return (
+    <>
     <section className={`line-board ${isActive ? 'active' : ''} ${line.status}`}>
       <EditableBlock id={`line-${line.id}-rail`} label={`产线 ${line.id} · 轨道栏`}>
         <div className="line-rail">
@@ -2382,7 +2411,7 @@ function LineBoard({
         </div>
       </EditableBlock>
       <EditableBlock id={`line-${line.id}-slots`} label={`产线 ${line.id} · 卡槽排`} editable={false}>
-        <div className={`slot-row ${fxReport?.multFx ? 'has-mult-fx' : ''}`}>
+        <div className="slot-row">
           {line.slots.map((card, index) => {
             const slotOutput = report?.slotResults[index]?.output
             const canPlaceSelected = canPlaceCard(line, index, selectedCard)
@@ -2420,7 +2449,7 @@ function LineBoard({
                   )}
                   {slotOutput > 0 && <b>¥{slotOutput}</b>}
                 </button>
-                {fxSlot && fxSlot.output > 0 && (
+                {fxSlot?.animateSlotFx && fxSlot.output > 0 && (
                   <div
                     className="slot-fx-number"
                     style={{
@@ -2434,18 +2463,6 @@ function LineBoard({
               </div>
             )
           })}
-
-          {fxReport?.multFx && (
-            <div
-              className="line-mult-fx"
-              style={{
-                '--fx-delay': `${fxReport.multFx.delay}ms`,
-              }}
-            >
-              <span>倍率结算</span>
-              <strong>×{fxReport.multFx.value}</strong>
-            </div>
-          )}
 
           {isActive && (
             <EditableBlock id={`line-${line.id}-actions`} label={`产线 ${line.id} · 操作按钮`}>
@@ -2486,11 +2503,47 @@ function LineBoard({
         </div>
       </EditableBlock>
     </section>
+    {fxReport?.lineTotalFx && (
+      <div
+        className={`line-total-fx line-total-${line.id}`}
+        style={{
+          '--fx-delay': `${fxReport.lineTotalFx.delay}ms`,
+        }}
+        aria-hidden="true"
+      >
+        <span>总产值</span>
+        <strong>+¥{fxReport.lineTotalFx.total}</strong>
+      </div>
+    )}
+    </>
+  )
+}
+
+function SettlementCenterFx({ fx }) {
+  const items = fx?.centerFx ?? []
+  if (!items.length) return null
+  return (
+    <div className="settlement-center-fx" aria-hidden="true">
+      {items.map((item) => (
+        <div
+          key={item.id}
+          className={`slot-fx-number settlement-center-number ${item.kind}`}
+          style={{
+            '--fx-delay': `${item.delay}ms`,
+            '--fx-scale': item.kind === 'total' ? 2.84 : 1,
+          }}
+        >
+          <small>{item.label}</small>
+          <span>{item.value}</span>
+        </div>
+      ))}
+    </div>
   )
 }
 
 function buildSettlementFx(settlement) {
   const reports = settlement?.lineReports ?? []
+  const activeLineId = settlement?.activeLineId ?? reports[0]?.lineId
   const allOutputs = reports.flatMap((report) => report.slotResults.map((slot) => slot.output ?? 0))
   const maxOutput = Math.max(1, ...allOutputs)
   const slotStep = 430
@@ -2499,31 +2552,56 @@ function buildSettlementFx(settlement) {
   const fxReports = reports.map((report) => ({
     ...report,
     slotResults: report.slotResults.map((slot) => {
-      if (!slot.card || slot.output <= 0) return { ...slot, fxDelay: 0 }
+      if (report.lineId !== activeLineId || !slot.card || slot.output <= 0) return { ...slot, fxDelay: 0, animateSlotFx: false }
       const fxDelay = order * slotStep
       const fxScale = (0.82 + Math.min(1.75, Math.sqrt(slot.output / maxOutput) * 1.15)).toFixed(2)
       order += 1
-      return { ...slot, fxDelay, fxScale }
+      return { ...slot, fxDelay, fxScale, animateSlotFx: true }
     }),
   }))
-  let multiplierOrder = order
-  const reportsWithMultiplier = fxReports.map((report) => {
+  let sequenceOrder = order
+  const centerFx = []
+  const reportsWithLineTotals = fxReports.map((report) => {
+    if (report.lineId === activeLineId || report.total <= 0) return report
+    const lineTotalFx = {
+      delay: sequenceOrder * slotStep + 120,
+      total: report.total,
+    }
+    sequenceOrder += 1
+    return { ...report, lineTotalFx }
+  })
+  const reportsWithMultiplier = reportsWithLineTotals.map((report) => {
     const hasOutput = report.slotResults.some((slot) => slot.card && slot.output > 0)
     if (!hasOutput) return report
     const rawSlotSum = Math.max(1, report.slotResults.reduce((sum, slot) => sum + (slot.output ?? 0), 0))
     const multiplier = Math.max(report.lineMultiplier ?? 1, report.total / rawSlotSum)
     const multFx = {
-      delay: multiplierOrder * slotStep + 120,
+      delay: sequenceOrder * slotStep + 120,
       value: formatFxMultiplier(multiplier),
     }
-    multiplierOrder += 1
+    centerFx.push({
+      id: `mult-${report.lineId}`,
+      kind: 'mult',
+      label: `产线 ${report.lineId} 倍率`,
+      value: `×${multFx.value}`,
+      delay: multFx.delay,
+    })
+    sequenceOrder += 1
     return { ...report, multFx }
   })
-  const slotEndDelay = multiplierOrder > 0 ? (multiplierOrder - 1) * slotStep + slotDuration : 0
+  const slotEndDelay = sequenceOrder > 0 ? (sequenceOrder - 1) * slotStep + slotDuration : 0
   const gain = settlement?.income ?? 0
+  centerFx.push({
+    id: 'total',
+    kind: 'total',
+    label: '本月总收入',
+    value: `${gain >= 0 ? '+' : '-'}¥${Math.abs(gain)}`,
+    delay: slotEndDelay + 120,
+  })
   return {
     id: Date.now(),
     reports: reportsWithMultiplier,
+    centerFx,
     totalFx: {
       delay: slotEndDelay + 120,
       gain,
@@ -2782,9 +2860,9 @@ function RecruitPackReveal({ card, onClose }) {
 
 function DeckButton({ label, count, onClick }) {
   const isCooling = label === '冷却'
-  const metaLabel = isCooling ? '休息' : '待命'
+  const metaLabel = isCooling ? '休息' : '名册'
   const tooltipCtx = React.useContext(FloatingTooltipCtx)
-  const tipText = isCooling ? '休息员工' : '员工册'
+  const tipText = isCooling ? '休息员工' : '员工名册'
   return (
     <button
       className="deck-button"
@@ -2807,15 +2885,15 @@ function HandCount({ discardRequired, handCount }) {
   return (
     <div
       className={`hand-title ${discardRequired > 0 ? 'discard-alert' : ''}`}
-      aria-label="待命员工"
-      onPointerEnter={(e) => tooltipCtx.showTooltip("待命员工", e)}
+      aria-label="手牌"
+      onPointerEnter={(e) => tooltipCtx.showTooltip("手牌", e)}
       onPointerMove={tooltipCtx.updateTooltip}
       onPointerLeave={tooltipCtx.hideTooltip}
     >
       {discardRequired > 0 ? (
         <span className="meta-word-icon discard-badge" aria-hidden="true">需弃牌 {discardRequired}</span>
       ) : (
-        <span className="meta-word-icon" aria-hidden="true">工作中</span>
+        <span className="meta-word-icon" aria-hidden="true">手牌</span>
       )}
       <span className="meta-copy">
         <strong>{handCount}/{GAME_CONFIG.handLimit}</strong>
@@ -3593,6 +3671,42 @@ function PileDrawer({ title, cards, onClose }) {
   )
 }
 
+function FunctionCardOverlay({ card, cash, onPick, onClose }) {
+  const options = card.actionOptions ?? []
+  return (
+    <div className="modal-backdrop retro-backdrop" onMouseDown={onClose}>
+      <section className="retro-panel function-card-panel" onMouseDown={(event) => event.stopPropagation()}>
+        <header className="function-card-header">
+          <Sparkles size={18} />
+          <strong>{card.name}</strong>
+          <button onClick={onClose}>关闭</button>
+        </header>
+        <div className="function-card-body">
+          <CardView card={card} mode="drawer" />
+          <div className="function-card-options">
+            {options.map((option) => {
+              const cost = option.cost ?? option.effect?.cost ?? 0
+              const disabled = cash < cost
+              return (
+                <button
+                  key={option.id}
+                  className="function-card-option"
+                  disabled={disabled}
+                  onClick={() => onPick(option.id)}
+                >
+                  <strong>{option.label}</strong>
+                  <span>{option.description}</span>
+                  {cost > 0 && <em>¥{cost}</em>}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 // ============================================================================
 // 关间「董事会会议」UI (详见 BOARD_MEETING_DESIGN.md §8)
 // ============================================================================
@@ -3982,9 +4096,8 @@ function EventCardNewspaper({ event, majorEvent, upcomingMajorEvent, countdown, 
     <div className="event-newspaper">
       {/* masthead：border-bottom 4px double = 双横线 */}
       <div className="masthead2">The Daily Biz</div>
-      {/* dateline：左"本月事件"，右实际 tone */}
       <div className="newsp-dateline">
-        <span>本月事件</span>
+        <span>季度新闻</span>
         <span>{event.tone}</span>
       </div>
       {/* 单横线 */}

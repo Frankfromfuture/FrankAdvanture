@@ -108,7 +108,7 @@ function PhaserBattleFX({ fxEvent }) {
         const slotActivations = []
         settlementFx.reports.forEach((report) => {
           report.slotResults.forEach((slot, slotIdx) => {
-            if (!slot.card || slot.output <= 0) return
+            if (!slot.animateSlotFx || !slot.card || slot.output <= 0) return
             const el = document.querySelector(
               `[data-line-id="${report.lineId}"][data-slot-idx="${slotIdx}"]`
             )
@@ -137,7 +137,7 @@ function PhaserBattleFX({ fxEvent }) {
         const { delay, gain } = settlementFx.totalFx
         this.time.delayedCall(delay, () => {
           const cx = this.scale.width * 0.5
-          const cy = this.scale.height * 0.42
+          const cy = this.scale.height * 0.46
           this.numberBurstFX(cx, cy, gain)
         })
       }
@@ -178,7 +178,7 @@ function PhaserBattleFX({ fxEvent }) {
       // Number burst: explode + 2× shockwave ring + screen flash + gold star rain
       numberBurstFX(x, y, _gain) {
         // ① White flash
-        this.flashScreen(0xffffff, 0.6, 100)
+        this.flashScreen(0xffffff, 0.72, 130)
 
         // ② Two staggered shockwave rings
         this.spawnRing(x, y, 0xffc857, 0)
@@ -186,36 +186,38 @@ function PhaserBattleFX({ fxEvent }) {
 
         // ③ Gold spark explode (main burst)
         const goldEmitter = this.add.particles(x, y, 'spark', {
-          speed: { min: 200, max: 720 },
+          speed: { min: 260, max: 980 },
           angle: { min: 0, max: 360 },
-          scale: { start: 0.8, end: 0 },
+          scale: { start: 1.35, end: 0 },
           alpha: { start: 1, end: 0 },
-          lifespan: { min: 480, max: 1050 },
-          gravityY: 300,
+          lifespan: { min: 620, max: 1350 },
+          gravityY: 360,
           tint: [0xffc857, 0xfbbf24, 0xfde68a, 0xffffff],
           blendMode: Phaser.BlendModes.ADD,
           emitting: false,
         })
         goldEmitter.setDepth(20)
-        goldEmitter.explode(180, x, y)
+        goldEmitter.explode(320, x, y)
 
         // ④ Accent stars (slower, multi-color)
         const starEmitter = this.add.particles(x, y, 'star4', {
-          speed: { min: 50, max: 250 },
+          speed: { min: 90, max: 390 },
           angle: { min: 0, max: 360 },
-          scale: { start: 1.4, end: 0 },
+          scale: { start: 2.8, end: 0 },
           alpha: { start: 1, end: 0 },
-          lifespan: { min: 700, max: 1600 },
-          gravityY: 120,
+          lifespan: { min: 900, max: 2100 },
+          gravityY: 160,
           tint: [0xffc857, 0xc084fc, 0x60a5fa, 0xfb923c],
           blendMode: Phaser.BlendModes.ADD,
           emitting: false,
         })
         starEmitter.setDepth(21)
-        starEmitter.explode(42, x, y)
+        starEmitter.explode(96, x, y)
+
+        this.spawnRing(x, y, 0xffffff, 320)
 
         // ⑤ Big camera shake
-        this.cameras.main.shake(350, 0.014)
+        this.cameras.main.shake(480, 0.019)
 
         // Cleanup after particles die
         this.time.delayedCall(1800, () => {
@@ -237,9 +239,9 @@ function PhaserBattleFX({ fxEvent }) {
           } catch (_) {}
           this.tweens.add({
             targets: ring,
-            scale: 4.0,
+            scale: 6.2,
             alpha: 0,
-            duration: 680,
+            duration: 820,
             ease: 'Sine.easeOut',
             onComplete: () => ring.destroy(),
           })
