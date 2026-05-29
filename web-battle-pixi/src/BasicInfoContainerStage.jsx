@@ -11,7 +11,7 @@ const DW = 640
 const DH = 230
 const SCALE = 2
 
-const C = {
+export const C = {
   stage: 0x17130f,
   table: 0x2a2118,
   cream: 0xf2e6c7,

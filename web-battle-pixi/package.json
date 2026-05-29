@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "vitest run",
+    "simulate": "node src/game/simulation.js"
   },
   "dependencies": {
     "@pixi/layout": "^3.2.0",
@@ -17,6 +19,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^5.1.1",
     "postcss": "^8.5.15",
-    "vite": "^7.2.7"
+    "vite": "^7.2.7",
+    "vitest": "^4.1.7"
   }
 }

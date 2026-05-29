@@ -34,8 +34,7 @@ function makeOuter(W, H) {
   const outer = new Container()
   outer.eventMode = 'static'
   outer.cursor = 'pointer'
-  outer.pivot.set(W / 2, H / 2)
-  outer.position.set(W / 2, H / 2)
+  // No pivot / position preset — callers set node.x/node.y directly (top-left semantics).
   return outer
 }
 
@@ -71,15 +70,27 @@ function addBorders(card_, W, H, palette) {
 }
 
 function addHover(outerCnt, W, H) {
-  const s = { scale: 1, targetScale: 1, y: 0, targetY: 0 }
-  outerCnt.on('pointerover', () => { s.targetScale = 1.06; s.targetY = -4 })
-  outerCnt.on('pointerout',  () => { s.targetScale = 1;    s.targetY = 0  })
+  const s = { scale: 1, targetScale: 1, yOff: 0, targetYOff: 0 }
+  outerCnt.on('pointerover', () => { s.targetScale = 1.06; s.targetYOff = -4 })
+  outerCnt.on('pointerout',  () => { s.targetScale = 1;    s.targetYOff = 0  })
+
+  // Base position is set EXTERNALLY after createPixiCard() returns.
+  // We capture it on the first onRender tick (after external x/y are applied),
+  // then use pivot-compensation to scale from the card's visual centre.
+  let baseX = null
+  let baseY = null
   outerCnt.onRender = () => {
+    // First tick: snapshot the externally-set position (top-left origin).
+    if (baseX === null) { baseX = outerCnt.x; baseY = outerCnt.y }
     const k = 0.25
     s.scale += (s.targetScale - s.scale) * k
-    s.y     += (s.targetY     - s.y    ) * k
+    s.yOff  += (s.targetYOff  - s.yOff)  * k
+    // Scale from card centre: set pivot to centre, compensate position so
+    // visual top-left stays at (baseX, baseY).
+    const cx = W / 2, cy = H / 2
+    outerCnt.pivot.set(cx, cy)
     outerCnt.scale.set(s.scale)
-    outerCnt.position.set(W / 2, H / 2 + s.y)
+    outerCnt.position.set(baseX + cx, baseY + cy + s.yOff)
   }
 }
 

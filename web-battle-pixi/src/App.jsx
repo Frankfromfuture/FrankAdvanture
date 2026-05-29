@@ -127,6 +127,16 @@ export function App() {
       <p className="note" style={{ marginBottom: 36 }}>
         战斗背景 / 数字弹跳火焰 / 产线牌桌
       </p>
+
+      {/* ── 引擎骨架入口 ── */}
+      <PixelDivider label="完整 Battle" />
+      <a href="?battle" style={{
+        display: 'inline-block', margin: '12px auto 36px',
+        padding: '8px 16px', background: '#7c562d', color: '#fff5d8',
+        border: '2px solid #d7922e', borderRadius: 4,
+        fontFamily: "'Zpix', monospace", fontSize: 13, letterSpacing: 1,
+        textDecoration: 'none',
+      }}>▶ 进入完整 Battle 页面</a>
     </>
   )
 }
