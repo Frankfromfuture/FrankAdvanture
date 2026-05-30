@@ -86,31 +86,38 @@ import {
 
 const TUTORIAL_STEPS = [
   {
-    title: '欢迎入职，新 CEO',
-    body: '顶部那一排数字别慌——累计 ¥ 是你向投资人交差的「KPI」，现金 ¥ 是「公司还能撑几个月」，AP 是「你今天还有多少精力开会」。董事会全靠这几个数字判断你能不能续命。',
+    title: '顶部 · 命脉数字',
+    body: '这一排是董事会唯一在意的指标：累计 ¥ 是交给投资人的 KPI，现金 ¥ 是公司还能撑多久，AP 是本月可用的行动力。',
     focus: 'top',
     targetSelector: '.top-hud',
     placement: 'bottom',
   },
   {
-    title: '把人塞进产线 (5 格生产位)',
-    body: '5 个工位各有自己的部门偏好：P1/P2 更适合销售，P3 更适合研发，P4/P5 更适合运营。把人放在顺手的位置，产线才会真的转起来。',
-    focus: 'line',
-    targetSelector: '.line-board.active .slot-row',
-    placement: 'top',
+    title: '左侧 · 商业模式',
+    body: '这里挂着你的商业模式（全局加成）、手牌排序与「自动布置产线」按钮，下方是每月操作日志。',
+    focus: 'bizmodel',
+    targetSelector: '.ceo-panel',
+    placement: 'right',
   },
   {
-    title: 'HR 部今天只给你 3 张简历',
-    body: '右边每月放 3 个候选人，只能签 1 个。先看 AP（薪资）、产出（产值），再瞄一眼右上角那个红红绿绿的 roll（面试当天他运气如何）。\n剩下两个？HR 会说「保持联系」。',
-    focus: 'market',
-    targetSelector: '.recruit-market',
+    title: '右侧 · 情报面板',
+    body: '本月事件、对手战报与年度大事件预告都在这。开战时还会显示双方营收和市场份额变化。',
+    focus: 'info',
+    targetSelector: '.event-panel',
     placement: 'left',
   },
   {
-    title: '按那个「▶」开始爆分',
-    body: '产线旁那个三角形按钮就是月底结算。点下去 P1 → P5 依次触发，数字一个个炸出来——那个声音叫做「升职加薪 BGM」。\nAP 别超限，超了说明你又要熬夜了。',
-    focus: 'settle',
-    targetSelector: '.line-board.active .line-action-button.start',
+    title: '中间 · 生产线',
+    body: '核心战场。把员工放进 5 个工位结算产出，A、B 两条线可同时开工——错峰运转让收入接近翻倍。',
+    focus: 'line',
+    targetSelector: '.arena-panel',
+    placement: 'top',
+  },
+  {
+    title: '底部 · 员工与牌堆',
+    body: '手牌就是你的员工卡，点选后拖进产线。右侧 AP 表显示本月行动力上限，牌堆 / 冷却区告诉你还剩多少卡可抽。',
+    focus: 'hand',
+    targetSelector: '.hand-dock',
     placement: 'top',
   },
 ]
@@ -541,10 +548,19 @@ function ProfessionSelectScreen({ onSelect, onBack }) {
 const FloatingTooltipCtx = React.createContext(null)
 
 function App() {
+  const [showIntro, setShowIntro] = useState(true)
   const [screen, setScreen] = useState('menu')
   const [compendiumReturn, setCompendiumReturn] = useState('menu')
   const [sortMode, setSortMode] = useState('ap') // 'ap' or 'dept'
   const appTooltip = useFloatingTooltip({ delay: 150 })
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowIntro(false)
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [])
+
   const [game, setGame] = useState(() => {
     const loaded = _loadGameState()
     if (loaded) {
@@ -1460,6 +1476,17 @@ function App() {
     setScreen('compendium')
   }
 
+  if (showIntro) {
+    return (
+      <div className="intro-splash-shell">
+        <div className="intro-splash-content">
+          <img src="/assets/intro.jpeg" alt="Frank Fan's Production" className="intro-splash-image" />
+          <h2 className="intro-splash-text">Frank Fan's Production</h2>
+        </div>
+      </div>
+    )
+  }
+
   if (screen === 'menu') {
     return (
       <main className="main-menu-shell">
@@ -1721,7 +1748,7 @@ function App() {
       </footer>
 
       {hint && <div className="toast">{hint}</div>}
-      {!tutorialDone && game.stage.id === 1 && game.month === 1 && !game.result && !game.intermissionState && (
+      {!tutorialDone && game.stage.id === 1 && (game.elapsedMonths ?? 0) === 0 && !game.result && !game.intermissionState && (
         <TutorialOverlay
           step={tutorialStep}
           onNext={() => {
@@ -2298,19 +2325,20 @@ function TutorialOverlay({ step, onNext, onSkip }) {
   const item = TUTORIAL_STEPS[step] ?? TUTORIAL_STEPS[0]
   const isLast = step >= TUTORIAL_STEPS.length - 1
   const [rect, setRect] = useState(null)
+  const [cardSize, setCardSize] = useState({ w: 720, h: 320 })
   const cardRef = useRef(null)
 
-  // 测量目标 DOM 元素位置（每帧轮询 + window resize，避免错过元素挂载时机）
+  // 测量目标 DOM 元素位置 + 卡片自身尺寸（每帧轮询 + window resize，避免错过元素挂载时机）
   useEffect(() => {
     let raf = 0
     let active = true
     function measure() {
       if (!active) return
       const target = document.querySelector(item.targetSelector)
-      if (target) {
-        setRect(rectInDesignCanvas(target))
-      } else {
-        setRect(null)
+      setRect(target ? rectInDesignCanvas(target) : null)
+      if (cardRef.current) {
+        const c = rectInDesignCanvas(cardRef.current)
+        setCardSize((prev) => (Math.abs(prev.h - c.h) > 1 || Math.abs(prev.w - c.w) > 1 ? { w: c.w, h: c.h } : prev))
       }
       raf = window.requestAnimationFrame(measure)
     }
@@ -2325,38 +2353,50 @@ function TutorialOverlay({ step, onNext, onSkip }) {
 
   // 根据 placement 计算卡片浮现位置 + 箭头朝向
   const placement = item.placement || 'bottom'
-  const CARD_W = 440
-  const CARD_GAP = 24
+  const CARD_W = 720
+  const CARD_GAP = 28
+  const MARGIN = 24
+  const cw = CARD_W
+  const ch = cardSize.h
   let cardX = 0
   let cardY = 0
-  let arrowAxis = 'top'
+  let arrowAxis = 'none'
   if (rect) {
     const cx = rect.x + rect.w / 2
     const cy = rect.y + rect.h / 2
-    if (placement === 'bottom') {
-      cardX = cx - CARD_W / 2
-      cardY = rect.y + rect.h + CARD_GAP
-      arrowAxis = 'top'
-    } else if (placement === 'top') {
-      cardX = cx - CARD_W / 2
-      cardY = rect.y - CARD_GAP // CSS 用 transform translate(0,-100%) 把卡片放到上方
-      arrowAxis = 'bottom'
-    } else if (placement === 'left') {
-      cardX = rect.x - CARD_W - CARD_GAP
-      cardY = cy
-      arrowAxis = 'right'
-    } else if (placement === 'right') {
-      cardX = rect.x + rect.w + CARD_GAP
-      cardY = cy
-      arrowAxis = 'left'
+    // 候选位：卡片真实左上角坐标（不依赖 CSS transform 偏移），始终落在目标区之外
+    const candidate = (p) => {
+      if (p === 'bottom') return { x: cx - cw / 2, y: rect.y + rect.h + CARD_GAP, arrow: 'top' }
+      if (p === 'top') return { x: cx - cw / 2, y: rect.y - CARD_GAP - ch, arrow: 'bottom' }
+      if (p === 'left') return { x: rect.x - CARD_GAP - cw, y: cy - ch / 2, arrow: 'right' }
+      return { x: rect.x + rect.w + CARD_GAP, y: cy - ch / 2, arrow: 'left' } // right
     }
-    // 防止溢出屏幕 (设计画布坐标，1920×1080)
-    const margin = 16
-    cardX = Math.max(margin, Math.min(cardX, DESIGN_CANVAS_W - CARD_W - margin))
+    // 双轴裁剪到设计画布内，避免被边缘裁切
+    const clamp = (pos) => ({
+      ...pos,
+      x: Math.max(MARGIN, Math.min(pos.x, DESIGN_CANVAS_W - cw - MARGIN)),
+      y: Math.max(MARGIN, Math.min(pos.y, DESIGN_CANVAS_H - ch - MARGIN)),
+    })
+    // 裁剪后是否仍压住高亮区
+    const covers = (pos) => !(
+      pos.x + cw <= rect.x || pos.x >= rect.x + rect.w ||
+      pos.y + ch <= rect.y || pos.y >= rect.y + rect.h
+    )
+    // 优先用指定朝向；若会遮挡目标，依次尝试其它方向，选第一个不遮挡的
+    const order = [placement, 'bottom', 'top', 'right', 'left'].filter((v, i, a) => a.indexOf(v) === i)
+    let chosen = null
+    for (const p of order) {
+      const c = clamp(candidate(p))
+      if (!covers(c)) { chosen = c; break }
+    }
+    if (!chosen) chosen = clamp(candidate(placement))
+    cardX = chosen.x
+    cardY = chosen.y
+    arrowAxis = chosen.arrow
   } else {
     // 找不到目标 → 居中显示 (设计画布中央)
-    cardX = DESIGN_CANVAS_W / 2 - CARD_W / 2
-    cardY = DESIGN_CANVAS_H / 2
+    cardX = DESIGN_CANVAS_W / 2 - cw / 2
+    cardY = DESIGN_CANVAS_H / 2 - ch / 2
     arrowAxis = 'none'
   }
 

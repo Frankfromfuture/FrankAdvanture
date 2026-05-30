@@ -444,14 +444,16 @@ export function pickRivalName(archetype, rng = Math.random) {
   return names[Math.floor(rng() * names.length)]
 }
 
-// 收入公式：rivalBaseIncome = stageThreshold[currentStage] × 0.6
+// 收入公式：rivalBaseIncome = max(80, nextStageThreshold^0.8 × 0.20)  ← 次线性，压缩高端
 // rivalTierMult = 1 + 0.15 × (tier − 1)
 // rivalIncome = rivalBaseIncome × rivalTierMult × archetypeMul × monthDrift(±10%)
 export function computeRivalIncome(stageId, tier, archetypeMul, rng = Math.random) {
   const stage = STAGES.find((s) => s.id === stageId) ?? STAGES[0]
   // 用下一阶段阈值的差作为更稳定的"规模基准"，避免 stage 1 阈值=0 时收入为 0
   const nextStage = STAGES.find((s) => s.id === stageId + 1) ?? stage
-  const baseScale = Math.max(80, nextStage.threshold * 0.035)
+  // 次线性耦合阶段阈值：低端（tier1）≈80 不变，高端（tier3+）压缩，
+  // 把 tier2→tier3 的收入断崖磨成斜坡，配合玩家阶段 AP 成长形成平滑难度曲线。
+  const baseScale = Math.max(80, Math.pow(nextStage.threshold, 0.8) * 0.20)
   const tierMult = 1 + 0.15 * (tier - 1)
   const drift = 0.9 + rng() * 0.2  // ±10%
   return Math.round(baseScale * tierMult * archetypeMul * drift)

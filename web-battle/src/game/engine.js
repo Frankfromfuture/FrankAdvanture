@@ -738,6 +738,13 @@ export function getLineAp(slots, bmStats = {}) {
   return total
 }
 
+// v4: 阶段 AP 成长曲线。基础 AP 随公司做大平滑提升，让后期能铺满 5 槽、吃到乘法 combo
+// （全员出动 2.5× / 世界最好兄弟 2× / S 质变 1.8×）。早期保持紧张以考验取舍。
+//   阶段 1-3:+0  4-6:+1  7-9:+2
+export function getStageApBonus(stageId = 1) {
+  return Math.min(2, Math.floor((Math.max(1, stageId) - 1) / 3))
+}
+
 export function getEffectiveApLimit(state, slots = getActiveLine(state)?.slots ?? []) {
   let founderBonus = 0
   if (state.hand.some((card) => card?.id === 'EMP_FOUNDER_O')) {
@@ -754,7 +761,8 @@ export function getEffectiveApLimit(state, slots = getActiveLine(state)?.slots ?
       return effectSum + readSignedNumber(effect)
     }, 0)
   }, 0)
-  return Math.max(1, state.apAvailable + serviceBonus + founderBonus)
+  const stageBonus = getStageApBonus(state.stage?.id ?? 1)
+  return Math.max(1, state.apAvailable + serviceBonus + founderBonus + stageBonus)
 }
 
 export function placeCardInSlot(state, cardUid, slotIndex) {

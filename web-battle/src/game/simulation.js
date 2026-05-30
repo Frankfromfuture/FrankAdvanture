@@ -521,11 +521,7 @@ function handleBoardMeeting(state, rng, log) {
   return current
 }
 
-function playOneMonth(state, rng, monthIndex) {
-  const before = snapshot(state)
-  const beforeHand = cardIds(state.hand)
-  const decisions = []
-
+function resolveDiscards(state, rng, decisions) {
   while (state.discardRequired > 0) {
     const toss = randomTop(rng, state.hand, (card) => -cardScore(card), 2)
     if (!toss) break
@@ -534,6 +530,15 @@ function playOneMonth(state, rng, monthIndex) {
     decisions.push({ type: 'discard', card: toss.name })
     state = discarded.state
   }
+  return state
+}
+
+function playOneMonth(state, rng, monthIndex) {
+  const before = snapshot(state)
+  const beforeHand = cardIds(state.hand)
+  const decisions = []
+
+  state = resolveDiscards(state, rng, decisions)
 
   const functionAction = chooseFunctionCardAction(state, rng)
   if (functionAction) {
@@ -580,6 +585,8 @@ function playOneMonth(state, rng, monthIndex) {
       }
     }
   }
+
+  state = resolveDiscards(state, rng, decisions)
 
   const previewBeforeSettle = computeBattlePreview(state)
   const battleBeforeSettle = battleSnapshot(state.battle)
@@ -738,6 +745,8 @@ export function summarize(runs) {
   let battlesWon = 0
   let rewardsClaimed = 0
   let battleTimeoutsOrLosses = 0
+  const bossByTier = {}
+  const tierBucket = (t) => (bossByTier[t] ??= { started: 0, won: 0, lost: 0 })
   for (const run of runs) {
     stageCounts[run.final.stage] = (stageCounts[run.final.stage] ?? 0) + 1
     const deathMonth = run.final.result?.gameOver ? run.monthsPlayed : null
@@ -754,12 +763,19 @@ export function summarize(runs) {
         drawnTotal += record.drawnCards.length
       }
       if (record.boss?.previewStarted) battlePreviews += 1
-      if (record.boss?.battleStarted) battlesStarted += 1
+      if (record.boss?.battleStarted) {
+        battlesStarted += 1
+        tierBucket(record.boss.after?.tier ?? '?').started += 1
+      }
       if (record.boss?.before || record.boss?.after) activeBattleMonths += 1
-      if (record.boss?.defeatedThisMonth) battlesWon += 1
+      if (record.boss?.defeatedThisMonth) {
+        battlesWon += 1
+        tierBucket(record.boss.before?.tier ?? record.boss.after?.tier ?? '?').won += 1
+      }
       if (record.boss?.rewardClaimed?.length) rewardsClaimed += 1
       if (record.boss?.before && !record.boss?.after && !record.boss?.defeatedThisMonth) {
         battleTimeoutsOrLosses += 1
+        tierBucket(record.boss.before?.tier ?? '?').lost += 1
       }
     }
   }
@@ -792,6 +808,7 @@ export function summarize(runs) {
       timeoutOrLost: battleTimeoutsOrLosses,
       avgDefeatedRivals: avgFloat((run) => run.final.defeatedRivals?.length ?? 0),
       maxDefeatedRivals: Math.max(0, ...runs.map((run) => run.final.defeatedRivals?.length ?? 0)),
+      byTier: bossByTier,
     },
     deathBuckets: Object.fromEntries(Object.entries(deathBuckets).map(([key, count]) => [key, { count, rate: pct(count) }])),
     cumulativeDeaths: Object.fromEntries(Object.entries(cumulativeDeaths).map(([key, count]) => [key, { count, rate: pct(count) }])),

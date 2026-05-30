@@ -566,8 +566,8 @@ button {
 .tutorial-card {
   position: fixed;
   display: grid;
-  gap: 10px;
-  padding: 20px 22px;
+  gap: 16px;
+  padding: 30px 34px;
   border: 4px solid rgba(255, 200, 87, 0.86);
   color: #fff4bd;
   background:
@@ -586,21 +586,21 @@ button {
   to { opacity: 1; transform: var(--tutorial-anchor-offset, translateY(0)) scale(1); }
 }
 
-/* 根据箭头朝向决定卡片相对 (left/top) 的锚点 */
-.tutorial-card.arrow-top { --tutorial-anchor-offset: translateY(0); }
-.tutorial-card.arrow-bottom { transform: translateY(-100%); --tutorial-anchor-offset: translateY(-100%); }
-.tutorial-card.arrow-left { transform: translateY(-50%); --tutorial-anchor-offset: translateY(-50%); }
-.tutorial-card.arrow-right { transform: translate(-100%, -50%); --tutorial-anchor-offset: translate(-100%, -50%); }
-.tutorial-card.arrow-none { --tutorial-anchor-offset: translate(0, -50%); transform: translate(0, -50%); }
+/* 卡片真实左上角坐标由 JS 计算，CSS 不再做方向性偏移；锚点统一为原点，仅保留 pop 动画 */
+.tutorial-card.arrow-top,
+.tutorial-card.arrow-bottom,
+.tutorial-card.arrow-left,
+.tutorial-card.arrow-right,
+.tutorial-card.arrow-none { --tutorial-anchor-offset: translateY(0); }
 
 .tutorial-card span {
   color: #93c5fd;
-  font-size: 11px;
-  letter-spacing: 3px;
+  font-size: 22px;
+  letter-spacing: 4px;
 }
 
 .tutorial-card strong {
-  font-size: 20px;
+  font-size: 40px;
   letter-spacing: 2px;
   line-height: 1.25;
 }
@@ -608,7 +608,7 @@ button {
 .tutorial-card p {
   margin: 0;
   color: #e2e8f0;
-  font-size: 13px;
+  font-size: 26px;
   line-height: 1.7;
   white-space: pre-line;
 }
@@ -666,18 +666,18 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  margin-top: 4px;
+  gap: 16px;
+  margin-top: 8px;
 }
 
 .tutorial-actions button {
-  min-height: 36px;
-  padding: 0 14px;
+  min-height: 64px;
+  padding: 0 26px;
   border: 3px solid rgba(255, 200, 87, 0.72);
   color: #fff4bd;
   background: rgba(67, 56, 202, 0.82);
   font-family: inherit;
-  font-size: 12px;
+  font-size: 24px;
   cursor: pointer;
   clip-path: polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px);
 }
@@ -686,7 +686,7 @@ button {
   color: #cbd5e1 !important;
   border-color: rgba(148, 163, 184, 0.5) !important;
   background: transparent !important;
-  font-size: 11px !important;
+  font-size: 22px !important;
 }
 
 .tutorial-next {
@@ -11335,3 +11335,49 @@ button:disabled,
 }
 
 /* 浮动 modal/panel 已废弃，对决信息全部走 event-panel 既有 in-game 样式 */
+
+/* ============================================================================
+   Intro Splash Screen
+   ============================================================================ */
+.intro-splash-shell {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  animation: introFade 1.5s ease-in-out forwards;
+}
+
+.intro-splash-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  text-align: center;
+}
+
+.intro-splash-image {
+  max-width: 480px;
+  max-height: 320px;
+  border-radius: 4px;
+  border: 3px solid var(--gold);
+  box-shadow: 0 0 15px rgba(255, 200, 87, 0.4);
+}
+
+.intro-splash-text {
+  color: var(--gold);
+  font-family: "Fusion Pixel SC", "Fusion Pixel", "Press Start 2P", monospace;
+  font-size: 28px;
+  letter-spacing: 2px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+  margin: 0;
+}
+
+@keyframes introFade {
+  0%   { opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { opacity: 0; }
+}
