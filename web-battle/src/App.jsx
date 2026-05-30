@@ -7,6 +7,7 @@ import PhaserBattleFX from './PhaserBattleFX.jsx'
 import PhaserMenuFX from './PhaserMenuFX.jsx'
 import { PackBox3D } from './PackBox3D.jsx'
 import { ServiceFunSvg, hasServiceFunSvg } from './ServiceFunSvg.jsx'
+import { BusinessModelSvg } from './BusinessModelSvg.jsx'
 import { createRivalInstance, createBattle, RIVAL_SCHEDULE, RIVAL_ARCHETYPES } from './game/rivals.js'
 import { MarketShareBar } from './components/MarketShareBar.jsx'
 import { ExecutiveSvgPortrait } from './人物/ExecutiveSvgPortrait.jsx'
@@ -60,6 +61,7 @@ import {
   getActiveLine,
   getEffectiveApLimit,
   getLineAp,
+  getPositionalBuff,
   openPack,
   placeCardInSlot,
   purchaseBusinessModel,
@@ -613,6 +615,8 @@ function App() {
   const [flyingCards, setFlyingCards] = useState([])
   const [draggingCardUid, setDraggingCardUid] = useState(null)
   const [functionCardUid, setFunctionCardUid] = useState(null)
+  const [dissolvingCardUid, setDissolvingCardUid] = useState(null)
+  const dissolveTimerRef = useRef(null)
   const isInteractionLocked = isSettling || isAnimating
   const [comboOpen, setComboOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -761,15 +765,24 @@ function App() {
     window.clearTimeout(hintTimerRef.current)
     window.clearTimeout(handEntryTimerRef.current)
     window.clearTimeout(settlementFxTimerRef.current)
+    window.clearTimeout(dissolveTimerRef.current)
   }, [])
 
   useEffect(() => {
     const inactive = flyingCards.some((fc) => !fc.active)
     if (inactive) {
-      const id = requestAnimationFrame(() => {
-        setFlyingCards((prev) => prev.map((fc) => (fc.active ? fc : { ...fc, active: true })))
+      // 双 rAF：先让浏览器把"起始帧"（transition:none）真正绘制出来，
+      // 下一帧再翻到 active 触发过渡，避免起止帧被合并导致瞬移/僵硬。
+      let inner = 0
+      const outer = requestAnimationFrame(() => {
+        inner = requestAnimationFrame(() => {
+          setFlyingCards((prev) => prev.map((fc) => (fc.active ? fc : { ...fc, active: true })))
+        })
       })
-      return () => cancelAnimationFrame(id)
+      return () => {
+        cancelAnimationFrame(outer)
+        cancelAnimationFrame(inner)
+      }
     }
   }, [flyingCards])
 
@@ -821,15 +834,9 @@ function App() {
         setSettlementFx(null)
         setIsSettling(false)
         if (options.animateNewHand) animateNewHand(game, result.state)
-        
-        let finalState = result.state
-        if (finalState.result && finalState.result.passed && !finalState.result.gameWon) {
-          const intermission = enterIntermission(finalState)
-          if (intermission.ok) {
-            finalState = intermission.state
-          }
-        }
-        setGame(finalState)
+        // 月末结算后只展示「结算/晋升」弹窗，董事会会议由玩家点击「进入董事会会议」按钮进入
+        // （避免 ResultOverlay 与 BoardMeetingHub 同时挂载、互相遮挡导致按钮失效）
+        setGame(result.state)
       }, nextSettlementFx.duration)
       return
     }
@@ -914,14 +921,39 @@ function App() {
         const endCenterX = slotRect.left + slotRect.width / 2
         const endCenterY = slotRect.top + slotRect.height / 2
 
-        const startScale = handRect.width / 134
-        // Hand card is scale 1.2 * fan scale 1.1 = 1.32. Slot card is scale 1.0.
-        // So the target scale at the slot should be exactly startScale / 1.32.
-        const endScale = startScale / 1.32
+        // 每张手牌按扇形角度不同地绕底边中心旋转（--fan-rotate），其 getBoundingClientRect
+        // 宽度会被旋转放大，且放大量随角度变化。若直接用 bbox 宽或固定常数当起始缩放，
+        // 只有角度≈0 的那张（第一/中间张）能对准，越往两侧越偏。这里按角度反推真实牌面宽，
+        // 得到每张卡各自准确的起始缩放；落点统一用 app-scale（槽位卡为设计尺寸 scale 1.0）。
+        const fanRotateDeg = parseFloat(handCardEl.style.getPropertyValue('--fan-rotate')) || 0
+        const theta = (Math.abs(fanRotateDeg) * Math.PI) / 180
+        const CARD_ASPECT = 200 / 134
+        const faceWidth = handRect.width / (Math.cos(theta) + CARD_ASPECT * Math.sin(theta))
+        const startScale = faceWidth / 134
+        const scalerEl = document.querySelector('.app-scaler')
+        const appScale = scalerEl ? (scalerEl.getBoundingClientRect().width / scalerEl.offsetWidth) || 1 : 1
+        // 槽位卡为设计尺寸（scale 1.0），但 .line-slot-cell 可能被 CSS 缩放（如缩窄 slot）。
+        // 直接读取该缩放，保证落点尺寸与真实槽位卡一致，避免与 CSS 常数脱钩。
+        const slotCellEl = slotEl.closest('.line-slot-cell')
+        let slotCellScale = 1
+        if (slotCellEl) {
+          const t = getComputedStyle(slotCellEl).transform
+          if (t && t !== 'none') {
+            const m = new DOMMatrixReadOnly(t)
+            if (m.a) slotCellScale = m.a
+          }
+        }
+        const endScale = appScale * slotCellScale
 
         // Read fanned rotation from the inline style (fallback to 0deg)
         const startRot = handCardEl.style.getPropertyValue('--fan-rotate') || '0deg'
         const endRot = '0deg'
+
+        // 激活产线整体被 rotateX(7deg) 透视倾斜，槽位卡也随之倾斜。
+        // 让飞行卡终点带上相同的透视倾角，直接「贴」到经过透视的槽位上，
+        // 避免落点时从平面卡瞬切成倾斜卡的跳变。
+        const startTilt = '0deg'
+        const endTilt = '7deg'
 
         const newFly = {
           uid: cardUid,
@@ -934,15 +966,18 @@ function App() {
           endScale,
           startRot,
           endRot,
+          startTilt,
+          endTilt,
         }
 
         setFlyingCards((prev) => [...prev, newFly])
 
+        // 过渡 0.48s + 双 rAF 启动延迟，落点后再换上真实槽位卡，避免提前移除造成的末端瞬跳。
         setTimeout(() => {
           onComplete()
           setIsAnimating(false)
           setFlyingCards((prev) => prev.filter((fc) => fc.uid !== cardUid))
-        }, 450)
+        }, 520)
         return
       }
     }
@@ -1121,11 +1156,26 @@ function App() {
     commit(resolveMonth(game), { fx: true, animateNewHand: true })
   }
 
-  function handleFunctionCardOption(optionId) {
-    if (!functionCardUid) return
-    const result = playFunctionCard(game, functionCardUid, optionId)
-    if (result.ok) setFunctionCardUid(null)
-    commit(result, { sfx: 'card' })
+  // 功能牌：点击即直接打出（单一功能，无需 2 选 1 弹窗）
+  // 先播放「整张牌扩散消失」动效，结束后再结算并弹出「xxx 功能已触发」提示。
+  function handlePlayFunctionCard(cardUid) {
+    if (isInteractionLocked || !cardUid || dissolvingCardUid) return
+    const card = game.hand.find((c) => c.uid === cardUid)
+    setFunctionCardUid(null)
+    setDissolvingCardUid(cardUid)
+    playUiSfx('card')
+    window.clearTimeout(dissolveTimerRef.current)
+    dissolveTimerRef.current = window.setTimeout(() => {
+      setDissolvingCardUid(null)
+      commit(playFunctionCard(game, cardUid))
+      if (card) {
+        const desc = (card.actionOptions ?? [])
+          .map((o) => o.description)
+          .filter(Boolean)
+          .join(' / ')
+        showHint(`「${card.name}」功能已触发${desc ? `：${desc}` : ''}`)
+      }
+    }, 560)
   }
 
   function sortHandByAp() {
@@ -1307,11 +1357,22 @@ function App() {
 
   function handleEnterIntermission() {
     setSettingsOpen(false)
+    // 已在董事会会议中（如旧存档/旧逻辑残留）→ 只需收起结算弹窗，露出董事会
     if (game.intermissionState) {
       setGame((current) => ({ ...current, result: null }))
-    } else {
-      commit(enterIntermission(game), { sfx: 'transition' })
+      return
     }
+    // 进入董事会会议
+    const next = enterIntermission(game)
+    if (next.ok) {
+      playUiSfx('transition')
+      setGame(next.state)
+      return
+    }
+    // 兜底：万一无法进入董事会，也不要把玩家卡死在结算页 —— 提示并退回经营界面
+    playUiSfx('error')
+    showHint(next.message || '无法进入董事会，已返回经营界面')
+    setGame((current) => ({ ...current, result: null }))
   }
 
   function handleQuickEnterBoardMeeting() {
@@ -1614,6 +1675,7 @@ function App() {
                   entering={enteringHandUids.has(card.uid)}
                   selected={game.selectedCardUid === card.uid}
                   dragging={draggingCardUid === card.uid}
+                  dissolving={dissolvingCardUid === card.uid}
                   mode="hand"
                   draggable={game.discardRequired === 0 && !isInteractionLocked && card.type !== 'fun'}
                   onDragStart={(event) => {
@@ -1635,8 +1697,7 @@ function App() {
                       return
                     }
                     if (card.type === 'fun') {
-                      setFunctionCardUid(card.uid)
-                      setGame((current) => ({ ...current, selectedCardUid: null }))
+                      handlePlayFunctionCard(card.uid)
                       return
                     }
                     setGame((current) => ({
@@ -1676,14 +1737,6 @@ function App() {
       {game.revealedRecruitCard && (
         <RecruitPackReveal card={game.revealedRecruitCard} onClose={handleDismissReveal} />
       )}
-      {functionCard && (
-        <FunctionCardOverlay
-          card={functionCard}
-          cash={game.cash}
-          onPick={handleFunctionCardOption}
-          onClose={() => setFunctionCardUid(null)}
-        />
-      )}
       {comboOpen && <ComboRulesOverlay onClose={() => setComboOpen(false)} />}
       {settingsOpen && (
         <SettingsOverlay
@@ -1709,7 +1762,7 @@ function App() {
           onDismiss={handleHighlightDismiss}
         />
       )}
-      {game.result && (
+      {game.result && !game.intermissionState && (
         <ResultOverlay
           game={game}
           onRestart={restart}
@@ -1721,8 +1774,9 @@ function App() {
         const y = fc.active ? fc.endY : fc.startY
         const scale = fc.active ? fc.endScale : fc.startScale
         const rot = fc.active ? (fc.endRot || '0deg') : (fc.startRot || '0deg')
+        const tilt = fc.active ? (fc.endTilt || '0deg') : (fc.startTilt || '0deg')
         const transition = fc.active
-          ? 'transform 0.45s cubic-bezier(0.25, 1, 0.5, 1)'
+          ? 'transform 0.48s cubic-bezier(0.22, 0.61, 0.36, 1)'
           : 'none'
 
         return (
@@ -1730,9 +1784,10 @@ function App() {
             key={fc.uid}
             className="flying-card-overlay"
             style={{
-              transform: `translate(${x}px, ${y}px) rotate(${rot}) scale(${scale})`,
+              transform: `translate(${x}px, ${y}px) perspective(900px) rotateX(${tilt}) rotate(${rot}) scale(${scale})`,
               transition,
               transformOrigin: 'center center',
+              willChange: 'transform',
             }}
           >
             <CardView card={fc.card} mode="flying" />
@@ -1778,6 +1833,44 @@ function App() {
     </main>
     </LayoutEditCtx.Provider>
     </FloatingTooltipCtx.Provider>
+  )
+}
+
+// 仪表式数字：目标值变化时，从当前值缓动滚动到新值（上下变化过程）
+function AnimatedNumber({ value, duration = 700, format = (n) => n, className = '' }) {
+  const [display, setDisplay] = useState(value)
+  const displayRef = useRef(value)
+  const rafRef = useRef(0)
+  const [dir, setDir] = useState(0)
+
+  useEffect(() => {
+    const from = displayRef.current
+    const to = value
+    if (from === to) return
+    setDir(to > from ? 1 : -1)
+    const start = performance.now()
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration)
+      const eased = 1 - Math.pow(1 - t, 3) // easeOutCubic
+      const current = Math.round(from + (to - from) * eased)
+      displayRef.current = current
+      setDisplay(current)
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(tick)
+      } else {
+        displayRef.current = to
+      }
+    }
+    cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [value, duration])
+
+  const isRolling = display !== value
+  return (
+    <span className={`metric-rolling ${isRolling ? (dir > 0 ? 'up' : 'down') : ''} ${className}`}>
+      {format(display)}
+    </span>
   )
 }
 
@@ -1896,7 +1989,7 @@ function TopHud({ game, preview, onCombo, onSettings }) {
             <img className="hud-icon-img" src="/assets/ui-icons/cumulative-cash.png" alt="" aria-hidden="true" />
             <span><EditableText id="hud-valuation-label">估值</EditableText></span>
             <div className="valuation-progress-container">
-              <strong>V {totalV}{nextStage ? ` / ${maxV}` : ''}</strong>
+              <strong>V <AnimatedNumber value={totalV} />{nextStage ? ` / ${maxV}` : ''}</strong>
               <div className="stage-progress-track">
                 <div className="stage-progress-fill" style={{ width: `${pct}%` }} />
               </div>
@@ -1927,7 +2020,7 @@ function TopHud({ game, preview, onCombo, onSettings }) {
           >
             <img className="hud-icon-img" src="/assets/ui-icons/cash.png" alt="" aria-hidden="true" />
             <span><EditableText id="hud-cash-label">现金</EditableText></span>
-            <strong>¥{game.cash}</strong>
+            <strong>¥<AnimatedNumber value={game.cash} /></strong>
           </div>
         </EditableBlock>
 
@@ -2350,7 +2443,7 @@ function ActiveBusinessModelsPanel({ activeBusinessModels, slotCap }) {
               onPointerMove={tooltipCtx.updateTooltip}
               onPointerLeave={tooltipCtx.hideTooltip}
             >
-              <img className="active-bm-image" src={businessModeImageSrc(bm)} alt="" aria-hidden="true" />
+              <BusinessModelSvg id={bm.id} className="active-bm-image" />
               <span className="active-bm-film" aria-hidden="true" />
               <div className="active-bm-card-top">
                 <strong>{bm.name}</strong>
@@ -2381,6 +2474,15 @@ function LogList({ items }) {
   )
 }
 
+// 放置箭头颜色深浅：按所选卡在该槽位的区位加成强弱（1.5 深 / 1.3 稍深 / 其余 浅）
+function placementAdvClass(slotIndex, card) {
+  if (!card) return 'adv-none'
+  const buff = getPositionalBuff(slotIndex, card.dept)
+  if (buff >= 1.45) return 'adv-strong'
+  if (buff >= 1.25) return 'adv-mid'
+  return 'adv-none'
+}
+
 function LineBoard({
   line,
   activeLineId,
@@ -2398,6 +2500,8 @@ function LineBoard({
 }) {
   const isActive = line.id === activeLineId && line.status === 'planning'
   const statusLabel = getLineStatus(line, isActive)
+  const activeCombos = report?.combos ?? []
+  const hasCombo = activeCombos.length > 0
   const tooltipCtx = React.useContext(FloatingTooltipCtx)
   return (
     <>
@@ -2412,6 +2516,9 @@ function LineBoard({
       </EditableBlock>
       <EditableBlock id={`line-${line.id}-slots`} label={`产线 ${line.id} · 卡槽排`} editable={false}>
         <div className="slot-row">
+          {hasCombo && (
+            <div className="line-combo-hint">已触发 combo：{activeCombos.join('、')}</div>
+          )}
           {line.slots.map((card, index) => {
             const slotOutput = report?.slotResults[index]?.output
             const canPlaceSelected = canPlaceCard(line, index, selectedCard)
@@ -2419,8 +2526,9 @@ function LineBoard({
             const fxSlot = fxReport?.slotResults?.[index]
             return (
               <div className="line-slot-cell" key={`${line.id}-${index}`}>
+                {card && hasCombo && <span className="slot-combo-flash" aria-hidden="true" />}
                 <button
-                  className={`line-slot pos-${index + 1} ${card ? 'filled' : ''} ${canPlaceSelected ? 'can-place' : ''} ${canDropDragged ? 'drop-ready' : ''}`}
+                  className={`line-slot pos-${index + 1} ${card ? 'filled' : ''} ${card && hasCombo ? 'combo-glow' : ''} ${canPlaceSelected ? 'can-place' : ''} ${canDropDragged ? 'drop-ready' : ''}`}
                   data-line-id={line.id}
                   data-slot-idx={index}
                   onClick={() => onSlotClick(line, index)}
@@ -2436,7 +2544,15 @@ function LineBoard({
                   }}
                 >
                   <span className="slot-label">{SLOT_LABELS[index]}</span>
-                  {canPlaceSelected && <span className="placement-arrow" aria-hidden="true" />}
+                  {canPlaceSelected && (
+                    <span
+                      className={`placement-arrow ${placementAdvClass(index, selectedCard)}`}
+                      aria-hidden="true"
+                    >
+                      <span className="arrow-blade" />
+                      <span className="arrow-blade arrow-blade-cross" />
+                    </span>
+                  )}
                   {card ? (
                     <CardView
                       card={card}
@@ -2500,6 +2616,13 @@ function LineBoard({
               </div>
             </EditableBlock>
           )}
+
+          {!isActive && (
+            <div className="line-capacity" aria-label={`产线 ${line.id} 产能`}>
+              <small>产能</small>
+              <b>¥{report?.total ?? 0}</b>
+            </div>
+          )}
         </div>
       </EditableBlock>
     </section>
@@ -2546,8 +2669,8 @@ function buildSettlementFx(settlement) {
   const activeLineId = settlement?.activeLineId ?? reports[0]?.lineId
   const allOutputs = reports.flatMap((report) => report.slotResults.map((slot) => slot.output ?? 0))
   const maxOutput = Math.max(1, ...allOutputs)
-  const slotStep = 430
-  const slotDuration = 1320
+  const slotStep = 230
+  const slotDuration = 760
   let order = 0
   const fxReports = reports.map((report) => ({
     ...report,
@@ -2582,7 +2705,7 @@ function buildSettlementFx(settlement) {
     centerFx.push({
       id: `mult-${report.lineId}`,
       kind: 'mult',
-      label: `产线 ${report.lineId} 倍率`,
+      label: '倍率',
       value: `×${multFx.value}`,
       delay: multFx.delay,
     })
@@ -2606,7 +2729,7 @@ function buildSettlementFx(settlement) {
       delay: slotEndDelay + 120,
       gain,
     },
-    duration: slotEndDelay + 1800,
+    duration: slotEndDelay + 1300,
   }
 }
 
@@ -2903,46 +3026,55 @@ function HandCount({ discardRequired, handCount }) {
 }
 
 // v4: 5 个产线 Combo 的定义与说明（与 engine.js detectCombos 一一对应）
+// 统一表述为「最终结算倍数」：先把每张卡产值算好，再在整线产值上乘 combo 倍数。
 const V4_COMBO_DEFS = [
   {
-    id: 'pair',
-    name: '双子 (Pair)',
+    id: 'brother2',
+    name: '好兄弟',
     rarity: 'common',
-    trigger: '相邻 2 个槽位都是同部门「专员」级别',
-    effect: '该 2 张卡 +30% 产出',
-    note: '低门槛 combo，适合开局靠数量起手',
+    trigger: '同部门同级别 2 人（如：销售专员＋销售专员）',
+    formula: '整线产值 ×1.2',
+    example: '整线 ¥100 → ¥120',
   },
   {
-    id: 'chain',
-    name: '升阶链 (Promotion Chain)',
+    id: 'brother3',
+    name: '超级好兄弟',
     rarity: 'rare',
-    trigger: '同部门「专员 → 经理 → 总监」按 tier 递增排列在连续 3 槽（如 P1/P2/P3）',
-    effect: '整条产线 ×1.5',
-    note: '体现"团队梯队"的商业逻辑，奖励有节奏的招聘',
+    trigger: '同部门同级别 3 人（如：销售专员 ×3）',
+    formula: '整线产值 ×1.5',
+    example: '整线 ¥100 → ¥150',
   },
   {
-    id: 'fullRoster',
-    name: '满编 (Full Roster)',
-    rarity: 'elite',
-    trigger: '一条产线 5 张卡全部是同部门（且非 NONE）',
-    effect: '整线 ×2 + 触发对应部门 5 张流派质变 buff',
-    note: '"All in 一个部门"的终极爆发，但 burn 也会非常高',
-  },
-  {
-    id: 'rainbow',
-    name: '三色管理 (Rainbow Trio)',
+    id: 'brother4',
+    name: '世界最好兄弟',
     rarity: 'epic',
-    trigger: '一条产线含 3 张相同 tier、不同部门（R/S/O）',
-    effect: '整线 +40% + 下月免费抽 1 张',
-    note: '奖励"高管管理团队"的均衡布局',
+    trigger: '同部门同级别 4 人（如：销售专员 ×4）',
+    formula: '整线产值 ×2',
+    example: '整线 ¥100 → ¥200',
   },
   {
-    id: 'execMeeting',
-    name: '高管会议 (Exec Meeting)',
+    id: 'crossDept',
+    name: '跨部门协作',
+    rarity: 'rare',
+    trigger: '不同部门的同级别 3 人（如：销售专员＋研发专员＋运营专员）',
+    formula: '整线产值 ×1.4（＋下月抽 1）',
+    example: '整线 ¥100 → ¥140',
+  },
+  {
+    id: 'deptMobilize',
+    name: '部门出动',
+    rarity: 'elite',
+    trigger: '同部门连续三级相邻（如：销售专员＋销售经理＋销售总监）',
+    formula: '整线产值 ×1.6',
+    example: '整线 ¥100 → ¥160',
+  },
+  {
+    id: 'allHands',
+    name: '全员出动',
     rarity: 'legendary',
-    trigger: '三色管理的升级版：3 张同 tier 必须是 VP 或 CXO 级且不同部门',
-    effect: '整线 ×1.8（覆盖三色管理）+ 下月 AP +3',
-    note: '需要大量传奇/史诗卡，但对应回报也最猛',
+    trigger: '五个槽位均为同一部门的人',
+    formula: '整线产值 ×2.5',
+    example: '整线 ¥100 → ¥250',
   },
 ]
 
@@ -2951,25 +3083,22 @@ function ComboRulesOverlay({ onClose }) {
     <div className="modal-backdrop retro-backdrop" onMouseDown={onClose}>
       <section className="retro-panel combo-panel" onMouseDown={(event) => event.stopPropagation()}>
         <div className="retro-title">
-          <strong>5 个产线 Combo · 规则与定义</strong>
+          <strong>6 个产线 Combo · 公式速查</strong>
           <button onClick={onClose}>返回</button>
         </div>
-        <p style={{ padding: '8px 16px', fontSize: 12, opacity: 0.75, marginBottom: 0 }}>
-          Combo 自动检测，无需手动触发。所有效果叠加在 lineMultiplier 上，与流派质变、槽位区位 buff 共同生效。
+        <p className="combo-formula-head">
+          最终产值 ＝（各卡产值之和）<b> × combo 倍数</b>　·　combo 自动检测，多个倍数连乘
         </p>
-        <div className="combo-rules-list">
-          {V4_COMBO_DEFS.map((c) => (
-            <article key={c.id} className={`combo-rule rarity-${c.rarity}`} style={{ display: 'block', padding: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                <strong style={{ fontSize: 16 }}>{c.name}</strong>
-                <span style={{ fontSize: 11, opacity: 0.7 }}>稀有度示意: {c.rarity}</span>
-              </div>
-              <div style={{ fontSize: 13, marginBottom: 4 }}><b style={{ color: '#60a5fa' }}>触发：</b>{c.trigger}</div>
-              <div style={{ fontSize: 13, marginBottom: 4 }}><b style={{ color: '#4ade80' }}>效果：</b>{c.effect}</div>
-              <div style={{ fontSize: 12, opacity: 0.65, fontStyle: 'italic' }}>— {c.note}</div>
-            </article>
+        <ol className="combo-rule-list">
+          {V4_COMBO_DEFS.map((c, i) => (
+            <li key={c.id} className={`combo-rule-item rarity-${c.rarity}`}>
+              <span className="combo-rule-idx">{i + 1}</span>
+              <span className="combo-rule-name">{c.name}</span>
+              <span className="combo-rule-trigger">{c.trigger}</span>
+              <span className="combo-rule-formula">{c.formula}</span>
+            </li>
           ))}
-        </div>
+        </ol>
       </section>
     </div>
   )
@@ -3599,18 +3728,50 @@ function ResultOverlay({ game, onRestart, onEnterIntermission }) {
   if (!result) return null
 
   const isGameWon = result.gameWon
+  const isGameOver = !!result.gameOver && !isGameWon
+
+  // 破产/失败：不是董事会议程，显示「游戏结束」而非「进入董事会会议」按钮
+  // （否则点击会触发 enterIntermission 的「当前没有董事会议程」拒绝，且月份卡住不前进）
+  if (isGameOver) {
+    return (
+      <div className="modal-backdrop retro-backdrop">
+        <section className="result-panel failed">
+          <span>游戏结束</span>
+          <h1>{result.reason || '经营失败'}</h1>
+          <div className="result-stats">
+            <Metric label="最终估值" value={`¥${game.valuation}`} />
+            <Metric label="现金" value={`¥${game.cash}`} />
+            <Metric label="经营月数" value={`${result.elapsedMonths ?? game.elapsedMonths} 月`} />
+          </div>
+          <div className="result-actions">
+            <button className="command-button primary" onClick={onRestart}>
+              <RotateCcw size={18} />
+              再玩一局
+            </button>
+          </div>
+        </section>
+      </div>
+    )
+  }
+
   const nextStage = result.nextStage
   const isPromotion = !!result.stagePromotion
+  const isEmergency = !!result.emergencyReview
+  const boardKind = isPromotion ? '阶段达成' : (isEmergency ? '紧急董事会' : '季度董事会')
+  const boardTitle = isPromotion
+    ? `${game.stage.name} → ${nextStage?.name}`
+    : (isEmergency ? `${game.stage.name} 紧急会` : `${game.stage.name} 季度会`)
+  const elapsedMonths = result.elapsedMonths ?? game.elapsedMonths
 
   return (
     <div className="modal-backdrop retro-backdrop">
       <section className={`result-panel ${isGameWon ? 'passed' : 'promoted'}`}>
-        <span>{isGameWon ? '终极胜利' : (isPromotion ? '阶段达成' : '季度董事会')}</span>
-        <h1>{isGameWon ? '行业第一' : (isPromotion ? `${game.stage.name} → ${nextStage?.name}` : `${game.stage.name} 季度会`)}</h1>
+        <span>{isGameWon ? '终极胜利' : boardKind}</span>
+        <h1>{isGameWon ? '行业第一' : boardTitle}</h1>
         <div className="result-stats">
           <Metric label="当前估值" value={`¥${game.valuation}`} />
           {!isGameWon && nextStage && <Metric label={isPromotion ? '下阶段门槛' : '当前阶段门槛'} value={`¥${nextStage.threshold}`} />}
-          <Metric label="经营月数" value={`${game.elapsedMonths} 月`} />
+          <Metric label="经营月数" value={`${elapsedMonths} 月`} />
         </div>
 
         <div className="result-actions">
@@ -3992,6 +4153,7 @@ function BoardMeetingHub({
                     description={card.description}
                     status={card.status}
                     metric={card.metric}
+                    alert={card.id === 'strategy' && im.phase === 'event'}
                     onClick={() => {
                       if (card.id === "strategy" && im.phase === "event") {
                         setActiveStation("strategy")
@@ -4136,14 +4298,21 @@ function describeEventEffect(opt) {
   }
 }
 
-function StationCard({ icon, title, tag, description, color, onClick }) {
+function StationCard({ icon, title, tag, description, status, metric, color, alert, onClick }) {
   return (
-    <button className={`bm-station tone-${color}`} onClick={onClick}>
+    <button className={`bm-station tone-${color} ${alert ? 'is-alert' : ''}`} onClick={onClick}>
       <span className="bm-station-tag">{tag}</span>
       <span className="bm-station-icon" aria-hidden="true">{icon}</span>
-      <strong className="bm-station-title">{title}</strong>
-      <em className="bm-station-desc">{description}</em>
-      <span className="bm-station-arrow" aria-hidden="true">▸</span>
+      <span className="bm-station-copy">
+        {/* 关键字标题 2x，功能说明 1x */}
+        <strong className="bm-station-title">{title}</strong>
+        <em className="bm-station-desc">{description}</em>
+      </span>
+      <span className="bm-station-meta">
+        <strong>{status}</strong>
+        <em>{metric}</em>
+      </span>
+      <span className="bm-station-arrow" aria-hidden="true">▾</span>
     </button>
   )
 }
@@ -4514,9 +4683,7 @@ function BmCardMini({ bm, charged }) {
       onPointerMove={tooltipCtx.updateTooltip}
       onPointerLeave={tooltipCtx.hideTooltip}
     >
-      {businessModeImageSrc(bm) && (
-        <img className="bm-card-image" src={businessModeImageSrc(bm)} alt="" aria-hidden="true" />
-      )}
+      <BusinessModelSvg id={bm.id} className="bm-card-image" />
       <div className="bm-card-top">
         <strong>{bm.name}</strong>
         <span>{RARITY_LABELS[bm.rarity] ?? bm.rarity}</span>
@@ -4533,10 +4700,6 @@ function BmCardMini({ bm, charged }) {
       </div>
     </div>
   )
-}
-
-function businessModeImageSrc(bm) {
-  return bm?.id ? `/assets/business-modes/${bm.id}.png?v=bm-square-1-40` : ''
 }
 
 function StrategyDrawer({ game, onResolveEvent, onClose }) {

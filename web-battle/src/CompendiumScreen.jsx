@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { CardView } from './CardView.jsx'
+import { BusinessModelSvg } from './BusinessModelSvg.jsx'
 import { useFloatingTooltip } from './hooks/useFloatingTooltip.jsx'
 import {
   BOARD_EVENTS,
@@ -26,33 +27,37 @@ const TABS = [
   { id: 'bm', label: '商业模式', subtitle: '全局 buff' },
   { id: 'event', label: '季度新闻', subtitle: '宏观风向' },
   { id: 'board', label: '董事访谈', subtitle: '关间事件' },
-  { id: 'combo', label: 'Combo 规则', subtitle: '5 个产线组合' },
+  { id: 'combo', label: 'Combo 规则', subtitle: '6 个产线组合' },
   { id: 'rarity', label: '稀有度参数', subtitle: 'Burn/资产/Roll' },
   { id: 'random', label: '随机功能池', subtitle: 'lv1-4 词条' },
 ]
 
-// v4: 5 个产线 Combo 的定义与说明
+// v4: 6 个产线 Combo 的定义与说明（全部作用于整线最终结算倍数）
 const V4_COMBO_DEFS = [
-  { id: 'pair', name: '双子 (Pair)', rarity: 'common',
-    trigger: '相邻 2 个槽位都是同部门「专员」级别',
-    effect: '该 2 张卡 +30% 产出',
+  { id: 'brother2', name: '好兄弟', rarity: 'common',
+    trigger: '同部门同级别 2 人（如：销售专员＋销售专员）',
+    effect: '整线产值 ×1.2',
     note: '低门槛 combo，适合开局靠数量起手' },
-  { id: 'chain', name: '升阶链 (Promotion Chain)', rarity: 'rare',
-    trigger: '同部门「专员 → 经理 → 总监」按 tier 递增排列在连续 3 槽',
-    effect: '整条产线 ×1.5',
+  { id: 'brother3', name: '超级好兄弟', rarity: 'rare',
+    trigger: '同部门同级别 3 人（如：销售专员 ×3）',
+    effect: '整线产值 ×1.5',
+    note: '堆叠同岗位的中段强化' },
+  { id: 'brother4', name: '世界最好兄弟', rarity: 'epic',
+    trigger: '同部门同级别 4 人（如：销售专员 ×4）',
+    effect: '整线产值 ×2',
+    note: '极致堆叠同岗位的爆发' },
+  { id: 'crossDept', name: '跨部门协作', rarity: 'rare',
+    trigger: '不同部门的同级别 3 人（如：销售专员＋研发专员＋运营专员）',
+    effect: '整线产值 ×1.4 + 下月免费抽 1 张',
+    note: '奖励"均衡管理团队"的布局' },
+  { id: 'deptMobilize', name: '部门出动', rarity: 'elite',
+    trigger: '同部门连续三级相邻（如：销售专员＋销售经理＋销售总监）',
+    effect: '整线产值 ×1.6',
     note: '体现"团队梯队"的商业逻辑，奖励有节奏的招聘' },
-  { id: 'fullRoster', name: '满编 (Full Roster)', rarity: 'elite',
-    trigger: '一条产线 5 张卡全部是同部门（且非 NONE）',
-    effect: '整线 ×2 + 触发对应部门 5 张流派质变 buff',
+  { id: 'allHands', name: '全员出动', rarity: 'legendary',
+    trigger: '五个槽位均为同一部门的人',
+    effect: '整线产值 ×2.5',
     note: '"All in 一个部门"的终极爆发，但 burn 也会非常高' },
-  { id: 'rainbow', name: '三色管理 (Rainbow Trio)', rarity: 'epic',
-    trigger: '一条产线含 3 张相同 tier、不同部门 (R/S/O)',
-    effect: '整线 +40% + 下月免费抽 1 张',
-    note: '奖励"高管管理团队"的均衡布局' },
-  { id: 'execMeeting', name: '高管会议 (Exec Meeting)', rarity: 'legendary',
-    trigger: '3 张同 tier 必须是 VP 或 CXO 级且不同部门',
-    effect: '整线 ×1.8 + 下月 AP +3',
-    note: '需要大量传奇/史诗卡，但对应回报也最猛' },
 ]
 
 const EFFECT_TEMPLATES = [
@@ -377,7 +382,7 @@ function CompendiumBM({ bm, devMode, onEdit }) {
       onPointerMove={tooltipCtx.updateTooltip}
       onPointerLeave={tooltipCtx.hideTooltip}
     >
-      <img className="compendium-bm-image" src={businessModeImageSrc(bm)} alt="" aria-hidden="true" />
+      <BusinessModelSvg id={bm.id} className="compendium-bm-image" />
       {devMode && (
         <button className="compendium-edit-btn" onClick={onEdit} title="编辑">✎</button>
       )}
@@ -394,9 +399,6 @@ function CompendiumBM({ bm, devMode, onEdit }) {
   )
 }
 
-function businessModeImageSrc(bm) {
-  return bm?.id ? `/assets/business-modes/${bm.id}.png?v=bm-square-1-40` : ''
-}
 
 function CompendiumEvent({ event, devMode, onEdit }) {
   return (
@@ -834,14 +836,14 @@ function SelectField({ label, value, options, onChange }) {
 }
 
 // ============================================================================
-// v4: Combo 规则参考面板（read-only，5 个 combo 定义）
+// v4: Combo 规则参考面板（read-only，6 个 combo 定义）
 // ============================================================================
 function ComboReferencePanel({ combos }) {
   return (
     <div style={{ padding: 16, maxWidth: 1100 }}>
-      <h2 style={{ marginBottom: 4 }}>5 个产线 Combo · 规则与定义</h2>
+      <h2 style={{ marginBottom: 4 }}>6 个产线 Combo · 规则与定义</h2>
       <p style={{ opacity: 0.7, fontSize: 13, marginBottom: 24 }}>
-        Combo 在 computeLineOutput 中自动检测，无需手动触发。所有效果叠加在 lineMultiplier 上，与流派质变、槽位区位 buff 共同生效。详见 engine.js detectCombos。
+        Combo 在 computeLineOutput 中自动检测，无需手动触发。所有效果在最终结算阶段汇总为整线倍数（comboMultiplier）统一相乘，与流派质变、槽位区位 buff 共同生效。详见 engine.js detectCombos。
       </p>
       <div style={{ display: 'grid', gap: 14 }}>
         {combos.map((c) => (

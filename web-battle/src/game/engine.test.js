@@ -442,55 +442,59 @@ describe('v4 Engine Core Tests · 新估值 / CCR / Game Over', () => {
   })
 })
 
-describe('v4 PR3: 5 个 Combo + 槽位区位 Buff', () => {
-  it('双子 combo: 相邻 2 个同部门专员 → 双方 +30%', async () => {
+describe('v4 PR3: 6 个 Combo + 槽位区位 Buff', () => {
+  it('好兄弟 combo: 同部门同级别 2 人 → 整线 ×1.2', async () => {
     const { detectCombos, makeFixedCard } = await import('./engine.js')
     const r01 = makeFixedCard('EMP_R_01')
     const r01b = makeFixedCard('EMP_R_01')
     const result = detectCombos([r01, r01b, null, null, null])
-    expect(result.pairBonus.sort()).toEqual([0, 1])
-    expect(result.labels).toContain('双子')
+    expect(result.brotherMultiplier).toBe(1.2)
+    expect(result.labels).toContain('好兄弟')
   })
 
-  it('升阶链 combo: 同部门专员→经理→总监 → 整线 ×1.5', async () => {
+  it('超级好兄弟 combo: 同部门同级别 3 人 → 整线 ×1.5', async () => {
     const { detectCombos, makeFixedCard } = await import('./engine.js')
-    // EMP_R_01 (专员), EMP_R_02 (经理), EMP_R_03 (总监)
-    const r1 = makeFixedCard('EMP_R_01')
-    const r2 = makeFixedCard('EMP_R_02')
-    const r3 = makeFixedCard('EMP_R_03')
-    const result = detectCombos([r1, r2, r3, null, null])
-    expect(result.chainMultiplier).toBe(1.5)
-    expect(result.labels).toContain('升阶链')
+    const r01 = makeFixedCard('EMP_R_01')
+    const result = detectCombos([r01, r01, r01, null, null])
+    expect(result.brotherMultiplier).toBe(1.5)
+    expect(result.labels).toContain('超级好兄弟')
   })
 
-  it('满编 combo: 5 张同部门 → 整线 ×2', async () => {
+  it('世界最好兄弟 combo: 同部门同级别 4 人 → 整线 ×2', async () => {
     const { detectCombos, makeFixedCard } = await import('./engine.js')
-    const s1 = makeFixedCard('EMP_S_01')
-    const result = detectCombos([s1, s1, s1, s1, s1])
-    expect(result.fullRosterMultiplier).toBe(2.0)
-    expect(result.labels).toContain('满编')
+    const r01 = makeFixedCard('EMP_R_01')
+    const result = detectCombos([r01, r01, r01, r01, null])
+    expect(result.brotherMultiplier).toBe(2.0)
+    expect(result.labels).toContain('世界最好兄弟')
   })
 
-  it('三色管理 combo: 3 张同 tier 不同部门 → 整线 ×1.4 + 抽 1', async () => {
+  it('跨部门协作 combo: 3 张同级别不同部门 → 整线 ×1.4 + 抽 1', async () => {
     const { detectCombos, makeFixedCard } = await import('./engine.js')
     const r1 = makeFixedCard('EMP_R_01') // 专员
     const s1 = makeFixedCard('EMP_S_01') // 专员
     const o1 = makeFixedCard('EMP_O_01') // 专员
     const result = detectCombos([r1, s1, o1, null, null])
-    expect(result.rainbowMultiplier).toBe(1.4)
-    expect(result.rainbowDrawBonus).toBe(1)
-    expect(result.labels).toContain('三色管理')
+    expect(result.crossDeptMultiplier).toBe(1.4)
+    expect(result.crossDeptDrawBonus).toBe(1)
+    expect(result.labels).toContain('跨部门协作')
   })
 
-  it('高管会议 combo: 3 张同 VP/CXO 不同部门 → 整线 ×1.8 + 下月 AP +3', async () => {
+  it('部门出动 combo: 同部门专员→经理→总监连续相邻 → 整线 ×1.6', async () => {
     const { detectCombos, makeFixedCard } = await import('./engine.js')
-    const r7 = makeFixedCard('EMP_R_07') // 技术 VP
-    const s7 = makeFixedCard('EMP_S_07') // 销售 VP
-    const o7 = makeFixedCard('EMP_O_07') // 运营 VP
-    const result = detectCombos([r7, s7, o7, null, null])
-    expect(result.execMeetingMultiplier).toBe(1.8)
-    expect(result.execMeetingApBonus).toBe(3)
-    expect(result.labels).toContain('高管会议')
+    const r1 = makeFixedCard('EMP_R_01') // 专员
+    const r2 = makeFixedCard('EMP_R_02') // 经理
+    const r3 = makeFixedCard('EMP_R_03') // 总监
+    const result = detectCombos([r1, r2, r3, null, null])
+    expect(result.deptMobilizeMultiplier).toBe(1.6)
+    expect(result.labels).toContain('部门出动')
+  })
+
+  it('全员出动 combo: 5 张同部门 → 整线 ×2.5', async () => {
+    const { detectCombos, makeFixedCard } = await import('./engine.js')
+    const s1 = makeFixedCard('EMP_S_01')
+    const result = detectCombos([s1, s1, s1, s1, s1])
+    expect(result.allHandsMultiplier).toBe(2.5)
+    expect(result.labels).toContain('全员出动')
   })
 
   it('槽位区位 buff: S 卡 P1 ×1.5 / R 卡 P3 ×1.5 / O 卡 P5 ×1.5', async () => {
@@ -518,14 +522,15 @@ describe('v4 PR3: 5 个 Combo + 槽位区位 Buff', () => {
     expect(outAtP3).toBe(20)
   })
 
-  it('不再给同部门相邻员工自动 ×1.2（combo 效果除外）', async () => {
+  it('好兄弟 combo 作用于整线最终结算倍数，不再给单卡加成', async () => {
     const { computeLineOutput, makeFixedCard } = await import('./engine.js')
     const r1 = makeFixedCard('EMP_R_01', { baseOutput: 20, effects: [] })
     const r2 = makeFixedCard('EMP_R_01', { baseOutput: 20, effects: [] })
     const report = computeLineOutput([r1, r2, null, null, null])
-    expect(report.slotResults[0].output).toBe(26) // 双子 combo +30%
-    expect(report.slotResults[1].output).toBe(26) // no extra same-dept ×1.2
-    expect(report.total).toBe(52)
+    expect(report.slotResults[0].output).toBe(20) // 单卡无加成
+    expect(report.slotResults[1].output).toBe(20)
+    expect(report.comboMultiplier).toBe(1.2) // 好兄弟整线 ×1.2
+    expect(report.total).toBe(48) // (20+20) × 1.2
   })
 
   it('不再触发 P5 产出占比 60% 的额外收割加成', async () => {
@@ -919,7 +924,7 @@ describe('Rival Battle System · 竞争公司对决', () => {
   })
 
   it('function effects support PE windows, emergency board and boss delay', () => {
-    const peCard = makeFixedCard('FUN_02', { uid: 'fun-pe-test', location: 'hand' })
+    const peCard = makeFixedCard('FUN_04', { uid: 'fun-pe-test', location: 'hand' })
     let state = {
       ...createInitialState({ rng: () => 0.5 }),
       hand: [peCard],
@@ -937,27 +942,23 @@ describe('Rival Battle System · 竞争公司对决', () => {
       },
     }
     const beforeV = computeValuation(state)
-    const used = playFunctionCard(state, peCard.uid, 'launch_demo', () => 0.5)
+    const used = playFunctionCard(state, peCard.uid, undefined, () => 0.5)
     expect(used.ok).toBe(true)
     state = used.state
-    expect(state.cash).toBe(420)
-    expect(state.peBuffs[0].value).toBeCloseTo(0.18)
+    expect(state.peBuffs[0].value).toBeCloseTo(0.15)
     expect(state.upcomingRival.startElapsedMonth).toBe(13)
     expect(computeValuation(state)).toBeGreaterThan(beforeV)
 
-    const delayCard = makeFixedCard('FUN_10', { uid: 'fun-delay-test', location: 'hand' })
-    const delayed = playFunctionCard({ ...state, hand: [delayCard], coolingPile: [] }, delayCard.uid, 'brand_moat', () => 0.5)
+    const delayCard = makeFixedCard('FUN_02', { uid: 'fun-delay-test', location: 'hand' })
+    const delayed = playFunctionCard({ ...state, hand: [delayCard], coolingPile: [] }, delayCard.uid, undefined, () => 0.5)
     expect(delayed.ok).toBe(true)
     expect(delayed.state.upcomingRival.startElapsedMonth).toBe(16)
     expect(delayed.state.rivalScheduleDelayMonths).toBe(3)
 
-    const boardCard = makeFixedCard('FUN_03', { uid: 'fun-board-test', location: 'hand' })
-    const board = playFunctionCard({ ...state, hand: [boardCard], coolingPile: [] }, boardCard.uid, 'war_room', () => 0.5)
-    expect(board.ok).toBe(true)
-    expect(board.state.emergencyBoardMeetingPending).toBe(true)
-    const result = resolveMonth({ ...board.state, event: calmEvent, cash: 5000 }, () => 0.5)
+    // 紧急/临时董事会功能已下线：即使残留 emergencyBoardMeetingPending 标记，也不应在非季度月触发董事会
+    const result = resolveMonth({ ...state, emergencyBoardMeetingPending: true, elapsedMonths: 1, event: calmEvent, cash: 5000 }, () => 0.5)
     expect(result.ok).toBe(true)
-    expect(result.state.result?.reason).toBe('紧急董事会')
+    expect(result.state.result?.boardMeeting).toBeFalsy()
   })
 
   it('profession-specific boss lines do not cross tracks', () => {

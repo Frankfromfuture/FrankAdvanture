@@ -20,6 +20,7 @@ export function CardView({
   selected = false,
   entering = false,
   dragging = false,
+  dissolving = false,
   mode = 'hand',
   outputOverride,
   draggable = false,
@@ -36,6 +37,11 @@ export function CardView({
   const cardAffixes = card.affixes ?? []
   const hasOutputOverride = card.type === 'emp' && Number.isFinite(outputOverride)
   const isActionCard = card.type === 'fun' || card.type === 'srv'
+  // 功能卡的 effects 被改写为 `ACTION: <label>`，而 label 恰好等于卡名，
+  // 直接展示会与卡名重复。功能卡真正的「功能」在 actionOptions 的 description 里。
+  const funDescription = card.type === 'fun'
+    ? (card.actionOptions ?? []).map((o) => o.description).filter(Boolean).join(' / ')
+    : ''
   const baseOutput = Number.isFinite(card.baseOutput) ? card.baseOutput : 0
   const primary = hasOutputOverride ? `¥${outputOverride}` : card.type === 'emp' ? `¥${baseOutput}` : getActionPrimaryParts(cardEffects[0])
   const outputChanged = hasOutputOverride && outputOverride !== baseOutput
@@ -89,7 +95,7 @@ export function CardView({
     <>
       <span
         ref={tilt.wrapRef}
-        className={`card-stage ${mode} ${selected ? 'selected' : ''} ${entering ? 'entering' : ''} ${dragging ? 'dragging' : ''} rarity-${card.rarity} ${isFounder ? 'is-founder' : ''}`}
+        className={`card-stage ${mode} ${selected ? 'selected' : ''} ${entering ? 'entering' : ''} ${dragging ? 'dragging' : ''} ${dissolving ? 'dissolving' : ''} rarity-${card.rarity} ${isFounder ? 'is-founder' : ''}`}
         data-card-uid={card.uid}
         style={style}
         data-effect-hint={fullEffectText}
@@ -100,7 +106,7 @@ export function CardView({
         {!isFounder && <span className="card-glow-ring" aria-hidden="true" />}
         <Component
           ref={tilt.targetRef}
-          className={`card-view ${mode} ${selected ? 'selected' : ''} ${entering ? 'entering' : ''} ${dragging ? 'dragging' : ''} ${neighborDirection ? `neighbor-${neighborDirection}` : ''} rarity-${card.rarity} type-${card.type} dept-${card.dept.toLowerCase()} ${isFounder ? 'is-founder' : ''}`}
+          className={`card-view namecard ${mode} ${selected ? 'selected' : ''} ${entering ? 'entering' : ''} ${dragging ? 'dragging' : ''} ${dissolving ? 'dissolving' : ''} ${neighborDirection ? `neighbor-${neighborDirection}` : ''} rarity-${card.rarity} type-${card.type} dept-${card.dept.toLowerCase()} ${isFounder ? 'is-founder' : ''}`}
           data-card-id={card.id}
           draggable={draggable}
           onClick={onClick}
@@ -119,29 +125,41 @@ export function CardView({
               {(neighborDirection === 'right' || neighborDirection === 'both') && <i className="right" />}
             </span>
           )}
-          <span className="card-top">
-            <i className="card-title-chip">
-              <DepartmentIcon className="card-dept-icon" size={12} aria-hidden="true" />
-              <span>{isFounder ? '创始人' : card.name}</span>
-            </i>
-            <em>{rarityLabel}</em>
-            <b><Zap className="card-ap-icon" size={12} />{card.ap}</b>
+          {/* 顶部 2px 稀有度色条 */}
+          <span className="nc-accent" aria-hidden="true" />
+          {/* 顶行：部门徽章 | 稀有度 | AP */}
+          <span className="nc-top">
+            <i className="nc-badge"><DepartmentIcon className="nc-badge-icon" size={9} aria-hidden="true" /></i>
+            <em className="nc-rarity">{rarityLabel}</em>
+            <b className="nc-ap"><Zap className="card-ap-icon" size={11} aria-hidden="true" />{card.ap}</b>
           </span>
-          <span className="card-portrait" aria-hidden="true">
+          <span className="card-portrait nc-portrait" aria-hidden="true">
             {card.type === 'emp' && <ExecutiveSvgPortrait card={card} />}
             {(card.type === 'srv' || card.type === 'fun') && hasServiceFunSvg(card.id) && (
               <span className="srvfun-svg-wrap"><ServiceFunSvg cardId={card.id} /></span>
             )}
           </span>
-          <span className={`card-output delta-${card.outputDelta ?? 'neutral'} ${card.type === 'emp' ? 'exec-number' : 'action-primary'} ${outputChanged ? 'changed' : ''}`}>
-            {isActionCard ? (
-              <>
-                <span className="action-primary-label">{primary.label}</span>
-                {primary.value && <span className="action-primary-value exec-number">{primary.value}</span>}
-              </>
-            ) : primary}
-          </span>
-          {!isActionCard && shortEffectText && <span className="card-effects">{shortEffectText}</span>}
+          {/* 卡名（肖像下方，次于产值） */}
+          <span className="nc-name">{isFounder ? '创始人' : card.name}</span>
+          {/* 分隔线（稀有度色） */}
+          <span className="nc-divider" aria-hidden="true" />
+          {card.type === 'fun' ? (
+            /* 功能卡：卡名下直接写「功能描述」，不再重复卡名 */
+            funDescription && <span className="nc-output nc-fun-desc">{funDescription}</span>
+          ) : (
+            <>
+              {/* 产值（最醒目：稀有度高光色 + 黑描边） */}
+              <span className={`nc-output delta-${card.outputDelta ?? 'neutral'} ${card.type === 'emp' ? 'exec-number' : 'nc-action'} ${outputChanged ? 'changed' : ''}`}>
+                {isActionCard ? (
+                  <>
+                    <span className="nc-action-label">{primary.label}</span>
+                    {primary.value && <span className="nc-action-value">{primary.value}</span>}
+                  </>
+                ) : primary}
+              </span>
+              {shortEffectText && <span className="nc-effects">{shortEffectText}</span>}
+            </>
+          )}
         </Component>
       </span>
       {usesFloatingHint && tooltip.renderTooltip()}
@@ -207,6 +225,19 @@ export function summarizeEffect(effect = '') {
   if (normalized.includes('BOTH:')) return `两侧员工${effectValueVerb(value) || strengthen}`
   if (normalized.includes('ADJ_R')) return value ? `相邻研发员工${effectValueVerb(value)}` : '相邻研发员工加强'
   if (normalized.includes('ADJ_S')) return value ? `相邻销售员工${effectValueVerb(value)}` : '相邻销售员工加强'
+  if (normalized.includes('DRAW_NEXT_MONTH')) {
+    const n = (normalized.match(/[+-]\d+/) || [''])[0]
+    return n ? `下月抓牌 ${n}` : '下月多抓牌'
+  }
+  if (normalized.includes('MONTH_AP')) {
+    const n = (normalized.match(/[+-]\d+/) || [''])[0]
+    return n ? `本月 AP ${n}` : '本月 AP 提升'
+  }
+  if (normalized.includes('IF_ALL_THREE_DEPT_IN_LINE')) return value ? `三部门齐·全线${effectValueVerb(value)}` : '三部门齐·全线加强'
+  if (normalized.includes('DIFF_DEPT_ADJ_EXTRA')) return value ? `异部门相邻额外${effectValueVerb(value)}` : '异部门相邻额外加强'
+  if (normalized.includes('SAME_DEPT_O_ADJ')) return value ? `相邻运营同部门${effectValueVerb(value)}` : '相邻运营同部门加强'
+  if (normalized.includes('SAME_DEPT_S_ADJ')) return value ? `相邻销售同部门${effectValueVerb(value)}` : '相邻销售同部门加强'
+  if (normalized.includes('SELF_IF_RIGHT_FUN')) return value ? `右邻功能牌时自身${effectValueVerb(value)}` : '右邻功能牌时自身加强'
   if (normalized.includes('SAME_DEPT')) return value ? `同部门员工${effectValueVerb(value)}` : '同部门员工加强'
   if (normalized.includes('SELF_IF_P1')) return value ? `在启动位时自身${effectValueVerb(value)}` : '启动位自身加强'
   if (normalized.includes('SELF_IF_P3')) return value ? `在中位时自身${effectValueVerb(value)}` : '中位自身加强'
@@ -240,6 +271,19 @@ function summarizeEffectShort(effect = '') {
   if (normalized.includes('BOTH:')) return value ? `两侧${value}` : '两侧加强'
   if (normalized.includes('ADJ_R')) return value ? `邻研发${value}` : '邻研发'
   if (normalized.includes('ADJ_S')) return value ? `邻销售${value}` : '邻销售'
+  if (normalized.includes('DRAW_NEXT_MONTH')) {
+    const n = (normalized.match(/[+-]\d+/) || [''])[0]
+    return n ? `下月抓牌${n}` : '下月抓牌'
+  }
+  if (normalized.includes('MONTH_AP')) {
+    const n = (normalized.match(/[+-]\d+/) || [''])[0]
+    return n ? `本月AP${n}` : '本月AP'
+  }
+  if (normalized.includes('IF_ALL_THREE_DEPT_IN_LINE')) return value ? `三部门齐${value}` : '三部门齐'
+  if (normalized.includes('DIFF_DEPT_ADJ_EXTRA')) return value ? `异部门邻${value}` : '异部门邻'
+  if (normalized.includes('SAME_DEPT_O_ADJ')) return value ? `邻运营同部门${value}` : '邻运营同部门'
+  if (normalized.includes('SAME_DEPT_S_ADJ')) return value ? `邻销售同部门${value}` : '邻销售同部门'
+  if (normalized.includes('SELF_IF_RIGHT_FUN')) return value ? `右邻功能${value}` : '右邻功能'
   if (normalized.includes('SAME_DEPT')) return value ? `同部门${value}` : '同部门'
   if (normalized.includes('SELF_IF_P1')) return value ? `启动${value}` : '启动位'
   if (normalized.includes('SELF_IF_P3')) return value ? `中位${value}` : '中位'

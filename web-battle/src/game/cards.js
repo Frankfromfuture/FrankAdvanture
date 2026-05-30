@@ -285,34 +285,28 @@ export const TIER_BURN_BONUS = {
 
 export const FUNCTION_CARD_ACTIONS = {
   FUN_01: [
-    { id: 'scan_market', label: '抽 4 选 2', description: '立刻抽 4 张，留下前 2 张，其余洗回牌堆', effect: { type: 'drawSelect', draw: 4, keep: 2 } },
-    { id: 'pe_memo', label: 'PE 叙事 +12%（2 月）', description: '未来 2 个月估值叙事放大', effect: { type: 'peBuff', value: 0.12, months: 2 } },
+    { id: 'scan_market', label: '市场调研', description: '抽 4 选 2，其余洗回牌堆', effect: { type: 'drawSelect', draw: 4, keep: 2 } },
   ],
   FUN_02: [
-    { id: 'launch_demo', label: '技术发布会', description: '未来 2 个月 PE +18%，但现金 -80', cost: 80, effect: { type: 'peBuff', value: 0.18, months: 2 } },
-    { id: 'delay_boss_ai', label: '开源烟雾弹', description: '未开战 boss 延后 3 个月；已开战则战期 +1 月', effect: { type: 'delayBoss', months: 3 } },
+    { id: 'delay_boss_ai', label: '产品冲刺', description: '未开战 boss 延后 3 个月；已开战则战期 +1 月', effect: { type: 'delayBoss', months: 3 } },
   ],
   FUN_03: [
-    { id: 'war_room', label: '紧急董事会', description: '下个月强制召开一次董事会', effect: { type: 'emergencyBoard' } },
-    { id: 'runway', label: '现金跑道', description: '花 ¥120，未来 2 个月 burn -20%', cost: 120, effect: { type: 'cashToRunway', months: 2, discount: 0.2 } },
+    { id: 'war_room', label: '团队建设', description: '抽 4 选 2，理顺团队节奏', effect: { type: 'drawSelect', draw: 4, keep: 2 } },
   ],
   FUN_04: [
-    { id: 'brand_blitz', label: '品牌闪击', description: '下月 boss 对手收入 -25%', effect: { type: 'rivalDebuff', months: 1, rivalIncomeMult: 0.75 } },
-    { id: 'promo_pe', label: '增长故事 +15%（2 月）', description: '未来 2 个月 PE +15%', effect: { type: 'peBuff', value: 0.15, months: 2 } },
+    { id: 'promo_pe', label: '产品推广', description: '未来 2 个月估值 PE +15%', effect: { type: 'peBuff', value: 0.15, months: 2 } },
   ],
   FUN_05: [
-    { id: 'data_room', label: '数据作战室', description: '抽 5 选 2，强化本季度决策', effect: { type: 'drawSelect', draw: 5, keep: 2 } },
-    { id: 'boss_read', label: '对手画像', description: '下月 boss 技能屏蔽并收入 -10%', effect: { type: 'rivalDebuff', months: 1, rivalIncomeMult: 0.9, skillBlocked: true } },
+    { id: 'data_room', label: '数据分析', description: '抽 5 选 2，强化本季度决策', effect: { type: 'drawSelect', draw: 5, keep: 2 } },
   ],
   FUN_06: [
-    { id: 'ops_sweep', label: '流程扫除', description: '未来 2 个月 burn -15%', effect: { type: 'cashToRunway', months: 2, discount: 0.15, cost: 0 } },
-    { id: 'board_packet', label: '临时议程', description: '下个月紧急召开董事会', effect: { type: 'emergencyBoard' } },
+    { id: 'ops_sweep', label: '流程优化', description: '未来 2 个月 burn -15%', effect: { type: 'cashToRunway', months: 2, discount: 0.15, cost: 0 } },
   ],
   FUN_07: [
     { id: 'alliance', label: '跨部门联盟', description: '抽 3 选 2；下月 boss 收入 -15%', effect: { type: 'composite', effects: [{ type: 'drawSelect', draw: 3, keep: 2 }, { type: 'rivalDebuff', months: 1, rivalIncomeMult: 0.85 }] } },
   ],
   FUN_08: [
-    { id: 'okr_reset', label: 'OKR 重置', description: '未来 3 个月 PE +10%，下个月董事会提前召开', effect: { type: 'composite', effects: [{ type: 'peBuff', value: 0.1, months: 3 }, { type: 'emergencyBoard' }] } },
+    { id: 'okr_reset', label: 'OKR 重置', description: '未来 3 个月 PE +15%', effect: { type: 'peBuff', value: 0.15, months: 3 } },
   ],
   FUN_09: [
     { id: 'crunch', label: '冲刺窗口', description: '未来 1 个月 PE +25%，之后照常还债', effect: { type: 'peBuff', value: 0.25, months: 1 } },
@@ -2257,19 +2251,15 @@ export const BUSINESS_MODELS = [
     flavor: 'MVP 验证完没人用？那就 Pivot。Pivot 完还不行？继续 Pivot。Pivot 12 次后，融资到 B 轮。',
   },
   {
-    "id": "BM_16",
-    "name": "007",
-    "hook": "onMonthStart",
-    "payload": {
-      "type": "apIfHandRich",
-      "threshold": 6,
-      "value": 1
-    },
-    "rarity": "rare",
-    "unlockLevel": 4,
-    "cost": 13,
-    "description": "月初手牌 ≥6 张时 AP +1",
-    "flavor": "我说的是大家都知道的知名大帅间谍，不是 24×7 在线，0 点睡 0 点起，0 假期这些。"
+    id: 'BM_16',
+    name: '007',
+    hook: 'onMonthStart',
+    payload: { type: 'handLimitBonus', value: 3 },
+    rarity: 'rare',
+    unlockLevel: 4,
+    cost: 13,
+    description: '月初手牌上限 +3',
+    flavor: '我说的是大家都知道的知名大帅间谍，不是 24×7 在线，0 点睡 0 点起，0 假期这些。',
   },
   {
     id: 'BM_17',
@@ -2418,18 +2408,15 @@ export const BUSINESS_MODELS = [
 
   // ---- Rare (4) ----
   {
-    "id": "BM_07",
-    "name": "本地部署Deapseak",
-    "hook": "onSettle",
-    "payload": {
-      "type": "srvApDiscount",
-      "value": 1
-    },
-    "rarity": "rare",
-    "unlockLevel": 1,
-    "cost": 13,
-    "description": "服务卡 AP -1",
-    "flavor": "“给你一个最直接、不绕弯子的答案：”"
+    id: 'BM_07',
+    name: '本地部署 DeepSeek',
+    hook: 'onSettle',
+    payload: { type: 'srvApDiscount', value: 1 },
+    rarity: 'rare',
+    unlockLevel: 4,
+    cost: 13,
+    description: '服务卡 AP -1',
+    flavor: '“给你一个最直接、不绕弯子的答案：”',
   },
   {
     id: 'BM_09',
@@ -2478,18 +2465,15 @@ export const BUSINESS_MODELS = [
     flavor: '管理学教科书说要从低端市场开始颠覆。我们说要从老板感兴趣的市场开始。',
   },
   {
-    "id": "BM_29",
-    "name": "现金牛牛矩阵",
-    "hook": "onSettle",
-    "payload": {
-      "type": "ccrBonus",
-      "value": 0.1
-    },
-    "rarity": "elite",
-    "unlockLevel": 4,
-    "cost": 18,
-    "description": "现金转化率 +10%",
-    "flavor": "没钱用BCG，用个他们的矩阵平替下～"
+    id: 'BM_29',
+    name: '现金牛牛矩阵',
+    hook: 'onSettle',
+    payload: { type: 'ccrBonus', value: 0.15 },
+    rarity: 'elite',
+    unlockLevel: 4,
+    cost: 18,
+    description: '现金转化率 CCR +15%',
+    flavor: '没钱用 BCG，用个他们的矩阵平替下～',
   },
   {
     id: 'BM_30',

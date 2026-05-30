@@ -633,88 +633,84 @@ export function getPositionalBuff(slotIndex, dept) {
 }
 
 // ============================================================================
-// v4 产线 Combo 检测（5 个）
+// v4 产线 Combo 检测（6 个，全部作用于最终结算的整线倍数）
 // ============================================================================
-const TIER_RANK = { 专员: 1, 经理: 2, 总监: 3, VP: 4, CXO: 5, 创始人: 6 }
 
 /**
- * 检测产线中所有触发的 combo
+ * 检测产线中所有触发的 combo。所有效果都表述为「整线最终结算倍数」。
  * 返回：{
- *   pairBonus: 双子触发的卡 index 列表（这些卡 +30%）
- *   chainMultiplier: 升阶链触发 → 1.5 倍整线
- *   fullRosterMultiplier: 满编同部门 → 2.0 倍整线（与流派质变叠加）
- *   rainbowMultiplier: 三色管理 → 1.4 倍整线
- *   rainbowDrawBonus: 三色管理触发额外抽 1
- *   execMeetingMultiplier: 高管会议 → 1.8 倍整线
- *   execMeetingApBonus: 高管会议触发下月 AP +3
+ *   brotherMultiplier: 好兄弟/超级好兄弟/世界最好兄弟（同部门同级别 2/3/4 人）→ 1.2 / 1.5 / 2
+ *   crossDeptMultiplier: 跨部门协作（同级别、3 个不同部门）→ 1.4
+ *   crossDeptDrawBonus: 跨部门协作触发下月抽 1
+ *   deptMobilizeMultiplier: 部门出动（同部门 专员→经理→总监 连续相邻）→ 1.6
+ *   allHandsMultiplier: 全员出动（5 槽全同部门）→ 2.5
  *   labels: 触发的 combo 名称数组（UI 用）
  * }
  */
 export function detectCombos(slots) {
   const cards = slots.map((c) => c ?? null)
   const result = {
-    pairBonus: [],
-    chainMultiplier: 1,
-    fullRosterMultiplier: 1,
-    rainbowMultiplier: 1,
-    rainbowDrawBonus: 0,
-    execMeetingMultiplier: 1,
-    execMeetingApBonus: 0,
+    brotherMultiplier: 1,
+    crossDeptMultiplier: 1,
+    crossDeptDrawBonus: 0,
+    deptMobilizeMultiplier: 1,
+    allHandsMultiplier: 1,
     labels: [],
   }
 
-  // 1. 双子 combo：相邻两槽都是同部门"专员"
-  for (let i = 0; i < cards.length - 1; i++) {
-    const a = cards[i]; const b = cards[i + 1]
-    if (!a || !b) continue
-    if (a.dept === b.dept && a.tier === '专员' && b.tier === '专员') {
-      if (!result.pairBonus.includes(i)) result.pairBonus.push(i)
-      if (!result.pairBonus.includes(i + 1)) result.pairBonus.push(i + 1)
-      if (!result.labels.includes('双子')) result.labels.push('双子')
+  // 统计每个 (部门|级别) 的人数，以及每个级别下出现的不同部门
+  const sameGroupCount = {}
+  const tierDepts = {}
+  for (const c of cards) {
+    if (!c || !c.tier || !c.dept || c.dept === 'NONE') continue
+    const key = `${c.dept}|${c.tier}`
+    sameGroupCount[key] = (sameGroupCount[key] ?? 0) + 1
+    if (!tierDepts[c.tier]) tierDepts[c.tier] = new Set()
+    tierDepts[c.tier].add(c.dept)
+  }
+
+  // 1~3. 好兄弟系列：同部门同级别的最大人数 2/3/4+ → ×1.2 / ×1.5 / ×2（取最高一档）
+  const maxSameGroup = Object.values(sameGroupCount).reduce((m, n) => Math.max(m, n), 0)
+  if (maxSameGroup >= 4) {
+    result.brotherMultiplier = 2.0
+    result.labels.push('世界最好兄弟')
+  } else if (maxSameGroup === 3) {
+    result.brotherMultiplier = 1.5
+    result.labels.push('超级好兄弟')
+  } else if (maxSameGroup === 2) {
+    result.brotherMultiplier = 1.2
+    result.labels.push('好兄弟')
+  }
+
+  // 4. 跨部门协作：同一级别下含 3 个不同部门 → ×1.4 + 下月抽 1
+  for (const depts of Object.values(tierDepts)) {
+    if (depts.size >= 3) {
+      result.crossDeptMultiplier = 1.4
+      result.crossDeptDrawBonus = 1
+      result.labels.push('跨部门协作')
+      break
     }
   }
 
-  // 2. 升阶链：连续 3 个槽位含"同部门专员→经理→总监"
+  // 5. 部门出动：连续 3 槽为同部门「专员→经理→总监」→ ×1.6
   for (let i = 0; i < cards.length - 2; i++) {
     const a = cards[i]; const b = cards[i + 1]; const c = cards[i + 2]
     if (!a || !b || !c) continue
     if (a.dept === b.dept && b.dept === c.dept
       && a.tier === '专员' && b.tier === '经理' && c.tier === '总监') {
-      result.chainMultiplier = 1.5
-      result.labels.push('升阶链')
+      result.deptMobilizeMultiplier = 1.6
+      result.labels.push('部门出动')
       break
     }
   }
 
-  // 3. 满编：整条产线 5 张全是同部门
+  // 6. 全员出动：5 槽全部为同一部门（非 NONE）→ ×2.5
   const nonEmpty = cards.filter(Boolean)
   if (nonEmpty.length === 5) {
     const dept0 = nonEmpty[0].dept
     if (dept0 && dept0 !== 'NONE' && nonEmpty.every((c) => c.dept === dept0)) {
-      result.fullRosterMultiplier = 2.0
-      result.labels.push('满编')
-    }
-  }
-
-  // 4. 三色管理：含 3 张同 tier 不同部门（R/S/O）
-  const tierGroups = {}
-  for (const c of cards) {
-    if (!c || !c.tier || !c.dept || c.dept === 'NONE') continue
-    if (!tierGroups[c.tier]) tierGroups[c.tier] = new Set()
-    tierGroups[c.tier].add(c.dept)
-  }
-  for (const [tier, depts] of Object.entries(tierGroups)) {
-    if (depts.size >= 3) {
-      result.rainbowMultiplier = 1.4
-      result.rainbowDrawBonus = 1
-      result.labels.push('三色管理')
-      // 高管会议：进一步检查是否是 VP/CXO 级
-      if (tier === 'VP' || tier === 'CXO') {
-        result.execMeetingMultiplier = 1.8
-        result.execMeetingApBonus = 3
-        result.labels.push('高管会议')
-      }
-      break
+      result.allHandsMultiplier = 2.5
+      result.labels.push('全员出动')
     }
   }
 
@@ -1236,8 +1232,10 @@ export function resolveMonth(state, rng = Math.random) {
     nextYear += 1
   }
   const elapsedMonths = (state.elapsedMonths ?? 0) + 1
+  // 董事会只在每季度末（每 3 个月）召开。临时/紧急董事会功能已下线，
+  // 这里恒为 false，确保旧存档里残留的 emergencyBoardMeetingPending 标记也不会再触发董事会。
   const isQuarterlyBoard = elapsedMonths > 0 && elapsedMonths % 3 === 0
-  const isEmergencyBoard = !!state.emergencyBoardMeetingPending
+  const isEmergencyBoard = false
   const tempModifiersAfterMonth = tickTemporaryModifiers(state)
 
   // 竞争公司系统：每月对决推进（预告 / 开战 / 份额结算 / 胜负判定）
@@ -1309,6 +1307,7 @@ export function resolveMonth(state, rng = Math.random) {
         passed: true,
         gameWon: true,
         reason: '终极胜利',
+        elapsedMonths,
         bestMonth: Math.max(eventIncome, state.lastSettlement?.income ?? 0),
       }
     } else {
@@ -1318,6 +1317,7 @@ export function resolveMonth(state, rng = Math.random) {
         nextStage: nextStage,
         reason: '估值达标',
         boardMeeting: true,
+        elapsedMonths,
         bestMonth: Math.max(eventIncome, state.lastSettlement?.income ?? 0),
       }
     }
@@ -1329,6 +1329,7 @@ export function resolveMonth(state, rng = Math.random) {
       emergencyReview: isEmergencyBoard && !isQuarterlyBoard,
       reason: isEmergencyBoard && !isQuarterlyBoard ? '紧急董事会' : '季度董事会',
       nextStage: state.stage,
+      elapsedMonths,
       bestMonth: Math.max(eventIncome, state.lastSettlement?.income ?? 0),
     }
   }
@@ -1385,14 +1386,13 @@ export function resolveMonth(state, rng = Math.random) {
   // v4 流派质变 R/O 流派月末 buff
   const deptMassR = getDeptMassRBonus(activeProducingLines)
   const deptMassO = getDeptMassOBonus(activeProducingLines)
-  // v4 combo: 累加所有产线的 rainbow draw + exec meeting AP
-  const comboDrawBonus = lineReports.reduce((s, r) => s + (r.rainbowDrawBonus ?? 0), 0)
-  const comboApBonus = lineReports.reduce((s, r) => s + (r.execMeetingApBonus ?? 0), 0)
+  // v4 combo: 累加所有产线的「跨部门协作」下月抽牌加成
+  const comboDrawBonus = lineReports.reduce((s, r) => s + (r.comboDrawBonus ?? 0), 0)
 
-  // v4 流派质变 O 流派下月 AP 加成 + combo 高管会议下月 AP +3
+  // v4 流派质变 O 流派下月 AP 加成
   const nextEventContext = nextMajorEvent ? getCombinedEvent({ ...rescuedState, event: nextEvent, majorEvent: nextMajorEvent }) : nextEvent
   // 竞争公司系统：archetype 的 apPenalty（如终极对手 -1 AP）减下月 apAvailable
-  const nextApAvailable = Math.max(1, GAME_CONFIG.baseAp + apCarry + (nextEventContext.apDelta ?? 0) + apHandRich + deptMassO + comboApBonus - (battleTick.apPenalty ?? 0))
+  const nextApAvailable = Math.max(1, GAME_CONFIG.baseAp + apCarry + (nextEventContext.apDelta ?? 0) + apHandRich + deptMassO - (battleTick.apPenalty ?? 0))
 
   const isFounderRInHand = rescuedState.hand.some(c => c.id === 'EMP_FOUNDER_R')
   const isFounderRInSlots = activeLine && activeLine.slots.some(c => c && c.id === 'EMP_FOUNDER_R')
@@ -1835,9 +1835,6 @@ export function computeLineOutput(slots, context = {}) {
     // 保留 BM 的 p1Bonus（如果存在），但不再硬编码 P1/P5 收割类规则
     if (index === 0 && bmStats.p1Bonus) addMult(index, 1 + bmStats.p1Bonus, 'BM P1 加成')
 
-    // v4 combo: 双子（相邻 2 个同部门专员）→ 这些卡 +30%
-    if (combos.pairBonus.includes(index)) addMult(index, 1.3, 'Combo 双子')
-
     const left = cards[index - 1]
     const right = cards[index + 1]
     if (card.dept === 'R' && bmStats.deptBonusR) addMult(index, 1 + bmStats.deptBonusR, '商业模式研发倾斜')
@@ -1895,23 +1892,25 @@ export function computeLineOutput(slots, context = {}) {
     result.output = Math.max(0, Math.round((result.base + result.flat) * mult))
   })
 
-  // v4 combo: 整线级倍数（升阶链 / 满编 / 三色 / 高管会议）叠加到 lineMultiplier
-  lineMultiplier *= combos.chainMultiplier
-  lineMultiplier *= combos.fullRosterMultiplier
-  lineMultiplier *= combos.rainbowMultiplier
-  lineMultiplier *= combos.execMeetingMultiplier
+  // v4 combo: 6 个 combo 全部汇总为单一「最终结算倍数」，在所有卡产值与流派/区位 buff
+  // 结算完毕后，对整线产值统一乘上去。
+  const comboMultiplier = combos.brotherMultiplier
+    * combos.crossDeptMultiplier
+    * combos.deptMobilizeMultiplier
+    * combos.allHandsMultiplier
 
-  const total = Math.round(results.reduce((sum, result) => sum + result.output, 0) * lineMultiplier + monthBonus)
+  const settledLineOutput = results.reduce((sum, result) => sum + result.output, 0) * lineMultiplier
+  const total = Math.round(settledLineOutput * comboMultiplier + monthBonus)
   return {
     slotResults: results,
     total,
     lineMultiplier,
+    comboMultiplier, // v4: combo 在最终结算阶段对整线产值乘的总倍数
     monthBonus,
     maintenanceWaived,
     synergyCount: results.reduce((sum, result) => sum + result.notes.length, 0),
     combos: combos.labels, // v4: 触发的 combo 名称数组（UI 展示用）
-    rainbowDrawBonus: combos.rainbowDrawBonus,
-    execMeetingApBonus: combos.execMeetingApBonus,
+    comboDrawBonus: combos.crossDeptDrawBonus,
   }
 
   function applyDept(dept, factor, label) {
