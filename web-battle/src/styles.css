@@ -8229,8 +8229,8 @@ button {
   margin-top: 0;
   padding: 10px 0;
   min-height: 0;
-  /* 整体缩小 20%，锚定左上角，保持与战斗区其余布局对齐 */
-  transform: scale(0.85);
+  /* 整体放大 20% (原本为 scale(0.85))，锚定左上角，保持与战斗区其余布局对齐 */
+  transform: scale(1.02);
   transform-origin: top left;
 }
 
