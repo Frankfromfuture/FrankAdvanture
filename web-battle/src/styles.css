@@ -6086,6 +6086,7 @@ button {
     inset 0 0 0 8px rgba(255, 200, 87, 0.4);
   filter:
     drop-shadow(0 10px 0 rgba(82, 57, 17, 0.74))
+    drop-shadow(10px 10px 0 rgba(0, 0, 0, 0.85))
     drop-shadow(0 28px 50px rgba(0, 0, 0, 0.5));
   transform: rotateX(var(--bm-tilt-x, 0deg)) rotateY(var(--bm-tilt-y, 0deg)) rotateZ(0deg);
   transform-style: preserve-3d;
@@ -6287,6 +6288,7 @@ button {
     inset 0 -3px 0 rgba(0, 0, 0, 0.36);
   filter:
     drop-shadow(0 4px 0 var(--tone-deep))
+    drop-shadow(4px 4px 0 rgba(0, 0, 0, 0.85))
     drop-shadow(0 0 1px #101418);
   transform: translateY(0) translateZ(0);
   transform-style: preserve-3d;
@@ -6297,6 +6299,7 @@ button {
   transform: translateY(-8px) translateZ(16px);
   filter:
     drop-shadow(0 12px 0 var(--tone-deep))
+    drop-shadow(8px 8px 0 rgba(0, 0, 0, 0.85))
     drop-shadow(0 0 1px #101418)
     brightness(1.1) saturate(1.06);
 }
@@ -6305,6 +6308,7 @@ button {
   transform: translateY(4px) translateZ(-4px);
   filter:
     drop-shadow(0 0 0 var(--tone-deep))
+    drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.85))
     drop-shadow(0 0 1px #101418)
     brightness(0.95);
 }
@@ -6456,6 +6460,7 @@ button {
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.1),
     inset 0 -3px 0 rgba(0, 0, 0, 0.3);
+  filter: drop-shadow(6px 6px 0 rgba(0, 0, 0, 0.85));
   overflow: auto;
 }
 
@@ -6626,6 +6631,7 @@ button {
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.1),
     inset 0 -3px 0 rgba(0, 0, 0, 0.3);
+  filter: drop-shadow(5px 5px 0 rgba(0, 0, 0, 0.85));
 }
 
 .shop-slot.legendary {
@@ -6775,6 +6781,7 @@ button {
   overflow-y: auto;
   border: 2px dashed rgba(96, 165, 250, 0.3);
   background: rgba(8, 14, 32, 0.5);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.85);
   flex: 1;
 }
 
@@ -6833,6 +6840,7 @@ button {
     8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px),
     calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px
   );
+  filter: drop-shadow(5px 5px 0 rgba(0, 0, 0, 0.85));
 }
 
 .hr-action-panel h4 {
@@ -7013,6 +7021,7 @@ button {
     4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px),
     calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px), 0 4px
   );
+  filter: drop-shadow(3px 3px 0 rgba(0, 0, 0, 0.85));
   overflow: hidden;
 }
 
@@ -7240,8 +7249,8 @@ button {
   );
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -3px 0 rgba(0, 0, 0, 0.36),
-    3px 4px 0 rgba(0, 0, 0, 0.34);
+    inset 0 -3px 0 rgba(0, 0, 0, 0.36);
+  filter: drop-shadow(4px 4px 0 rgba(0, 0, 0, 0.85));
   transform: translateY(0) translateZ(0);
   transform-style: preserve-3d;
   transition: transform 180ms cubic-bezier(0.18, 0.9, 0.22, 1), filter 180ms ease, box-shadow 180ms ease;
@@ -7261,25 +7270,24 @@ button {
 .event-option:hover:not(.disabled) {
   border-color: rgba(255, 200, 87, 0.86);
   transform: translateY(-4px) translateZ(8px);
-  filter: brightness(1.1);
+  filter: drop-shadow(6px 6px 0 rgba(0, 0, 0, 0.85)) brightness(1.1);
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.24),
-    inset 0 -3px 0 rgba(0, 0, 0, 0.36),
-    3px 8px 0 rgba(0, 0, 0, 0.34);
+    inset 0 -3px 0 rgba(0, 0, 0, 0.36);
 }
 
 .event-option:active:not(.disabled) {
   transform: translateY(2px) translateZ(-2px);
+  filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.85));
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -3px 0 rgba(0, 0, 0, 0.36),
-    3px 2px 0 rgba(0, 0, 0, 0.34);
+    inset 0 -3px 0 rgba(0, 0, 0, 0.36);
 }
 
 .event-option.disabled {
   cursor: not-allowed;
   opacity: 0.45;
-  filter: grayscale(0.6);
+  filter: drop-shadow(4px 4px 0 rgba(0, 0, 0, 0.85)) grayscale(0.6);
 }
 
 .bm-event-modal {
@@ -7319,8 +7327,8 @@ button {
   color: #111827;
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.42),
-    inset 0 -3px 0 rgba(44, 32, 22, 0.1),
-    3px 4px 0 rgba(44, 32, 22, 0.16);
+    inset 0 -3px 0 rgba(44, 32, 22, 0.1);
+  filter: drop-shadow(4px 4px 0 rgba(0, 0, 0, 0.85));
 }
 
 .event-option strong {
@@ -7355,7 +7363,9 @@ button {
     10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px),
     calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px
   );
-  filter: drop-shadow(0 6px 0 rgba(82, 57, 17, 0.62));
+  filter:
+    drop-shadow(0 6px 0 rgba(82, 57, 17, 0.62))
+    drop-shadow(6px 6px 0 rgba(0, 0, 0, 0.85));
 }
 
 .bm-confirm-modal strong {
@@ -7473,6 +7483,7 @@ button {
   );
   filter:
     drop-shadow(0 16px 0 rgba(89, 56, 32, 0.28))
+    drop-shadow(10px 10px 0 rgba(0, 0, 0, 0.85))
     drop-shadow(0 28px 54px rgba(44, 32, 22, 0.32));
   transform: rotateX(var(--bm-tilt-x, 0deg)) rotateY(var(--bm-tilt-y, 0deg)) rotateZ(0deg);
   transform-style: preserve-3d;
@@ -10230,6 +10241,7 @@ button:disabled,
   clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px), calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
   font-family: "Fusion Pixel SC", "Fusion Pixel", monospace;
   color: #e2e8f0;
+  filter: drop-shadow(6px 6px 0 rgba(0, 0, 0, 0.85));
 }
 
 .finance-title {
@@ -10456,13 +10468,14 @@ button:disabled,
 
 .school-drawer .bm-card:hover {
   transform: translateY(-5px) translateZ(12px);
-  filter: brightness(1.08);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.45);
+  filter: drop-shadow(5px 5px 0 rgba(0, 0, 0, 0.85)) brightness(1.08);
+  box-shadow: none;
 }
 
 .school-drawer .bm-card:active {
   transform: translateY(2px) translateZ(-4px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.85));
+  box-shadow: none;
 }
 
 .bm-slot-actions {
