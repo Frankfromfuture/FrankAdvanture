@@ -11347,7 +11347,7 @@ button:disabled,
   align-items: center;
   justify-content: center;
   z-index: 99999;
-  animation: introFade 1.5s ease-in-out forwards;
+  animation: introFade 2.5s ease-in-out forwards;
 }
 
 .intro-splash-content {
