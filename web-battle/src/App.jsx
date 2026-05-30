@@ -4301,20 +4301,22 @@ function describeEventEffect(opt) {
 
 function StationCard({ icon, title, tag, description, status, metric, color, alert, onClick }) {
   return (
-    <button className={`bm-station tone-${color} ${alert ? 'is-alert' : ''}`} onClick={onClick}>
-      <span className="bm-station-tag">{tag}</span>
-      <span className="bm-station-icon" aria-hidden="true">{icon}</span>
-      <span className="bm-station-copy">
-        {/* 关键字标题 2x，功能说明 1x */}
-        <strong className="bm-station-title">{title}</strong>
-        <em className="bm-station-desc">{description}</em>
-      </span>
-      <span className="bm-station-meta">
-        <strong>{status}</strong>
-        <em>{metric}</em>
-      </span>
-      <span className="bm-station-arrow" aria-hidden="true">▾</span>
-    </button>
+    <div className={`bm-station-wrapper tone-${color}`}>
+      <button className={`bm-station ${alert ? 'is-alert' : ''}`} onClick={onClick}>
+        <span className="bm-station-tag">{tag}</span>
+        <span className="bm-station-icon" aria-hidden="true">{icon}</span>
+        <span className="bm-station-copy">
+          {/* 关键字标题 2x，功能说明 1x */}
+          <strong className="bm-station-title">{title}</strong>
+          <em className="bm-station-desc">{description}</em>
+        </span>
+        <span className="bm-station-meta">
+          <strong>{status}</strong>
+          <em>{metric}</em>
+        </span>
+        <span className="bm-station-arrow" aria-hidden="true">▾</span>
+      </button>
+    </div>
   )
 }
 
