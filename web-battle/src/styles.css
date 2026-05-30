@@ -8212,8 +8212,8 @@ button {
    ============================================================================ */
 
 .active-bm-panel {
-  --active-bm-slot-width: 96px;
-  --active-bm-slot-height: 144px; /* 3:2 size vertical */
+  --active-bm-slot-width: 144px;
+  --active-bm-slot-height: 96px; /* 3:2 size horizontal */
   display: grid;
   gap: 8px;
   width: 100%;
@@ -10419,8 +10419,9 @@ button:disabled,
 .school-drawer .bm-slot,
 .school-drawer .bm-pick-empty,
 .school-drawer .bm-card {
-  width: 120px !important;
-  height: 180px !important;
+  width: 180px !important;
+  height: 120px !important;
+  min-height: 0 !important;
   box-sizing: border-box;
   transform: translateY(0) translateZ(0);
   transform-style: preserve-3d;
@@ -10432,8 +10433,8 @@ button:disabled,
   background: none;
   padding: 0;
   clip-path: none;
-  width: 120px;
-  height: 180px;
+  width: 180px;
+  height: 120px;
 }
 
 .school-drawer .bm-slot.empty {
@@ -10460,7 +10461,7 @@ button:disabled,
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 120px;
+  width: 180px;
   gap: 8px;
 }
 
@@ -10468,7 +10469,7 @@ button:disabled,
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: 120px;
+  width: 180px;
   align-items: center;
   text-align: center;
   font-family: inherit;
