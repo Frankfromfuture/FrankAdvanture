@@ -34,6 +34,7 @@ export function ServiceFunSvg({ cardId }) {
       <img
         src={imagePath}
         alt={cardId}
+        className="srvfun-svg"
         style={{
           width: '100%',
           height: '100%',

@@ -4613,6 +4613,12 @@ button {
   box-shadow: none;
 }
 
+.card-view.type-fun .card-portrait,
+.card-view.type-srv .card-portrait {
+  perspective: 420px;
+  transform-style: preserve-3d;
+}
+
 /* 服务卡 / 功能卡 SVG 插画 (放在 .card-portrait 内) */
 .srvfun-svg-wrap {
   position: absolute;
@@ -4626,7 +4632,8 @@ button {
     translateY(var(--person-shift-y, 0px))
     translateZ(28px)
     rotateX(var(--person-tilt-x, 0deg))
-    rotateY(var(--person-tilt-y, 0deg));
+    rotateY(var(--person-tilt-y, 0deg))
+    scale(0.75);
   transition: transform 50ms linear;
   will-change: transform;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.28));
@@ -4642,7 +4649,7 @@ button {
 /* 仅在卡选中/hover 时显示视差 — 静止时归零 */
 .card-view.type-fun:not(.selected) .srvfun-svg-wrap,
 .card-view.type-srv:not(.selected) .srvfun-svg-wrap {
-  transform: translateZ(0);
+  transform: translateZ(0) scale(0.75);
 }
 
 .card-view.type-fun.selected .srvfun-svg-wrap,
@@ -4652,7 +4659,8 @@ button {
     translateY(var(--person-shift-y, 0px))
     translateZ(34px)
     rotateX(var(--person-tilt-x, 0deg))
-    rotateY(var(--person-tilt-y, 0deg));
+    rotateY(var(--person-tilt-y, 0deg))
+    scale(0.75);
   transition: none;
 }
 
@@ -4663,7 +4671,8 @@ button {
     translateY(var(--person-shift-y, 0px))
     translateZ(34px)
     rotateX(var(--person-tilt-x, 0deg))
-    rotateY(var(--person-tilt-y, 0deg));
+    rotateY(var(--person-tilt-y, 0deg))
+    scale(0.75);
 }
 
 .portrait-glow {
