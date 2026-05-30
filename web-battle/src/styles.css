@@ -11381,3 +11381,82 @@ button:disabled,
   80%  { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* ============================================================================
+   Menu Footer Contacts
+   ============================================================================ */
+.menu-footer-contacts {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  gap: 16px;
+  z-index: 100;
+}
+
+.contact-item {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.menu-footer-icon {
+  width: 32px;
+  height: 32px;
+  display: block;
+  image-rendering: pixelated;
+  /* 反白效果 */
+  filter: brightness(0) invert(1);
+  opacity: 0.7;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.contact-item:hover .menu-footer-icon {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.contact-tooltip {
+  position: absolute;
+  bottom: 44px;
+  right: 0;
+  background: rgba(8, 14, 32, 0.96);
+  border: 2px solid var(--gold);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition: opacity 0.25s cubic-bezier(0.18, 0.9, 0.22, 1), transform 0.25s cubic-bezier(0.18, 0.9, 0.22, 1);
+  z-index: 110;
+}
+
+.contact-item:hover .contact-tooltip {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.mail-tooltip {
+  padding: 8px 16px;
+  font-family: "Fusion Pixel SC", "Fusion Pixel", "Press Start 2P", monospace;
+  /* 2 倍大小字体 */
+  font-size: 24px;
+  color: #fff4bd;
+  white-space: nowrap;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.qr-tooltip {
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tooltip-qr-image {
+  width: 160px;
+  height: 160px;
+  display: block;
+  border-radius: 2px;
+}

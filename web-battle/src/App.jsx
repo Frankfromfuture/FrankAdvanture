@@ -1524,6 +1524,18 @@ function App() {
         )}
         {creditsOpen && <CreditsOverlay onClose={() => setCreditsOpen(false)} />}
         {hint && <div className="toast">{hint}</div>}
+        <div className="menu-footer-contacts">
+          <div className="contact-item">
+            <img src="/assets/menu/mail_icon.png" alt="Email" className="menu-footer-icon" />
+            <div className="contact-tooltip mail-tooltip">173246433@qq.com</div>
+          </div>
+          <div className="contact-item">
+            <img src="/assets/menu/qr_icon.png" alt="WeChat" className="menu-footer-icon" />
+            <div className="contact-tooltip qr-tooltip">
+              <img src="/assets/menu/wechat_qr.jpg" alt="WeChat QR" className="tooltip-qr-image" />
+            </div>
+          </div>
+        </div>
       </main>
     )
   }
