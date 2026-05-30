@@ -4070,106 +4070,105 @@ function BoardMeetingHub({
   ]
 
   return (
-    <div className="bm-overlay" onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
-      <div className="bm-panel-shadow-wrapper">
-        <section className={`bm-panel ${popActive ? "pop-active" : ""}`} ref={panelRef}>
-          <header className="bm-panel-header">
-            <div className="bm-cash-chip">
-              <span aria-hidden="true">¥</span>
-              <strong>{game.cash}</strong>
-            </div>
-            <div className="bm-panel-title">
-              <span>BOARD MEETING</span>
-              <strong>董事会会议</strong>
-              <em>{im.isPromotion ? `${game.stage.name} ▸ ${nextStage.name}` : `${game.stage.name} · 季度会`}</em>
-            </div>
-            <button
-              className="bm-next-button"
-              disabled={isEventPhase}
-              onClick={() => setConfirmExit(true)}
-              title={isEventPhase ? "请先制定本期战略" : (im.isPromotion ? "进入下一阶段" : "结束董事会")}
-            >
-              {im.isPromotion ? "进入下一阶段 ▸" : "结束董事会 ▸"}
-            </button>
-          </header>
+    <div className="bm-overlay" ref={panelRef} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
+      <div className={`bm-panel-shadow ${popActive ? "pop-active" : ""}`} />
+      <section className={`bm-panel ${popActive ? "pop-active" : ""}`}>
+        <header className="bm-panel-header">
+          <div className="bm-cash-chip">
+            <span aria-hidden="true">¥</span>
+            <strong>{game.cash}</strong>
+          </div>
+          <div className="bm-panel-title">
+            <span>BOARD MEETING</span>
+            <strong>董事会会议</strong>
+            <em>{im.isPromotion ? `${game.stage.name} ▸ ${nextStage.name}` : `${game.stage.name} · 季度会`}</em>
+          </div>
+          <button
+            className="bm-next-button"
+            disabled={isEventPhase}
+            onClick={() => setConfirmExit(true)}
+            title={isEventPhase ? "请先制定本期战略" : (im.isPromotion ? "进入下一阶段" : "结束董事会")}
+          >
+            {im.isPromotion ? "进入下一阶段 ▸" : "结束董事会 ▸"}
+          </button>
+        </header>
 
-          {im.resolvedMessage && (
-            <div className="bm-toast-strip">▶ {im.resolvedMessage}</div>
+        {im.resolvedMessage && (
+          <div className="bm-toast-strip">▶ {im.resolvedMessage}</div>
+        )}
+
+        <main className="bm-panel-body">
+          {activeStation ? (
+            <div className="bm-drawer-wrap">
+              <button className="bm-back-btn" onClick={() => setActiveStation(null)}>◂ 返回会议</button>
+              {activeStation === "shop" && (
+                <ShopDrawer
+                  shopRoll={im.shopRoll}
+                  purchased={im.purchased}
+                  budget={game.cash}
+                  nextLevelId={nextStage.id}
+                  onBuy={onShopBuy}
+                  onPack={onPack}
+                  onRoll={onShopRoll}
+                  onClose={() => setActiveStation(null)}
+                />
+              )}
+              {activeStation === "hr" && (
+                <HrDrawer
+                  game={game}
+                  hrCardUid={hrCardUid}
+                  setHrCardUid={setHrCardUid}
+                  onUpgrade={onUpgrade}
+                  onFire={onFire}
+                  onClose={() => setActiveStation(null)}
+                />
+              )}
+              {activeStation === "school" && (
+                <SchoolDrawer
+                  game={game}
+                  schoolRoll={im.schoolRoll}
+                  pendingReplaceIdx={pendingReplaceIdx}
+                  setPendingReplaceIdx={setPendingReplaceIdx}
+                  pendingBmSchoolIdx={pendingBmSchoolIdx}
+                  setPendingBmSchoolIdx={setPendingBmSchoolIdx}
+                  onBmBuy={onBmBuy}
+                  onBmUnsubscribe={onBmUnsubscribe}
+                  onRoll={onSchoolRoll}
+                  onClose={() => setActiveStation(null)}
+                />
+              )}
+              {activeStation === "strategy" && (
+                <StrategyDrawer game={game} onResolveEvent={onResolveEvent} onClose={() => setActiveStation(null)} />
+              )}
+            </div>
+          ) : (
+            <div className="bm-menu-and-finance">
+              <div className="bm-stations-grid">
+                {stationCards.map((card) => (
+                  <StationCard
+                    key={card.id}
+                    color={card.color}
+                    icon={card.icon}
+                    title={card.title}
+                    tag={card.tag}
+                    description={card.description}
+                    status={card.status}
+                    metric={card.metric}
+                    alert={card.id === 'strategy' && im.phase === 'event'}
+                    onClick={() => {
+                      if (card.id === "strategy" && im.phase === "event") {
+                        setActiveStation("strategy")
+                      } else {
+                        setActiveStation(card.id)
+                      }
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
           )}
-
-          <main className="bm-panel-body">
-            {activeStation ? (
-              <div className="bm-drawer-wrap">
-                <button className="bm-back-btn" onClick={() => setActiveStation(null)}>◂ 返回会议</button>
-                {activeStation === "shop" && (
-                  <ShopDrawer
-                    shopRoll={im.shopRoll}
-                    purchased={im.purchased}
-                    budget={game.cash}
-                    nextLevelId={nextStage.id}
-                    onBuy={onShopBuy}
-                    onPack={onPack}
-                    onRoll={onShopRoll}
-                    onClose={() => setActiveStation(null)}
-                  />
-                )}
-                {activeStation === "hr" && (
-                  <HrDrawer
-                    game={game}
-                    hrCardUid={hrCardUid}
-                    setHrCardUid={setHrCardUid}
-                    onUpgrade={onUpgrade}
-                    onFire={onFire}
-                    onClose={() => setActiveStation(null)}
-                  />
-                )}
-                {activeStation === "school" && (
-                  <SchoolDrawer
-                    game={game}
-                    schoolRoll={im.schoolRoll}
-                    pendingReplaceIdx={pendingReplaceIdx}
-                    setPendingReplaceIdx={setPendingReplaceIdx}
-                    pendingBmSchoolIdx={pendingBmSchoolIdx}
-                    setPendingBmSchoolIdx={setPendingBmSchoolIdx}
-                    onBmBuy={onBmBuy}
-                    onBmUnsubscribe={onBmUnsubscribe}
-                    onRoll={onSchoolRoll}
-                    onClose={() => setActiveStation(null)}
-                  />
-                )}
-                {activeStation === "strategy" && (
-                  <StrategyDrawer game={game} onResolveEvent={onResolveEvent} onClose={() => setActiveStation(null)} />
-                )}
-              </div>
-            ) : (
-              <div className="bm-menu-and-finance">
-                <div className="bm-stations-grid">
-                  {stationCards.map((card) => (
-                    <StationCard
-                      key={card.id}
-                      color={card.color}
-                      icon={card.icon}
-                      title={card.title}
-                      tag={card.tag}
-                      description={card.description}
-                      status={card.status}
-                      metric={card.metric}
-                      alert={card.id === 'strategy' && im.phase === 'event'}
-                      onClick={() => {
-                        if (card.id === "strategy" && im.phase === "event") {
-                          setActiveStation("strategy")
-                        } else {
-                          setActiveStation(card.id)
-                        }
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </main>
-        </section>
-      </div>
+        </main>
+      </section>
 
       {confirmExit && (
           <ConfirmExitModal
