@@ -11401,8 +11401,8 @@ button:disabled,
 }
 
 .menu-footer-icon {
-  width: 32px;
-  height: 32px;
+  width: 64px;
+  height: 64px;
   display: block;
   image-rendering: pixelated;
   /* 反白效果 */
@@ -11418,7 +11418,7 @@ button:disabled,
 
 .contact-tooltip {
   position: absolute;
-  bottom: 44px;
+  bottom: 76px;
   right: 0;
   background: rgba(8, 14, 32, 0.96);
   border: 2px solid var(--gold);
